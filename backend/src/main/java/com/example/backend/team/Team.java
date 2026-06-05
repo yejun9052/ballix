@@ -17,6 +17,10 @@ import lombok.NoArgsConstructor;
 @Table(name = "teams")
 public class Team extends BaseTimeEntity {
 
+    /** FotMob 팀 ID. 이 값으로 팀을 식별/업서트한다. */
+    @Column(name = "fotmob_team_id", unique = true)
+    private Long fotmobTeamId;
+
     @Column(nullable = false)
     private String name;
 
@@ -26,6 +30,13 @@ public class Team extends BaseTimeEntity {
     @Column(nullable = false)
     private String tla;
 
+    /** 엠블럼(로고) URL. */
     @Column(nullable = false)
     private String crest;
+
+    /** 동기화 시 이름/엠블럼 갱신. */
+    public void updateInfo(String name, String crest) {
+        if (name != null && !name.isBlank()) this.name = name;
+        if (crest != null && !crest.isBlank()) this.crest = crest;
+    }
 }

@@ -1,0 +1,86 @@
+package com.example.backend.fotmob;
+
+import com.example.backend.fotmob.dto.FotmobMatchResponse;
+import com.example.backend.fotmob.dto.FotmobSearchResponse;
+import com.example.backend.global.common.CommonResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * 테스트/디버그용 FotMob 프록시.
+ * DB 저장 없이 Python 스크래퍼 결과를 그대로 확인한다(끝난 경기 미리보기 등).
+ */
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/fotmob")
+public class FotmobDebugController {
+
+    private final FotmobClient fotmobClient;
+    private final FotmobScheduleService scheduleService;
+    private final FotmobStandingService standingService;
+    private final FotmobPollScheduler pollScheduler;
+
+    /** 리그 순위 조회 (competitionId = 내부 Competition PK). */
+    @GetMapping("/standings/{competitionId}")
+    public ResponseEntity<CommonResponse<?>> standings(@PathVariable Long competitionId) {
+        return ResponseEntity.ok(
+                CommonResponse.success("순위 조회 성공", standingService.getStandings(competitionId)));
+    }
+
+    /** 리그 순위 강제 갱신. */
+    @PostMapping("/standings/{competitionId}/sync")
+    public ResponseEntity<CommonResponse<?>> syncStandings(@PathVariable Long competitionId) {
+        standingService.syncStandings(competitionId);
+        return ResponseEntity.ok(
+                CommonResponse.success("순위 갱신 완료", standingService.getStandings(competitionId)));
+    }
+
+    /** 폴링 주기(분) 조회. */
+    @GetMapping("/poll-interval")
+    public ResponseEntity<CommonResponse<?>> getPollInterval() {
+        return ResponseEntity.ok(
+                CommonResponse.success("조회 성공", pollScheduler.getIntervalMinutes()));
+    }
+
+    /** 폴링 주기(분) 변경 (관리자). */
+    @PostMapping("/poll-interval")
+    public ResponseEntity<CommonResponse<?>> setPollInterval(@RequestParam int minutes) {
+        pollScheduler.setIntervalMinutes(minutes);
+        return ResponseEntity.ok(
+                CommonResponse.success("폴링 주기 변경", pollScheduler.getIntervalMinutes()));
+    }
+
+    /** 과거/미래 N일치 일정 동기화 (수동 트리거). */
+    @PostMapping("/schedule/sync")
+    public ResponseEntity<CommonResponse<?>> scheduleSync(
+            @RequestParam(defaultValue = "10") int pastDays,
+            @RequestParam(defaultValue = "10") int futureDays) {
+        int n = scheduleService.syncRange(pastDays, futureDays);
+        return ResponseEntity.ok(CommonResponse.success("일정 " + n + "경기 동기화", n));
+    }
+
+    /** 특정 날짜(YYYYMMDD) 일정 동기화. */
+    @PostMapping("/schedule/sync/{date}")
+    public ResponseEntity<CommonResponse<?>> scheduleSyncDate(@PathVariable String date) {
+        int n = scheduleService.syncDate(date);
+        return ResponseEntity.ok(CommonResponse.success(date + " " + n + "경기 동기화", n));
+    }
+
+    /** fotmobMatchId로 라인업·평점·이벤트를 즉시 미리보기 (DB 미저장). */
+    @GetMapping("/preview/{fotmobId}")
+    public ResponseEntity<CommonResponse<?>> preview(@PathVariable Long fotmobId) {
+        FotmobMatchResponse data = fotmobClient.getMatch(fotmobId);
+        return ResponseEntity.ok(CommonResponse.success("미리보기 성공", data));
+    }
+
+    /** 팀명/대회로 FotMob 경기 검색 (matchId 후보 확인). */
+    @GetMapping("/search")
+    public ResponseEntity<CommonResponse<?>> search(
+            @RequestParam String team1,
+            @RequestParam(required = false, defaultValue = "") String team2,
+            @RequestParam(required = false, defaultValue = "") String competition) {
+        FotmobSearchResponse data = fotmobClient.search(team1, team2, competition);
+        return ResponseEntity.ok(CommonResponse.success("검색 성공", data));
+    }
+}

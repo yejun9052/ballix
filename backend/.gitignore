@@ -38,3 +38,5 @@ out/
 
 ### Secrets ###
 src/main/resources/application.yml
+
+_boot*

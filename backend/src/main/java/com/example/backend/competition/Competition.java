@@ -20,6 +20,10 @@ import lombok.NoArgsConstructor;
 @Table(name = "competitions")
 public class Competition extends BaseTimeEntity {
 
+    /** FotMob 리그 ID (예: 월드컵=77). 이 값으로 식별/업서트. */
+    @Column(name = "fotmob_league_id", unique = true)
+    private Long fotmobLeagueId;
+
     @Column(nullable = false)
     private String code;
 
@@ -32,4 +36,9 @@ public class Competition extends BaseTimeEntity {
 
     @Column(nullable = false)
     private String emblem;
+
+    public void updateInfo(String name, String emblem) {
+        if (name != null && !name.isBlank()) this.name = name;
+        if (emblem != null && !emblem.isBlank()) this.emblem = emblem;
+    }
 }
