@@ -1,26 +1,54 @@
 spring:
   application:
     name: ballix
+  output:
+    ansi:
+      enabled: ALWAYS
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: YOUR_GOOGLE_CLIENT_ID
+            client-secret: YOUR_GOOGLE_CLIENT_SECRET
+            scope:
+              - email
+              - profile
 
   datasource:
-    url: jdbc:mysql://localhost:3306/ballix?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    url: jdbc:mysql://localhost:3306/backend?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: root
     password: YOUR_DB_PASSWORD
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: update              # 엔티티 추가 시 컬럼/테이블 자동 생성(마이그레이션 불필요)
     show-sql: true
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
 
-football:
+jwt:
+  secret: YOUR_JWT_SECRET_AT_LEAST_32_CHARS   # HS256 서명 키, 32자 이상
+
+fotmob:
   api:
-    key: YOUR_FOOTBALL_DATA_API_KEY   # https://www.football-data.org 에서 발급
-    base-url: https://api.football-data.org/v4
+    base-url: http://127.0.0.1:8800   # Python FotMob 스크래퍼(FastAPI) 주소
+  schedule:
+    enabled: true                     # 일정 자동 동기화 on/off
+    leagues: 77,114                   # 수집 리그 leagueId: 77=World Cup(남), 114=Friendlies(남 A매치). 숫자=ID정확매칭, 문자=이름부분매칭
+    past-days: 10                     # 부팅 시 과거 N일치까지 일정 동기화
+    future-days: 10                   # 미래 N일치까지
+    refresh-past-days: 2              # 주기 재동기화 때의 과거 범위(과거는 거의 안 변해 축소 → 크롤 부하↓)
+  poll:
+    enabled: true                     # 라인업/평점/이벤트 폴링 on/off
+    lineup-window-minutes: 60         # 킥오프 N분 전부터 라인업 폴링 시작
+    interval-minutes: 5               # 진행 중 갱신 주기(분) - 관리자 조정 가능
+
+prediction:
+  allowed-leagues: 77                 # 예측 허용 리그 fotmobLeagueId (쉼표구분, 77=월드컵)
 
 server:
   port: 8080
