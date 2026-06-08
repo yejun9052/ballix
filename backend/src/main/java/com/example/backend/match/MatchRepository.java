@@ -17,6 +17,12 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
 
     Optional<List<Match>> findByCompetitionId(Long compId);
 
+    /** 다가오는 경기(킥오프 미래), 가까운 순. */
+    List<Match> findByMatchTimeAfterOrderByMatchTimeAsc(LocalDateTime now);
+
+    /** 다가오는 경기 - 특정 대회만. */
+    List<Match> findByMatchTimeAfterAndCompetitionIdOrderByMatchTimeAsc(LocalDateTime now, Long compId);
+
     /** FotMob matchId로 경기 조회 (일정 동기화 업서트용). */
     Optional<Match> findByFotmobMatchId(Long fotmobMatchId);
 

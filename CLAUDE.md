@@ -29,7 +29,8 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 - **엔티티 식별 키는 FotMob ID**: `Match.fotmobMatchId`, `Team.fotmobTeamId`, `Competition.fotmobLeagueId`가 upsert 키다. FotMob 일정에 matchId가 처음부터 들어오므로 **별도 매핑 단계가 없다**(매핑 코드는 삭제됨).
 - **matchTime은 한국시간(KST = UTC+9)으로 저장**한다.
 - **idempotent 동기화**: 라인업·이벤트·순위는 `deleteByMatchId/CompetitionId → saveAll`로 통째로 교체한다.
-- **응답은 엔티티를 그대로 직렬화**(DTO 거의 없음). 공통 부모 `BaseTimeEntity`에 `@JsonIgnoreProperties({"hibernateLazyInitializer","handler"})`가 있어 지연로딩 프록시 노이즈가 빠진다. `spring.jpa.open-in-view`(기본 on) 덕에 컨트롤러 직렬화 시점까지 LAZY 연관(`Match.homeTeam` 등)이 로드된다.
+- **DB-first lazy-cache**: 순위(`FotmobStandingService.getStandings`)·경기상세(`FotmobQueryService.getView/getLineup/getEvents`)는 조회 시 DB가 비어있으면 **그 자리에서 1회 크롤+저장 후 반환**하고 이후엔 DB만 읽는다. 단 라인업은 킥오프 `LINEUP_LAZY_WINDOW_MINUTES`(60분) 전부터만 lazy 크롤(미래 경기 헛크롤 방지) + `lineupSynced` 플래그로 1회만.
+- **응답 직렬화**: 대체로 엔티티를 그대로 직렬화하되 **예측·유저 응답은 DTO**(`PredictionView`/`UserView`/`RankView`)로 내려 User(email 등) 노출을 막는다. 공통 부모 `BaseTimeEntity`의 `@JsonIgnoreProperties({"hibernateLazyInitializer","handler"})`가 엔티티 직렬화 시 지연로딩 프록시 노이즈를 제거한다. `spring.jpa.open-in-view`(기본 on) 덕에 컨트롤러 직렬화 시점까지 LAZY 연관(`Match.homeTeam` 등)이 로드된다.
 
 ### FotMob 동기화/폴링 (`com.example.backend.fotmob`)
 
@@ -46,10 +47,15 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 
 `MatchController`/`MatchService` 패턴을 그대로 따른 예측 저장/조회 + 자동 채점.
 
-- 엔드포인트: `POST /api/prediction/predict?matchId=&predictedWinner=`(저장, 이미 있으면 수정), `GET /api/prediction/myPrediction`, `GET /api/prediction/findByMatch?matchId=` — **전부 로그인 필요(쿠키 동봉)**.
+- 엔드포인트: `predict?matchId=&predictedWinner=`(저장/수정), `myPrediction`, `findByMatch?matchId=`, `ratio?matchId=`(예측 분포 %) — **전부 로그인 필요(쿠키 동봉)**. 응답은 `PredictionView` DTO(User 비노출).
 - 예측값은 `Winner` enum(`HOME_TEAM`/`AWAY_TEAM`/`DRAW`) — **`Match.winner`와 같은 어휘**라 채점 때 `.name()`으로 그대로 비교. 잘못된 값은 enum 바인딩 실패로 거절.
-- 가드(순서대로): 비로그인 → 없는 경기 → **월드컵(`fotmobLeagueId=77`) 아닌 경기** → 킥오프 지난 경기. (월드컵만 예측 가능은 서버에서 막는다)
+- 가드(순서대로): 비로그인 → 없는 경기 → **예측 허용 리그 아님**(`prediction.allowed-leagues` config, 기본 `77`=월드컵. 하드코딩 아님) → 킥오프 지남.
+- `ratio`는 **본인이 예측한 경기만** 조회 가능(예측 전이면 거절) → 분포 노출이 선택을 편향시키지 않게.
 - **자동 채점**: `FotmobSyncService`가 경기 종료(`markFinalized`) 시 `PredictionService.gradeMatch()` 호출 → 예측 `isCorrect` 기록 + `User.scorePrediction()`으로 전적(`matches_played`/`correct_count`) 갱신. `Prediction.isGraded()`로 멱등(재폴링 시 중복 집계 방지). 이 때문에 `fotmob → prediction` 단방향 의존이 있다.
+
+### 유저/리더보드 (`com.example.backend.user`)
+
+`UserController`/`UserService`(MatchController 스타일). `GET /api/user/me`(로그인, 내 전적+적중률), `GET /api/user/leaderboard`(공개, 적중수 내림차순 랭킹). 응답은 `UserView`/`RankView` DTO. 집계 원천(`User.correct_count`/`matches_played`)은 위 예측 채점이 갱신한다.
 
 ### 인증 흐름 (기존 유지)
 
@@ -60,7 +66,7 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 
 컨트롤러에서 **현재 로그인 유저는 `@AuthenticationPrincipal Long userId`로 받는다** — JwtFiller가 principal에 `userId`(Long)를 넣기 때문(User 객체 아님).
 
-**전역 예외 처리**: 서비스가 던지는 `RuntimeException`은 `global/exceptopn/GlobalExceptionHandler`(`@RestControllerAdvice`)가 `CommonResponse.fail(msg)` + HTTP 400 JSON으로 변환한다. 이 핸들러가 없으면 예외가 500 → `/error` 포워드 → (보안상 `/error` 미허용) → **OAuth 리다이렉트로 둔갑**하니, 검증 실패는 RuntimeException으로 던지고 이 핸들러를 거치게 둘 것.
+**전역 예외 처리**: `global/exceptopn`에 `BusinessException`(상태코드 보유) 기반 커스텀 예외 계층 — `BadRequestException(400)`/`NotFoundException(404)`/`UnauthorizedException(401)`. `GlobalExceptionHandler`(`@RestControllerAdvice`)가 이들을 `CommonResponse.fail(msg)` + 해당 상태코드로, 그 외 일반 `RuntimeException`은 400 안전망으로 변환한다. **검증 실패는 이 커스텀 예외로 던질 것**(`throw new RuntimeException`은 코드베이스에서 제거됨) — 핸들러가 없으면 예외가 500 → `/error` 포워드 → (보안상 `/error` 미허용) → **OAuth 리다이렉트로 둔갑**한다.
 
 ## 개발 실행 (4개 프로세스, 순서 중요)
 
@@ -104,8 +110,9 @@ npm run build ; npm run lint
 - `GET /api/fotmob/standings/{competitionId}` , `POST .../sync` — 리그 순위(조별)
 - `GET|POST /api/fotmob/poll-interval` — 폴링 주기 조회/변경(관리자)
 - `GET /api/fotmob/preview/{fotmobMatchId}` — DB 미저장 미리보기(프록시)
-- `POST /api/prediction/predict?matchId=&predictedWinner=` · `GET /api/prediction/myPrediction` · `GET /api/prediction/findByMatch?matchId=` — 예측(로그인 필요)
-- `GET /api/match/allMatch` · `/findByCompId?id=` · `/MatchDay?date=YYYY-MM-DD` — 경기 목록 조회
+- `POST /api/prediction/predict?matchId=&predictedWinner=` · `GET /api/prediction/{myPrediction,findByMatch?matchId=,ratio?matchId=}` — 예측·분포(로그인 필요)
+- `GET /api/match/allMatch` · `/findByCompId?id=` · `/MatchDay?date=YYYY-MM-DD` · `/upcoming?compId=` — 경기 목록 조회(`upcoming`=미래 경기만, compId 옵션)
+- `GET /api/user/me`(로그인) · `GET /api/user/leaderboard`(공개) — 내 전적 / 적중순 랭킹
 
 > 프론트 연동용 전체 응답 스키마/예시는 루트 **`API_SPEC.md`** 참고(프론트엔드 담당자 전달용).
 
@@ -125,7 +132,8 @@ npm run build ; npm run lint
 - `spring.datasource.*` — MySQL (docker-compose 기준 root/1234, DB `backend`)
 - `spring.security.oauth2.client.registration.google.*` — Google OAuth
 - `fotmob.api.base-url` — Python FastAPI 주소(기본 `http://127.0.0.1:8800`)
-- `fotmob.schedule.{leagues,past-days,future-days}` — 수집 리그/범위(기본 `77,114` ±10일; 숫자=leagueId 정확매칭, 문자=이름 부분매칭)
+- `fotmob.schedule.{leagues,past-days,future-days,refresh-past-days}` — 수집 리그/범위(기본 `77,114` ±10일; 숫자=leagueId 정확매칭, 문자=이름 부분매칭). `refresh-past-days`(기본 2)는 **부팅 후 주기 재동기화의 과거 범위** — 과거는 거의 안 변해 줄여서 크롤 부하·차단위험을 낮춤(부팅 1회는 full `past-days`).
 - `fotmob.poll.{enabled,lineup-window-minutes,interval-minutes}` — 폴링 동작
+- `prediction.allowed-leagues` — 예측 허용 리그 fotmobLeagueId(쉼표구분, 기본 `77`=월드컵)
 
 JPA는 `ddl-auto: update`라 엔티티 추가 시 컬럼/테이블이 자동 생성된다(마이그레이션 불필요).

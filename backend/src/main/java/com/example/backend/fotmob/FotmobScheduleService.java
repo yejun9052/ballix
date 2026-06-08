@@ -144,9 +144,26 @@ public class FotmobScheduleService {
                         .fotmobLeagueId(leagueId)
                         .code(leagueId == null ? name : String.valueOf(leagueId))
                         .name(name)
-                        .type(CompType.CUP)
+                        .type(resolveType(sm, name))
                         .emblem("")
                         .build()));
+    }
+
+    /**
+     * FotMob 스케줄엔 컵/리그 구분 플래그가 없어 휴리스틱으로 판단(type은 표시용).
+     * 조별 토너먼트(parentLeagueId 존재)나 컵/대회성 이름이면 CUP, 그 외 도메스틱 리그는 LEAGUE.
+     */
+    private CompType resolveType(ScheduledMatch sm, String name) {
+        if (sm.parentLeagueId() != null) {
+            return CompType.CUP; // 월드컵/챔스 등 조별 토너먼트
+        }
+        String n = name == null ? "" : name.toLowerCase();
+        if (n.contains("friendl") || n.contains("cup") || n.contains("qualif")
+                || n.contains("champions league") || n.contains("europa") || n.contains("conference league")
+                || n.contains("nations league") || n.contains("euro") || n.contains("copa")) {
+            return CompType.CUP;
+        }
+        return CompType.LEAGUE;
     }
 
     /** UTC ISO 문자열을 KST(UTC+9) LocalDateTime으로. */

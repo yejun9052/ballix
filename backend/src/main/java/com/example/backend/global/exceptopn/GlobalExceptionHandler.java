@@ -21,7 +21,15 @@ public class GlobalExceptionHandler {
                 .body(CommonResponse.fail("요청 값이 올바르지 않습니다. (" + e.getName() + ")"));
     }
 
-    // 서비스 검증 실패 등 일반 RuntimeException
+    // 서비스 검증 실패 — 커스텀 예외(상태코드를 스스로 안다)
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<CommonResponse<?>> handleBusiness(BusinessException e) {
+        return ResponseEntity
+                .status(e.getStatus())
+                .body(CommonResponse.fail(e.getMessage()));
+    }
+
+    // 그 외 예기치 못한 RuntimeException (500 → /error 포워드 방지용 안전망)
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<CommonResponse<?>> handleRuntime(RuntimeException e) {
         return ResponseEntity

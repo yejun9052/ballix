@@ -50,13 +50,18 @@ public class FotmobPollScheduler {
     @Value("${fotmob.schedule.future-days:10}")
     private int futureDays;
 
+    @Value("${fotmob.schedule.refresh-past-days:2}")
+    private int refreshPastDays;   // 주기 재동기화 시 과거 범위(과거 날짜는 거의 안 바뀌어 축소 → 부하·차단위험↓)
+
+    private volatile boolean firstSync = true;
+
     /** matchId → 마지막 폴링 시각 (N분 간격 준수용, 메모리 보관). */
     private final Map<Long, LocalDateTime> lastPolled = new ConcurrentHashMap<>();
 
     @PostConstruct
     void logConfig() {
-        log.info("[fotmob-poll] 설정: pollEnabled={} interval={}분 lineupWindow={}분 일정범위=-{}~+{}일",
-                pollEnabled, intervalMinutes, lineupWindowMinutes, pastDays, futureDays);
+        log.info("[fotmob-poll] 설정: pollEnabled={} interval={}분 lineupWindow={}분 일정범위=-{}~+{}일(주기 과거={}일)",
+                pollEnabled, intervalMinutes, lineupWindowMinutes, pastDays, futureDays, refreshPastDays);
     }
 
     // ── 일정 동기화: 부팅 10초 뒤 + 30분마다 ──────────────────────────
@@ -65,8 +70,11 @@ public class FotmobPollScheduler {
         if (!scheduleEnabled) {
             return;
         }
+        // 부팅 첫 동기화는 전체 과거범위, 이후 주기 동기화는 최근 과거만 (과거는 거의 안 변함)
+        int past = firstSync ? pastDays : refreshPastDays;
         try {
-            scheduleService.syncRange(pastDays, futureDays);
+            scheduleService.syncRange(past, futureDays);
+            firstSync = false;
         } catch (Exception e) {
             log.warn("[fotmob-poll] 일정 동기화 실패(Python 서버 확인): {}", e.getMessage());
         }

@@ -36,5 +36,11 @@ public class MatchController {
         return ResponseEntity
                 .ok(CommonResponse.success("데이터 조회 성공", matchService.findByDate(date)));
     }
+    // 다가오는 경기 조회 (compId 옵션 — WC만 보려면 6)
+    @GetMapping("/upcoming")
+    public ResponseEntity<CommonResponse<?>> upcoming(@RequestParam(required = false) Long compId) {
+        return ResponseEntity
+                .ok(CommonResponse.success("데이터 조회 성공", matchService.upcoming(compId)));
+    }
 
 }

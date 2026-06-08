@@ -78,6 +78,12 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - 예: `/api/match/MatchDay?date=2026-06-13`
 - 응답: `data` = `Match[]`
 
+### `GET /api/match/upcoming?compId={competitionId}`
+**다가오는 경기**(킥오프 미래)만, 가까운 순. 예측 화면 메인용.
+- `compId`: **선택** — 주면 그 대회만(**월드컵=6**), 없으면 전체
+- 예: `/api/match/upcoming?compId=6` → 아직 안 시작한 월드컵 경기만
+- 응답: `data` = `Match[]`
+
 ---
 
 ## 3. 경기 상세 — 라인업 / 이벤트 (FotMob) — 인증 불필요
@@ -138,6 +144,40 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 특정 경기에 대한 내 예측 1건.
 - 응답: `data` = [`Prediction`](#prediction)
 - 예측 안 했으면: `success:false, msg:"해당 경기에 대한 예측이 없습니다."`
+
+### `GET /api/prediction/ratio?matchId={id}`
+그 경기의 **예측 분포(%)**. **본인이 예측한 경기만** 조회 가능(예측 전엔 거절).
+- 응답: `data` = `PredictionRatio`
+```json
+{
+  "total": 12,
+  "homePercent": 50, "drawPercent": 17, "awayPercent": 33,
+  "homeCount": 6, "drawCount": 2, "awayCount": 4
+}
+```
+- `percent`는 0~100 정수(반올림). 예측 안 했으면: `success:false, msg:"예측 후 비율을 볼 수 있습니다."`
+
+---
+
+## 5-2. 유저 / 리더보드
+
+### `GET /api/user/me`  *(로그인 필요)*
+내 정보 + 전적.
+- 응답: `data` = `UserView`
+```json
+{ "id": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58 }
+```
+- `accuracy`: 적중률 0~100 정수 (`correctCount/matchesPlayed`), 참여 0이면 0
+
+### `GET /api/user/leaderboard`  *(공개)*
+적중수 내림차순 랭킹.
+- 응답: `data` = `RankView[]`
+```json
+[
+  { "rank": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58 }
+]
+```
+- 동률이면 경기수 적은 쪽이 위. 예측이 채점돼야 집계됨(`correctCount`는 경기 종료 시 자동 갱신).
 
 ---
 
@@ -305,20 +345,21 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - 월드컵(compId=6)은 **대회 시작 전에도 그룹 순위표가 0으로 채워져** 옵니다(예: "Grp. A", "Best 3rd placed teams"). `groupName` 으로 묶어서 렌더.
 - 친선(compId=1)은 순위표가 없어 **빈 배열**.
 
-### Prediction
-> ⚠️ 로그인이 필요해 실제 응답 미수록 — 아래는 예상 형태.
+### Prediction (응답 DTO = `PredictionView`)
+`predict` / `myPrediction` / `findByMatch` 응답. User 등 민감정보 없이 필요한 것만 내려갑니다.
 ```json
 {
   "id": 3,
-  "user": { /* User 객체 통째로 포함 */ },
-  "match": { /* Match 객체 통째로 포함 (위 Match 형태) */ },
+  "matchId": 197,
+  "homeTeamName": "South Korea",
+  "awayTeamName": "Czechia",
   "predictedWinner": "HOME_TEAM",
   "isCorrect": null
 }
 ```
 - `predictedWinner`: `HOME_TEAM` | `AWAY_TEAM` | `DRAW`
 - `isCorrect`: `null`(경기 안 끝남) | `true`(적중) | `false`(실패) — 경기 종료 시 자동 채점됨
-- `match.id`로 어느 경기인지 식별 가능
+- `homeTeamName`/`awayTeamName`: 화면 라벨용(예: "대한민국 승" 표시) — 전송 값은 enum
 
 ---
 

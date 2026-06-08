@@ -31,13 +31,14 @@ export default function FotmobTester() {
     <div style={S.page}>
       <h1 style={S.h1}>⚽ FotMob 콘솔 <span style={S.sub}>모든 결과는 콘솔(F12)에도 출력</span></h1>
       <div style={S.tabs}>
-        {[["schedule", "📅 일정"], ["standings", "🏆 순위"], ["predict", "🎯 예측"], ["tools", "🛠 도구"]].map(([k, label]) => (
+        {[["schedule", "📅 일정"], ["standings", "🏆 순위"], ["predict", "🎯 예측"], ["rank", "🏅 랭킹"], ["tools", "🛠 도구"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} style={{ ...S.tab, ...(tab === k ? S.tabOn : {}) }}>{label}</button>
         ))}
       </div>
       {tab === "schedule" && <SchedulePanel />}
       {tab === "standings" && <StandingsPanel />}
       {tab === "predict" && <PredictionPanel />}
+      {tab === "rank" && <RankPanel />}
       {tab === "tools" && <ToolsPanel />}
     </div>
   );
@@ -63,11 +64,8 @@ function SchedulePanel() {
   async function openMatch(m) {
     setErr("");
     try {
-      // 이미 저장된 라인업/이벤트 조회. 없으면 즉시 동기화.
-      let view = await call(`/api/match/${m.id}/fotmob`);
-      if (!view.lineup?.length) {
-        view = await call(`/api/match/${m.id}/fotmob/sync`, { method: "POST" });
-      }
+      // 백엔드가 조회 시 필요하면 라인업을 1회 자동 동기화(DB-first). 프론트는 GET만.
+      const view = await call(`/api/match/${m.id}/fotmob`);
       const lineups = (view.lineup || []).map(normLineup);
       const events = (view.events || []).map(normEvent);
       console.group(`%c[경기] ${m.homeTeam?.name} vs ${m.awayTeam?.name}`, "color:#2563eb;font-weight:bold");
@@ -230,6 +228,19 @@ function StandingsPanel() {
 // ── 예측 탭: 로그인 → WC 경기 불러오기 → 클릭 예측 → 내 예측 조회 ──
 const WINNER_LABEL = { HOME_TEAM: "홈 승", DRAW: "무", AWAY_TEAM: "원정 승" };
 
+// 예측 분포 막대 한 줄
+function RatioRow({ label, pct, count }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0", fontSize: 13 }}>
+      <span style={{ width: 100, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      <div style={{ flex: 1, background: "#f1f5f9", borderRadius: 6, height: 18 }}>
+        <div style={{ width: `${pct}%`, background: "#2563eb", height: "100%", borderRadius: 6, minWidth: pct > 0 ? 2 : 0 }} />
+      </div>
+      <span style={{ width: 78 }}>{pct}% ({count})</span>
+    </div>
+  );
+}
+
 function PredictionPanel() {
   const cred = { credentials: "include" }; // JWT 쿠키 동봉
 
@@ -238,6 +249,7 @@ function PredictionPanel() {
   const [matchId, setMatchId] = useState("");
   const [winner, setWinner] = useState("HOME_TEAM");
   const [mine, setMine] = useState([]);
+  const [ratio, setRatio] = useState(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
@@ -248,14 +260,13 @@ function PredictionPanel() {
     catch (e) { setErr(e.message); }
   }
 
-  // WC 경기 목록 (예측 대상) — 가까운 미래 순
+  // 다가오는 WC 경기 (예측 대상) — /upcoming 이 이미 킥오프 가까운 순으로 줌
   async function loadMatches() {
     setErr(""); setMsg("");
     try {
-      const data = await call(`/api/match/findByCompId?id=${compId}`);
-      const sorted = [...(data || [])].sort((a, b) => (a.matchTime > b.matchTime ? 1 : -1));
-      setMatches(sorted);
-      setMsg(`${sorted.length}경기 로드`);
+      const data = await call(`/api/match/upcoming?compId=${compId}`);
+      setMatches(data || []);
+      setMsg(`다가오는 ${data?.length || 0}경기 로드`);
     } catch (e) { setErr(e.message); setMatches([]); }
   }
 
@@ -266,7 +277,15 @@ function PredictionPanel() {
     try {
       const d = await call(`/api/prediction/predict?matchId=${matchId}&predictedWinner=${winner}`, { method: "POST", ...cred });
       setMsg(`✅ 예측 저장: matchId=${matchId} → ${d.predictedWinner} (${WINNER_LABEL[d.predictedWinner] || ""})`);
+      loadRatio(); // 예측 후에만 비율 공개
     } catch (e) { setErr("예측 실패: " + e.message); }
+  }
+
+  // 예측 분포(%) — 예측한 뒤에만 서버가 내려줌
+  async function loadRatio() {
+    if (!matchId) return;
+    try { setRatio(await call(`/api/prediction/ratio?matchId=${matchId}`, cred)); }
+    catch { setRatio(null); }
   }
 
   // 내 예측 전부
@@ -279,8 +298,8 @@ function PredictionPanel() {
   const fmtCorrect = (v) => v == null ? "⏳ 대기" : v ? "🟢 적중" : "🔴 실패";
   // enum → 팀 이름 라벨 (경기 정보 있으면 팀명, 없으면 홈/원정)
   const pickLabel = (p) => {
-    if (p.predictedWinner === "HOME_TEAM") return p.match?.homeTeam?.name || "홈 승";
-    if (p.predictedWinner === "AWAY_TEAM") return p.match?.awayTeam?.name || "원정 승";
+    if (p.predictedWinner === "HOME_TEAM") return p.homeTeamName || "홈 승";
+    if (p.predictedWinner === "AWAY_TEAM") return p.awayTeamName || "원정 승";
     return "무";
   };
   // 선택된 경기의 팀 이름 (화면 표시용 — 전송 값은 enum 그대로)
@@ -303,8 +322,8 @@ function PredictionPanel() {
         <h3 style={S.h3}>예측할 WC 경기 <span style={S.tag}>월드컵만 가능</span></h3>
         <div style={S.row}>
           <input style={{ ...S.input, width: 90 }} value={compId} onChange={(e) => setCompId(e.target.value)} placeholder="compId" />
-          <button style={S.btn} onClick={loadMatches}>경기 불러오기</button>
-          <span style={S.desc}>WC 내부 compId=6 · 경기를 클릭하면 아래 예측 폼에 자동 입력</span>
+          <button style={S.btn} onClick={loadMatches}>다가오는 경기 불러오기</button>
+          <span style={S.desc}>GET /api/match/upcoming?compId=6 · 미래 경기만 · 클릭하면 예측 폼에 자동 입력</span>
         </div>
         {matches.length > 0 && (
           <div style={S.matchList}>
@@ -340,6 +359,14 @@ function PredictionPanel() {
         </div>
         {err && <div style={S.error}>⚠️ {err}</div>}
         {msg && <div style={S.info}>{msg}</div>}
+        {ratio && (
+          <div style={{ marginTop: 12 }}>
+            <div style={S.subhead}>예측 분포 (총 {ratio.total}명)</div>
+            <RatioRow label={homeName || "홈 승"} pct={ratio.homePercent} count={ratio.homeCount} />
+            <RatioRow label="무" pct={ratio.drawPercent} count={ratio.drawCount} />
+            <RatioRow label={awayName || "원정 승"} pct={ratio.awayPercent} count={ratio.awayCount} />
+          </div>
+        )}
       </div>
 
       {mine.length > 0 && (
@@ -350,7 +377,7 @@ function PredictionPanel() {
             <tbody>
               {mine.map((p) => (
                 <tr key={p.id}>
-                  <td style={S.td}>{p.match?.id ?? "-"}</td>
+                  <td style={S.td}>{p.matchId ?? "-"}</td>
                   <td style={S.tdL}>{pickLabel(p)} <span style={S.desc}>({p.predictedWinner})</span></td>
                   <td style={S.td}>{fmtCorrect(p.isCorrect)}</td>
                 </tr>
@@ -363,10 +390,66 @@ function PredictionPanel() {
   );
 }
 
+// ── 랭킹 탭: 내 전적 + 리더보드 ──
+function RankPanel() {
+  const cred = { credentials: "include" };
+  const [me, setMe] = useState(null);
+  const [board, setBoard] = useState([]);
+  const [err, setErr] = useState("");
+
+  useEffect(() => { loadBoard(); }, []);
+
+  async function loadMe() {
+    setErr("");
+    try { setMe(await call("/api/user/me", cred)); }
+    catch (e) { setErr(e.message); setMe(null); }
+  }
+  async function loadBoard() {
+    setErr("");
+    try { setBoard(await call("/api/user/leaderboard") || []); }
+    catch (e) { setErr(e.message); }
+  }
+
+  return (
+    <div>
+      <div style={S.panel}>
+        <h3 style={S.h3}>내 정보 <span style={S.tag}>로그인 필요</span></h3>
+        <div style={S.row}>
+          <button style={S.btn} onClick={loadMe}>내 전적 보기</button>
+          {me && <span style={S.desc}><b>{me.name}</b> · 참여 {me.matchesPlayed} · 적중 {me.correctCount} · 적중률 <b>{me.accuracy}%</b></span>}
+        </div>
+      </div>
+      <div style={S.panel}>
+        <h3 style={S.h3}>리더보드 <span style={S.tag}>적중순</span></h3>
+        <button style={S.btnGhost} onClick={loadBoard}>새로고침</button>
+        {err && <div style={S.error}>⚠️ {err}</div>}
+        {board.length > 0 ? (
+          <table style={{ ...S.table, marginTop: 10 }}>
+            <thead><tr><th style={S.th}>#</th><th style={S.thL}>이름</th><th style={S.th}>경기</th><th style={S.th}>적중</th><th style={S.th}>적중률</th></tr></thead>
+            <tbody>
+              {board.map((r) => (
+                <tr key={r.rank}>
+                  <td style={S.td}>{r.rank}</td>
+                  <td style={S.tdL}>{r.name}</td>
+                  <td style={S.td}>{r.matchesPlayed}</td>
+                  <td style={S.td}>{r.correctCount}</td>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{r.accuracy}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <p style={S.desc}>아직 데이터가 없습니다. (예측이 채점되면 집계됩니다)</p>}
+      </div>
+    </div>
+  );
+}
+
 // ── 도구 탭: 미리보기 / 일정 동기화 / 폴링 주기 ──
 function ToolsPanel() {
   const [fid, setFid] = useState("5451162");
   const [interval, setIntervalV] = useState(null);
+  const [pastDays, setPastDays] = useState("10");
+  const [futureDays, setFutureDays] = useState("10");
   const [msg, setMsg] = useState("");
 
   useEffect(() => { call("/api/fotmob/poll-interval").then(setIntervalV).catch(() => {}); }, []);
@@ -383,8 +466,8 @@ function ToolsPanel() {
     } catch (e) { setMsg("실패: " + e.message); }
   }
   async function syncSchedule() {
-    setMsg("일정 동기화 중... (수십초 걸릴 수 있음)");
-    try { const n = await call("/api/fotmob/schedule/sync?pastDays=10&futureDays=10", { method: "POST" }); setMsg(`일정 ${n}경기 동기화 완료`); }
+    setMsg(`일정 동기화 중... 과거 ${pastDays}일 ~ 미래 ${futureDays}일 (수십초 걸릴 수 있음)`);
+    try { const n = await call(`/api/fotmob/schedule/sync?pastDays=${pastDays}&futureDays=${futureDays}`, { method: "POST" }); setMsg(`일정 ${n}경기 동기화 완료`); }
     catch (e) { setMsg("실패: " + e.message); }
   }
   async function setPoll(minutes) {
@@ -402,8 +485,15 @@ function ToolsPanel() {
         </div>
       </div>
       <div style={S.panel}>
-        <h3 style={S.h3}>일정 동기화 <span style={S.tag}>과거·미래 10일</span></h3>
-        <button style={S.btn} onClick={syncSchedule}>지금 일정 동기화</button>
+        <h3 style={S.h3}>일정 동기화 <span style={S.tag}>불러올 일수 지정</span></h3>
+        <div style={S.row}>
+          <label style={S.desc}>과거</label>
+          <input style={{ ...S.input, width: 60 }} type="number" value={pastDays} onChange={(e) => setPastDays(e.target.value)} />
+          <label style={S.desc}>~ 미래</label>
+          <input style={{ ...S.input, width: 60 }} type="number" value={futureDays} onChange={(e) => setFutureDays(e.target.value)} />
+          <label style={S.desc}>일치</label>
+          <button style={S.btn} onClick={syncSchedule}>지금 일정 동기화</button>
+        </div>
       </div>
       <div style={S.panel}>
         <h3 style={S.h3}>폴링 주기 (관리자)</h3>

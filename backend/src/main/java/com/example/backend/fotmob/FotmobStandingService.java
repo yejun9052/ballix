@@ -67,8 +67,18 @@ public class FotmobStandingService {
         log.info("[fotmob-standing] competitionId={} 순위 {}행 갱신", competitionId, rows.size());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<LeagueStanding> getStandings(Long competitionId) {
-        return standingRepository.findByCompetitionIdOrderByGroupNameAscRankNoAsc(competitionId);
+        List<LeagueStanding> rows = standingRepository.findByCompetitionIdOrderByGroupNameAscRankNoAsc(competitionId);
+        if (rows.isEmpty()) {
+            // 최초 조회 시 1회 크롤+저장 후 재조회 (이후엔 DB)
+            try {
+                syncStandings(competitionId);
+                rows = standingRepository.findByCompetitionIdOrderByGroupNameAscRankNoAsc(competitionId);
+            } catch (Exception e) {
+                log.warn("[fotmob-standing] lazy 동기화 실패 competitionId={} : {}", competitionId, e.getMessage());
+            }
+        }
+        return rows;
     }
 }

@@ -44,5 +44,13 @@ public class PredictionController {
         return ResponseEntity
                 .ok(CommonResponse.success("데이터 조회 성공", predictionService.findByMatch(userId, matchId)));
     }
+    // 예측 분포(%) 조회 - 본인이 예측한 경기만
+    @GetMapping("/ratio")
+    public ResponseEntity<CommonResponse<?>> ratio(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam Long matchId) {
+        return ResponseEntity
+                .ok(CommonResponse.success("데이터 조회 성공", predictionService.getRatio(userId, matchId)));
+    }
 
 }
