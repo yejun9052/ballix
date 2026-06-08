@@ -224,11 +224,18 @@ def _team_logo(team_id) -> str:
 
 
 def build_schedule(raw: dict, filters: list[str], date: str) -> dict:
-    """날짜별 raw 응답을 평탄한 경기 목록으로 정제. filters는 leagueName 부분매칭(소문자)."""
+    """날짜별 raw 응답을 평탄한 경기 목록으로 정제.
+
+    filters 토큰이 숫자면 leagueId(primaryId/id) 정확매칭, 아니면 leagueName 부분매칭(소문자).
+    숫자 토큰을 쓰면 이름이 같은 여자/U21/클럽 파생 리그를 정확히 구분해 걸러낼 수 있다.
+    """
+    id_filters = {f for f in filters if f.isdigit()}
+    name_filters = [f for f in filters if not f.isdigit()]
     out = []
     for lg in raw.get("leagues", []) or []:
         lname = lg.get("name", "") or ""
-        if filters and not any(f in lname.lower() for f in filters):
+        lid = str(lg.get("primaryId") or lg.get("id") or "")
+        if filters and not (lid in id_filters or any(f in lname.lower() for f in name_filters)):
             continue
         for m in lg.get("matches", []) or []:
             st = m.get("status", {}) or {}

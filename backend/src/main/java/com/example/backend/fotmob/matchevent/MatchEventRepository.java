@@ -1,4 +1,4 @@
-package com.example.backend.fotmob;
+package com.example.backend.fotmob.matchevent;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

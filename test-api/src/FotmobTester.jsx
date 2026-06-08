@@ -31,12 +31,13 @@ export default function FotmobTester() {
     <div style={S.page}>
       <h1 style={S.h1}>⚽ FotMob 콘솔 <span style={S.sub}>모든 결과는 콘솔(F12)에도 출력</span></h1>
       <div style={S.tabs}>
-        {[["schedule", "📅 일정"], ["standings", "🏆 순위"], ["tools", "🛠 도구"]].map(([k, label]) => (
+        {[["schedule", "📅 일정"], ["standings", "🏆 순위"], ["predict", "🎯 예측"], ["tools", "🛠 도구"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} style={{ ...S.tab, ...(tab === k ? S.tabOn : {}) }}>{label}</button>
         ))}
       </div>
       {tab === "schedule" && <SchedulePanel />}
       {tab === "standings" && <StandingsPanel />}
+      {tab === "predict" && <PredictionPanel />}
       {tab === "tools" && <ToolsPanel />}
     </div>
   );
@@ -222,6 +223,142 @@ function StandingsPanel() {
           </table>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── 예측 탭: 로그인 → WC 경기 불러오기 → 클릭 예측 → 내 예측 조회 ──
+const WINNER_LABEL = { HOME_TEAM: "홈 승", DRAW: "무", AWAY_TEAM: "원정 승" };
+
+function PredictionPanel() {
+  const cred = { credentials: "include" }; // JWT 쿠키 동봉
+
+  const [compId, setCompId] = useState("6"); // WC 내부 competitionId
+  const [matches, setMatches] = useState([]);
+  const [matchId, setMatchId] = useState("");
+  const [winner, setWinner] = useState("HOME_TEAM");
+  const [mine, setMine] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  function login() { window.location.href = API + "/oauth2/authorization/google"; }
+  async function logout() {
+    setErr(""); setMine([]);
+    try { await call("/api/auth/logout", { method: "POST", ...cred }); setMsg("로그아웃됨"); }
+    catch (e) { setErr(e.message); }
+  }
+
+  // WC 경기 목록 (예측 대상) — 가까운 미래 순
+  async function loadMatches() {
+    setErr(""); setMsg("");
+    try {
+      const data = await call(`/api/match/findByCompId?id=${compId}`);
+      const sorted = [...(data || [])].sort((a, b) => (a.matchTime > b.matchTime ? 1 : -1));
+      setMatches(sorted);
+      setMsg(`${sorted.length}경기 로드`);
+    } catch (e) { setErr(e.message); setMatches([]); }
+  }
+
+  // 예측하기 / 재예측
+  async function doPredict() {
+    setErr(""); setMsg("");
+    if (!matchId) { setErr("matchId를 선택하거나 입력하세요."); return; }
+    try {
+      const d = await call(`/api/prediction/predict?matchId=${matchId}&predictedWinner=${winner}`, { method: "POST", ...cred });
+      setMsg(`✅ 예측 저장: matchId=${matchId} → ${d.predictedWinner} (${WINNER_LABEL[d.predictedWinner] || ""})`);
+    } catch (e) { setErr("예측 실패: " + e.message); }
+  }
+
+  // 내 예측 전부
+  async function loadMine() {
+    setErr(""); setMsg("");
+    try { const d = await call("/api/prediction/myPrediction", cred); setMine(d || []); setMsg(`내 예측 ${d?.length || 0}건`); }
+    catch (e) { setErr(e.message); setMine([]); }
+  }
+
+  const fmtCorrect = (v) => v == null ? "⏳ 대기" : v ? "🟢 적중" : "🔴 실패";
+  // enum → 팀 이름 라벨 (경기 정보 있으면 팀명, 없으면 홈/원정)
+  const pickLabel = (p) => {
+    if (p.predictedWinner === "HOME_TEAM") return p.match?.homeTeam?.name || "홈 승";
+    if (p.predictedWinner === "AWAY_TEAM") return p.match?.awayTeam?.name || "원정 승";
+    return "무";
+  };
+  // 선택된 경기의 팀 이름 (화면 표시용 — 전송 값은 enum 그대로)
+  const selMatch = matches.find((m) => String(m.id) === String(matchId));
+  const homeName = selMatch?.homeTeam?.name;
+  const awayName = selMatch?.awayTeam?.name;
+
+  return (
+    <div>
+      <div style={S.panel}>
+        <h3 style={S.h3}>로그인 <span style={S.tag}>예측은 로그인 필요(쿠키)</span></h3>
+        <div style={S.row}>
+          <button style={S.btn} onClick={login}>Google 로그인</button>
+          <button style={S.btnGhost} onClick={logout}>로그아웃</button>
+          <span style={S.desc}>로그인 후 이 탭으로 돌아오세요.</span>
+        </div>
+      </div>
+
+      <div style={S.panel}>
+        <h3 style={S.h3}>예측할 WC 경기 <span style={S.tag}>월드컵만 가능</span></h3>
+        <div style={S.row}>
+          <input style={{ ...S.input, width: 90 }} value={compId} onChange={(e) => setCompId(e.target.value)} placeholder="compId" />
+          <button style={S.btn} onClick={loadMatches}>경기 불러오기</button>
+          <span style={S.desc}>WC 내부 compId=6 · 경기를 클릭하면 아래 예측 폼에 자동 입력</span>
+        </div>
+        {matches.length > 0 && (
+          <div style={S.matchList}>
+            {matches.map((m) => (
+              <div key={m.id}
+                   style={{ ...S.matchRow, outline: String(m.id) === String(matchId) ? "2px solid #2563eb" : "none" }}
+                   onClick={() => setMatchId(String(m.id))}>
+                <span style={S.comp}>#{m.id}{m.groupName ? ` · ${m.groupName}` : ""}</span>
+                <div style={S.teams}>
+                  <Team t={m.homeTeam} align="right" />
+                  <b style={S.vs}>{m.homeScore ?? "-"} : {m.awayScore ?? "-"}</b>
+                  <Team t={m.awayTeam} align="left" />
+                </div>
+                <span style={S.time}>{kst(m.matchTime)} · {m.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={S.panel}>
+        <h3 style={S.h3}>예측하기</h3>
+        {selMatch && <div style={S.desc}>선택: <b>{homeName}</b> vs <b>{awayName}</b> ({kst(selMatch.matchTime)})</div>}
+        <div style={{ ...S.row, marginTop: 6 }}>
+          <input style={{ ...S.input, width: 110 }} value={matchId} onChange={(e) => setMatchId(e.target.value)} placeholder="matchId" />
+          <select style={S.input} value={winner} onChange={(e) => setWinner(e.target.value)}>
+            <option value="HOME_TEAM">{homeName ? `${homeName} 승` : "홈 승"}</option>
+            <option value="DRAW">무</option>
+            <option value="AWAY_TEAM">{awayName ? `${awayName} 승` : "원정 승"}</option>
+          </select>
+          <button style={S.btn} onClick={doPredict}>예측 / 재예측</button>
+          <button style={S.btnGhost} onClick={loadMine}>내 예측 조회</button>
+        </div>
+        {err && <div style={S.error}>⚠️ {err}</div>}
+        {msg && <div style={S.info}>{msg}</div>}
+      </div>
+
+      {mine.length > 0 && (
+        <div style={S.panel}>
+          <h3 style={S.h3}>내 예측 ({mine.length})</h3>
+          <table style={S.table}>
+            <thead><tr><th style={S.th}>matchId</th><th style={S.thL}>예측</th><th style={S.th}>채점</th></tr></thead>
+            <tbody>
+              {mine.map((p) => (
+                <tr key={p.id}>
+                  <td style={S.td}>{p.match?.id ?? "-"}</td>
+                  <td style={S.tdL}>{pickLabel(p)} <span style={S.desc}>({p.predictedWinner})</span></td>
+                  <td style={S.td}>{fmtCorrect(p.isCorrect)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

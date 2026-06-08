@@ -1,7 +1,7 @@
 package com.example.backend.fotmob.dto;
 
-import com.example.backend.fotmob.LineupPlayer;
-import com.example.backend.fotmob.MatchEvent;
+import com.example.backend.fotmob.lineup.LineupPlayer;
+import com.example.backend.fotmob.matchevent.MatchEvent;
 
 import java.util.List;
 

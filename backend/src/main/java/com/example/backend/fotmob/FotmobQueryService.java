@@ -1,8 +1,12 @@
 package com.example.backend.fotmob;
 
 import com.example.backend.fotmob.dto.MatchFotmobView;
-import com.example.backend.matche.Match;
-import com.example.backend.matche.MatchRepository;
+import com.example.backend.fotmob.lineup.LineupPlayer;
+import com.example.backend.fotmob.lineup.LineupPlayerRepository;
+import com.example.backend.fotmob.matchevent.MatchEvent;
+import com.example.backend.fotmob.matchevent.MatchEventRepository;
+import com.example.backend.match.Match;
+import com.example.backend.match.MatchRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

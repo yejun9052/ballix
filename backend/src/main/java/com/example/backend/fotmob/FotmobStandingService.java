@@ -5,6 +5,8 @@ import com.example.backend.competition.CompetitionRepository;
 import com.example.backend.fotmob.dto.FotmobTableResponse;
 import com.example.backend.fotmob.dto.FotmobTableResponse.Group;
 import com.example.backend.fotmob.dto.FotmobTableResponse.Row;
+import com.example.backend.fotmob.league.LeagueStanding;
+import com.example.backend.fotmob.league.LeagueStandingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

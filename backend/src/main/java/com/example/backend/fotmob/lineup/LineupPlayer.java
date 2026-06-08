@@ -1,4 +1,4 @@
-package com.example.backend.fotmob;
+package com.example.backend.fotmob.lineup;
 
 import com.example.backend.global.common.BaseTimeEntity;
 import jakarta.persistence.*;

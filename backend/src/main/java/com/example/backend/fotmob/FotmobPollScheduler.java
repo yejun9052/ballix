@@ -1,7 +1,7 @@
 package com.example.backend.fotmob;
 
-import com.example.backend.matche.Match;
-import com.example.backend.matche.MatchRepository;
+import com.example.backend.match.Match;
+import com.example.backend.match.MatchRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

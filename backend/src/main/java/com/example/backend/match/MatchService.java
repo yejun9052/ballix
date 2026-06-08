@@ -1,4 +1,4 @@
-package com.example.backend.matche;
+package com.example.backend.match;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

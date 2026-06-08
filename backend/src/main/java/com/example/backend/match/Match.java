@@ -1,4 +1,4 @@
-package com.example.backend.matche;
+package com.example.backend.match;
 
 import com.example.backend.competition.Competition;
 import com.example.backend.global.common.BaseTimeEntity;

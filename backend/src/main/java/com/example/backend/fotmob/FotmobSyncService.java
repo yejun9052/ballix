@@ -3,8 +3,13 @@ package com.example.backend.fotmob;
 import com.example.backend.fotmob.dto.FotmobMatchResponse;
 import com.example.backend.fotmob.dto.FotmobMatchResponse.EventDto;
 import com.example.backend.fotmob.dto.FotmobMatchResponse.LineupDto;
-import com.example.backend.matche.Match;
-import com.example.backend.matche.MatchRepository;
+import com.example.backend.fotmob.lineup.LineupPlayer;
+import com.example.backend.fotmob.lineup.LineupPlayerRepository;
+import com.example.backend.fotmob.matchevent.MatchEvent;
+import com.example.backend.fotmob.matchevent.MatchEventRepository;
+import com.example.backend.match.Match;
+import com.example.backend.match.MatchRepository;
+import com.example.backend.prediction.PredictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +32,7 @@ public class FotmobSyncService {
     private final LineupPlayerRepository lineupPlayerRepository;
     private final MatchEventRepository matchEventRepository;
     private final FotmobStandingService standingService;
+    private final PredictionService predictionService;
 
     @Transactional
     public void syncMatch(Match match) {
@@ -77,6 +83,12 @@ public class FotmobSyncService {
                     log.warn("[fotmob-sync] 순위 갱신 실패 competitionId={} : {}",
                             match.getCompetition().getId(), e.getMessage());
                 }
+            }
+            // 예측 채점 (해당 경기 예측 일괄 채점 + 유저 전적 갱신)
+            try {
+                predictionService.gradeMatch(match);
+            } catch (Exception e) {
+                log.warn("[fotmob-sync] 예측 채점 실패 matchId={} : {}", match.getId(), e.getMessage());
             }
         }
 

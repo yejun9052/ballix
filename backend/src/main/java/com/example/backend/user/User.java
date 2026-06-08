@@ -53,6 +53,14 @@ public class User extends BaseTimeEntity {
                 .build();
     }
 
+    // 예측 채점 결과를 전적에 반영 (참여 경기 수 +1, 맞췄으면 적중 수 +1)
+    public void scorePrediction(boolean correct) {
+        this.matches_played++;
+        if (correct) {
+            this.correct_count++;
+        }
+    }
+
 
 
 
