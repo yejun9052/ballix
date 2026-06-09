@@ -105,12 +105,18 @@ async def extract_from_page(page: Page, page_url: str, match_id: Optional[str], 
         except Exception as e:
             log(f"[fotmob] 초기 로딩 경고: {e}")
 
-        # 네트워크 인터셉트 대기 (최대 30초)
-        if not capture_done.is_set():
-            try:
-                await asyncio.wait_for(capture_done.wait(), timeout=30)
-            except asyncio.TimeoutError:
-                log("[fotmob] 네트워크 인터셉트 실패, 대안 방법 시도...")
+        # FotMob은 데이터를 SSR(__NEXT_DATA__)로 내려주고 보통 별도 /api/matchDetails XHR를
+        # 쏘지 않는다. 따라서 '오지 않는 XHR'를 길게 기다리지 말고, 즉시 반환되는 방법
+        # (페이지 내 직접 fetch → SSR 추출)을 먼저 시도한다. goto 도중 XHR가 잡혔으면 그대로 사용.
+
+        # 방법 1: 페이지 내 직접 fetch (라이브 경기에도 가장 신선한 데이터)
+        if not capture_done.is_set() and match_id:
+            log("[fotmob] 페이지 내 직접 fetch 시도...")
+            data = await _try_fetch_via_page(page, match_id)
+            if data:
+                captured.update(data)
+                capture_done.set()
+                log("[fotmob] 페이지 내 fetch 성공")
 
         # 방법 2: Next.js SSR 데이터 추출
         if not capture_done.is_set():
@@ -130,22 +136,18 @@ async def extract_from_page(page: Page, page_url: str, match_id: Optional[str], 
                     else:
                         log(f"[fotmob] Next.js 데이터 키: {list(props.keys())}")
 
-        # 방법 3: 페이지 내 fetch 호출
-        if not capture_done.is_set() and match_id:
-            log("[fotmob] 페이지 내 직접 fetch 시도...")
-            data = await _try_fetch_via_page(page, match_id)
-            if data:
-                captured.update(data)
-                capture_done.set()
-                log("[fotmob] 페이지 내 fetch 성공")
-
-        # 방법 4: 스크롤 후 재시도
+        # 방법 3: 그래도 없으면 짧게 네트워크 인터셉트를 기다린 뒤 스크롤 후 재시도
         if not capture_done.is_set():
-            log("[fotmob] 페이지 스크롤 후 재시도...")
+            try:
+                await asyncio.wait_for(capture_done.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                log("[fotmob] 네트워크 인터셉트 실패, 스크롤 후 재시도...")
+
+        if not capture_done.is_set():
             try:
                 await page.mouse.wheel(0, 500)
-                await asyncio.sleep(3)
-                await asyncio.wait_for(capture_done.wait(), timeout=10)
+                await asyncio.sleep(2)
+                await asyncio.wait_for(capture_done.wait(), timeout=8)
             except asyncio.TimeoutError:
                 pass
     finally:

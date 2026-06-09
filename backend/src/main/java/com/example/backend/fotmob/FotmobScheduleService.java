@@ -11,7 +11,9 @@ import com.example.backend.team.Team;
 import com.example.backend.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,12 @@ public class FotmobScheduleService {
     private final TeamRepository teamRepository;
     private final CompetitionRepository competitionRepository;
 
+    /** 자기 자신의 프록시. 날짜별 저장(persistSchedule)을 독립 트랜잭션으로 커밋하기 위해
+     *  내부호출이 아닌 프록시 경유로 부른다(같은 빈 self-invocation은 @Transactional이 무시됨). */
+    @Lazy
+    @Autowired
+    private FotmobScheduleService self;
+
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
     // "World Cup Grp. A" → 그룹명 "Grp. A" 분리
     private static final Pattern GROUP_PAT = Pattern.compile("\\s*(Grp\\.?\\s*\\w+|Group\\s*\\w+)\\s*$", Pattern.CASE_INSENSITIVE);
@@ -44,8 +52,11 @@ public class FotmobScheduleService {
     @Value("${fotmob.schedule.leagues:World Cup,Friendlies}")
     private String leaguesFilter;
 
-    /** 과거~미래 N일치 일정을 동기화. */
-    @Transactional
+    /**
+     * 과거~미래 N일치 일정을 동기화.
+     * 트랜잭션을 전 범위로 묶지 않는다 — 날짜마다 크롤→저장을 독립 처리해
+     * 하루치가 끝날 때마다 바로 커밋되게 한다(16분짜리 단일 트랜잭션 방지).
+     */
     public int syncRange(int pastDays, int futureDays) {
         LocalDate today = LocalDate.now();
         int total = 0;
@@ -61,13 +72,22 @@ public class FotmobScheduleService {
         return total;
     }
 
-    /** 특정 날짜(YYYYMMDD) 일정 동기화. */
-    @Transactional
+    /**
+     * 특정 날짜(YYYYMMDD) 일정 동기화.
+     * 크롤(네트워크 I/O)은 트랜잭션 밖에서 수행해 DB 커넥션을 점유하지 않고,
+     * 저장만 프록시 경유 persistSchedule로 넘겨 날짜 단위 독립 트랜잭션으로 커밋한다.
+     */
     public int syncDate(String date) {
         FotmobScheduleResponse resp = fotmobClient.getSchedule(date, leaguesFilter);
         if (resp == null || resp.matches() == null || resp.matches().isEmpty()) {
             return 0;
         }
+        return self.persistSchedule(date, resp);
+    }
+
+    /** 크롤 결과를 DB에 업서트(날짜 단위 트랜잭션). */
+    @Transactional
+    public int persistSchedule(String date, FotmobScheduleResponse resp) {
         int count = 0;
         for (ScheduledMatch sm : resp.matches()) {
             if (sm.matchId() == null || sm.homeId() == null || sm.awayId() == null) {

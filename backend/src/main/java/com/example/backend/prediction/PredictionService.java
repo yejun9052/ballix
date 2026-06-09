@@ -43,9 +43,7 @@ public class PredictionService {
     // 예측하기 (이미 예측했으면 수정)
     @Transactional
     public PredictionView predict(Long userId, Long matchId, Winner predictedWinner) {
-        if (userId == null) {
-            throw new UnauthorizedException("로그인이 필요합니다.");
-        }
+        notLogin(userId);
 
         User user = userRepository.findById(userId).orElseThrow(
                 () -> new NotFoundException("유저를 찾을 수 없습니다.")
@@ -77,9 +75,7 @@ public class PredictionService {
     // 내 예측 전부 찾기
     @Transactional(readOnly = true)
     public List<PredictionView> myPrediction(Long userId) {
-        if (userId == null) {
-            throw new UnauthorizedException("로그인이 필요합니다.");
-        }
+        notLogin(userId);
         return predictionRepository.findByUserId(userId).orElseThrow(
                 () -> new NotFoundException("예측 내역을 찾을 수 없습니다.")
         ).stream().map(PredictionView::from).toList();
@@ -88,9 +84,7 @@ public class PredictionService {
     // 특정 경기에 대한 내 예측 찾기
     @Transactional(readOnly = true)
     public PredictionView findByMatch(Long userId, Long matchId) {
-        if (userId == null) {
-            throw new UnauthorizedException("로그인이 필요합니다.");
-        }
+        notLogin(userId);
         Prediction prediction = predictionRepository.findByUserIdAndMatchId(userId, matchId).orElseThrow(
                 () -> new NotFoundException("해당 경기에 대한 예측이 없습니다.")
         );
@@ -100,9 +94,7 @@ public class PredictionService {
     // 예측 분포(%) — 본인이 예측한 경기만 조회 가능
     @Transactional(readOnly = true)
     public PredictionRatio getRatio(Long userId, Long matchId) {
-        if (userId == null) {
-            throw new UnauthorizedException("로그인이 필요합니다.");
-        }
+        notLogin(userId);
         // 예측한 뒤에만 비율 공개
         predictionRepository.findByUserIdAndMatchId(userId, matchId).orElseThrow(
                 () -> new BadRequestException("예측 후 비율을 볼 수 있습니다.")
@@ -138,6 +130,14 @@ public class PredictionService {
             prediction.getUser().scorePrediction(correct); // 유저 전적 갱신
         }
         predictionRepository.saveAll(predictions);
+    }
+
+
+    // 로그인 필요 메시지
+    private void notLogin(Long userId) {
+        if (userId == null) {
+            throw new UnauthorizedException("로그인이 필요합니다.");
+        }
     }
 
 }

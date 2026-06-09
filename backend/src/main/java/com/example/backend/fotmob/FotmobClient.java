@@ -15,7 +15,7 @@ import java.time.Duration;
 
 /**
  * Python FotMob 스크래퍼(FastAPI)를 호출하는 클라이언트.
- * 헤드리스 브라우저 수집이 수십 초 걸릴 수 있어 read timeout을 넉넉히 둔다.
+ * 헤드리스 브라우저 수집은 보통 수 초(SSR 우선 추출)이며, read timeout은 멈춘 크롤 차단용 상한이다.
  */
 @Slf4j
 @Component
@@ -26,7 +26,9 @@ public class FotmobClient {
     public FotmobClient(@Value("${fotmob.api.base-url:http://127.0.0.1:8800}") String baseUrl) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));
-        factory.setReadTimeout(Duration.ofSeconds(90));
+        // 정상 크롤은 ~3초(SSR 우선 추출). 최악 경로(goto 30s + 폴백 스크롤 ~15s)도 ~45초라
+        // 60초면 충분한 안전 상한 — 진짜 멈춘 크롤만 끊는다.
+        factory.setReadTimeout(Duration.ofSeconds(60));
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(factory)

@@ -38,9 +38,9 @@ public class MatchService {
     // 다가오는 경기 찾기 (compId 주면 그 대회만, 없으면 전체)
     public List<Match> upcoming(Long compId) {
         LocalDateTime now = LocalDateTime.now();
-        if (compId == null) {
-            return matchRepository.findByMatchTimeAfterOrderByMatchTimeAsc(now);
-        }
+
+        if (compId == null) return matchRepository.findByMatchTimeAfterOrderByMatchTimeAsc(now);
+
         return matchRepository.findByMatchTimeAfterAndCompetitionIdOrderByMatchTimeAsc(now, compId);
     }
 
