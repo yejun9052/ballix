@@ -240,6 +240,71 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
 ---
 
+## 5-4. 공지사항 (Notice)
+
+> 관리자가 "공지를 때리는" 기능. **조회는 공개, 작성/수정/삭제는 관리자(`ROLE_ADMIN_USER`) 전용.**
+
+### `GET /api/notice`  *(공개)*
+공지 목록 (최신순, 페이지).
+- 응답: **페이지** — `data.content` = `NoticeView[]` (`?page=&size=8`)
+
+### `GET /api/notice/{id}`  *(공개)*
+공지 단건.
+- 응답: `data` = `NoticeView`
+- 없으면: `success:false, msg:"공지를 찾을 수 없습니다."`
+
+### `POST /api/admin/notice`  *(관리자 전용, 쿠키 동봉)*
+공지 등록. **본문 JSON** `{ "title": "...", "content": "..." }`
+- 예: `{ "title": "월드컵 개막!", "content": "다가오는 12일 11시에 진행하는 한국 vs 체코 많은 응원 부탁드립니다." }`
+- 응답: `data` = `NoticeView`
+- 제목/내용 비어있으면: `"제목과 내용을 입력하세요."` / 비관리자는 403(권한 없음)
+
+### `PUT /api/admin/notice/{id}`  *(관리자 전용)*
+공지 수정. 본문 `{ title, content }` (빈 값은 무시).
+- 응답: `data` = `NoticeView`
+
+### `DELETE /api/admin/notice/{id}`  *(관리자 전용)*
+공지 삭제.
+- 응답: `data` = 삭제된 `id`
+
+**NoticeView**
+```json
+{ "id": 3, "title": "월드컵 개막!", "content": "다가오는 12일 11시...", "authorName": "yejun Lee", "createAt": "2026-06-10T15:20:00" }
+```
+
+---
+
+## 5-5. 관리자 — 유저 관리 (Admin Users)
+
+> **전부 관리자(`ROLE_ADMIN_USER`) 전용, 쿠키 동봉.** 관리자만 보므로 email까지 노출됨.
+
+### `GET /api/admin/users`
+유저 목록 (페이지).
+- 응답: **페이지** — `data.content` = `AdminUserView[]` (`?page=&size=8`)
+
+### `PUT /api/admin/users/{id}/role?role={ROLE}`
+권한 변경. `role`: `ADMIN_USER` | `COMMON_USER`
+- 응답: `data` = `AdminUserView`
+- **본인 권한은 변경 불가**: `"본인 권한은 변경할 수 없습니다."`
+
+### `PUT /api/admin/users/{id}/status?active={bool}`
+계정상태 변경. `active=true`(활성) / `false`(정지 — `banType=ADMIN` 기록).
+- 응답: `data` = `AdminUserView`
+- **본인 계정상태는 변경 불가**: `"본인 계정상태는 변경할 수 없습니다."`
+- **정지된 계정은 다음 로그인(OAuth) 시 토큰 발급이 차단**되어 로그인 거부됨(`/home?error=suspended`로 리다이렉트). 단, 이미 발급된 쿠키는 만료(1시간)까지 유효.
+
+**AdminUserView**
+```json
+{
+  "id": 1, "name": "yejun Lee", "email": "yejun0441@hanmail.net",
+  "role": "ADMIN_USER", "active": true, "banType": null,
+  "matchesPlayed": 12, "correctCount": 7, "createAt": "2026-06-05T14:52:42"
+}
+```
+- `role`: `COMMON_USER` | `ADMIN_USER` / `active`: 계정상태(true=활성, false=정지) / `banType`: `ADMIN`(관리자 정지) | `SELF`(자진 탈퇴) | `null`
+
+---
+
 ## 6. 데이터 모델
 
 > 모든 엔티티는 공통으로 `id` (Long), `createAt` (ISO 시간 문자열) 포함.
@@ -461,6 +526,8 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 | 예측/승자 | `HOME_TEAM` `AWAY_TEAM` `DRAW` | `Prediction.predictedWinner`, `Match.winner` |
 | 경기 상태 | `SCHEDULED` `IN_PLAY` `FINISHED` `CANCELLED` | `Match.status` |
 | 이벤트 타입 | `GOAL` `CARD` `SUB` | `MatchEvent.type` |
+| 유저 권한 | `COMMON_USER` `ADMIN_USER` | `UserView.role`, `AdminUserView.role`, 관리자 API 권한 |
+| 밴 타입 | `ADMIN`(관리자 정지) `SELF`(자진 탈퇴) `null` | `AdminUserView.banType` |
 | 월드컵 ID | competitionId=`6`, fotmobLeagueId=`77` | 예측·순위·경기조회 |
 
 ---

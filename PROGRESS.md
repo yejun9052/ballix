@@ -60,6 +60,15 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 - [x] 프론트 `FotmobTester.jsx`: 공통 `asPage()`·`Pager` 컴포넌트로 모든 목록 탭에 페이지 버튼(◀/▶) 적용, `data.content` 소비
 - ⚠️ 순위는 8행 단위라 한 조(group)가 페이지 경계에서 쪼개질 수 있음 → 조 전체 보려면 `?size=100`
 
+### 공지사항 + 관리자 유저 관리 — 2026-06-10
+- [x] **공지사항(`notices` 테이블)** — 관리자가 "공지 때리기". `Notice`(title·content·작성자) + Service/DTO
+  - 조회 공개(`GET /api/notice`·`/{id}`, 페이지 8 최신순), 작성/수정/삭제는 관리자(`POST /api/admin/notice`·`PUT`·`DELETE`)
+  - 예) "다가오는 12일 11시에 진행하는 한국 vs 체코 많은 응원 부탁드립니다."
+- [x] **관리자 유저 관리** — `GET /api/admin/users`(목록, email 포함) + `PUT .../{id}/role`(권한) + `PUT .../{id}/status?active=`(계정상태). User의 기존 `role`·`is_active`·`banType` 활용
+  - **본인 권한/계정상태 변경 차단**(셀프 잠금 방지), 정지(`is_active=false`) 계정은 **로그인 시 토큰 발급 차단**
+- [x] 프론트 **🛡 관리자 탭**(공지 작성/삭제 + 유저 권한/계정상태 토글) + 일정 탭 상단 **공개 공지 배너**(📢)
+- ⚠️ 계정 정지는 **로그인 시점 차단**만 — 이미 발급된 쿠키는 만료(1h)까지 유효(즉시 차단하려면 `JwtFiller`에 `is_active` DB 확인 추가 필요)
+
 ### 보안 보강 (취약점 점검 후) — 2026-06-10
 - [x] **H1 크롤/관리 트리거 엔드포인트 관리자 잠금** — `@EnableMethodSecurity` + `@PreAuthorize("hasRole('ADMIN_USER')")` (poll-interval·schedule/sync·standings/sync·fotmob/sync·preview·search). `schedule/sync` 범위 상한(30) 클램프
 - [x] **H2 AI 요약 공개 `force` 제거** — 순수 DB-first lazy(있으면 캐시, 없으면 1회 생성·저장). 익명의 Gemini 재생성 남용 차단
