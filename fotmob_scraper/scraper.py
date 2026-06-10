@@ -196,6 +196,25 @@ async def fetch_schedule_from_page(page: Page, date: str, tz: str = "Asia/Seoul"
     }}""")
 
 
+async def fetch_commentary_from_page(page: Page, match_id: str, lang: str = "en_gen") -> Optional[dict]:
+    """라이브티커(ltc) 커멘터리 피드를 가져온다 (page는 fotmob.com 로드 상태).
+
+    골 해설 등 상세 중계 텍스트는 별도 ltc 피드에 있다:
+        /api/data/ltc?ltcUrl=http://data.fotmob.com/webcl/ltc/gsm/{matchId}_{lang}.json.gz&teams=[...]
+    teams 파라미터는 존재만 하면 되므로 더미값을 넣는다.
+    """
+    return await page.evaluate(f"""async () => {{
+        try {{
+            const ltc = 'http://data.fotmob.com/webcl/ltc/gsm/{match_id}_{lang}.json.gz';
+            const u = '/api/data/ltc?ltcUrl=' + encodeURIComponent(ltc) + '&teams=' + encodeURIComponent('["x","y"]');
+            const r = await fetch(u);
+            const t = await r.text();
+            if (!t.trim().startsWith('{{')) return null;
+            return JSON.parse(t);
+        }} catch(e) {{ return null; }}
+    }}""")
+
+
 async def fetch_league_table_from_page(page: Page, league_id: int, ccode: str = "KOR") -> Optional[dict]:
     """리그 상세(순위 table 포함)를 가져온다 (page는 fotmob.com에 로드된 상태)."""
     return await page.evaluate(f"""async () => {{

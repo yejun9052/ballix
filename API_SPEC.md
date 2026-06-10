@@ -29,6 +29,36 @@
 - `success: true` → `data` 사용
 - `success: false` → `msg`에 에러 메시지 (예: "로그인이 필요합니다.")
 
+### 페이지네이션 (목록 응답)
+
+**목록을 반환하는 API는 Spring `Page` 형식**으로 옵니다. `data`가 배열이 아니라 아래 객체이고, **실제 목록은 `data.content`** 에 있습니다.
+
+```json
+{
+  "success": true,
+  "msg": "데이터 조회 성공",
+  "data": {
+    "content": [ /* 이 페이지 분량의 목록 */ ],
+    "number": 0,             // 현재 페이지 번호 (0부터)
+    "size": 8,               // 페이지당 개수
+    "totalElements": 57,     // 전체 개수
+    "totalPages": 8,         // 전체 페이지 수
+    "first": true,
+    "last": false,
+    "numberOfElements": 8    // 이 페이지에 실제로 담긴 개수
+  }
+}
+```
+
+- 요청: **`?page={0부터}&size={개수}`** — 예 `?page=2&size=8`. **`size` 기본값 = 8.**
+- 정렬: `?sort={필드},asc|desc` (예 `?sort=matchTime,asc`). 대부분 서버가 기본 정렬을 주므로 생략 가능.
+- 페이지 버튼: `number`(현재)·`totalPages`(전체)로 그리고, `first`/`last`로 이전·다음 비활성화 판단.
+
+**페이지네이션 적용 엔드포인트**: `allMatch` · `findByCompId` · `MatchDay` · `upcoming` · `myPrediction` · `leaderboard` · `comp/allComp` · `fotmob/lineup` · `fotmob/events` · `fotmob/standings/{id}`(+`/sync`)
+**비페이지(단건 객체) 유지**: `/{id}/fotmob`(통합 뷰 — 포메이션 피치가 전체 라인업을 한 번에 필요) · `findByMatch` · `ratio` · `user/me` · `ai/predict` · `ai/summary`
+
+> 아래 각 목록 API의 "응답: `data` = `Xxx[]`" 표기는 **`data.content`가 `Xxx[]`** 라는 의미입니다(나머지 페이지 메타는 위 형식 공통).
+
 ### 에러 처리
 
 검증 실패·예외는 **HTTP 400 + `success:false`** 로 옵니다 (리다이렉트 아님).
@@ -66,23 +96,24 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
 ### `GET /api/match/allMatch`
 전체 경기 목록.
-- 응답: `data` = `Match[]`
+- 응답: **페이지** — `data.content` = `Match[]` (페이지 메타 포함, `?page=&size=8`)
 
 ### `GET /api/match/findByCompId?id={competitionId}`
 특정 대회의 경기 목록.
 - `id`: 내부 competitionId (**월드컵 = 6**, 친선 = 1)
-- 응답: `data` = `Match[]`
+- 응답: **페이지** — `data.content` = `Match[]` (페이지 메타 포함, `?page=&size=8`)
 
 ### `GET /api/match/MatchDay?date={YYYY-MM-DD}`
 특정 날짜의 경기 목록 (킥오프 빠른 순).
 - 예: `/api/match/MatchDay?date=2026-06-13`
-- 응답: `data` = `Match[]`
+- 응답: **페이지** — `data.content` = `Match[]` (페이지 메타 포함, `?page=&size=8`)
+- **DB-first lazy-crawl**: 그 날짜가 DB에 없으면 즉시 FotMob에서 크롤·저장 후 반환. 그래도 (등록 리그에) 경기 없으면 `success:false, msg:"날짜에 맞는 매치를 찾을 수 없습니다."`
 
 ### `GET /api/match/upcoming?compId={competitionId}`
 **다가오는 경기**(킥오프 미래)만, 가까운 순. 예측 화면 메인용.
 - `compId`: **선택** — 주면 그 대회만(**월드컵=6**), 없으면 전체
 - 예: `/api/match/upcoming?compId=6` → 아직 안 시작한 월드컵 경기만
-- 응답: `data` = `Match[]`
+- 응답: **페이지** — `data.content` = `Match[]` (페이지 메타 포함, `?page=&size=8`)
 
 ---
 
@@ -93,12 +124,12 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - 응답: `data` = [`MatchFotmobView`](#matchfotmobview)
 
 ### `GET /api/match/{matchId}/fotmob/lineup`
-라인업만.
-- 응답: `data` = [`LineupPlayer[]`](#lineupplayer)
+라인업만 (페이지). **포메이션 피치는 전체 라인업이 필요하니 통합 뷰(`GET .../fotmob`)를 쓰세요.**
+- 응답: **페이지** — `data.content` = [`LineupPlayer[]`](#lineupplayer) (`?page=&size=8`)
 
 ### `GET /api/match/{matchId}/fotmob/events`
-이벤트(골/카드/교체)만.
-- 응답: `data` = [`MatchEvent[]`](#matchevent)
+이벤트(골/카드/교체)만 (페이지).
+- 응답: **페이지** — `data.content` = [`MatchEvent[]`](#matchevent) (`?page=&size=8`)
 
 ### `POST /api/match/{matchId}/fotmob/sync`
 스케줄 안 기다리고 즉시 동기화 후 통합 뷰 반환 (라인업이 없을 때 강제 갱신용).
@@ -111,9 +142,10 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 ## 4. 리그 순위 (Standings) — 인증 불필요
 
 ### `GET /api/fotmob/standings/{competitionId}`
-조별 리그 순위. (월드컵 `competitionId = 6`)
-- 응답: `data` = [`LeagueStanding[]`](#leaguestanding)
-- 조별리그는 `groupName`("Grp. A" 등)으로 묶어서 보여주면 됨. 친선전은 순위표가 없어 빈 배열.
+조별 리그 순위 (페이지). (월드컵 `competitionId = 6`)
+- 응답: **페이지** — `data.content` = [`LeagueStanding[]`](#leaguestanding) (`?page=&size=8`)
+- 조별리그는 `groupName`("Grp. A" 등)으로 묶어서 보여주면 됨. 친선전은 순위표가 없어 `content`가 빈 배열.
+- ⚠️ **페이지당 8행이라 한 조(group)가 페이지 경계에서 쪼개질 수 있음.** 조 전체를 한 화면에 보려면 `size`를 크게 주세요(예: `?size=100`).
 
 ---
 
@@ -137,8 +169,8 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 | 잘못된 winner 값 | "요청 값이 올바르지 않습니다. (predictedWinner)" |
 
 ### `GET /api/prediction/myPrediction`
-내 예측 전부.
-- 응답: `data` = [`Prediction[]`](#prediction) (없으면 빈 배열)
+내 예측 전부 (페이지, 최신순).
+- 응답: **페이지** — `data.content` = [`Prediction[]`](#prediction) (없으면 `content`가 빈 배열) (`?page=&size=8`)
 
 ### `GET /api/prediction/findByMatch?matchId={id}`
 특정 경기에 대한 내 예측 1건.
@@ -165,19 +197,46 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 내 정보 + 전적.
 - 응답: `data` = `UserView`
 ```json
-{ "id": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58 }
+{ "id": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58, "role": "ADMIN_USER", "admin": true }
 ```
 - `accuracy`: 적중률 0~100 정수 (`correctCount/matchesPlayed`), 참여 0이면 0
+- `role`: `COMMON_USER` | `ADMIN_USER` / `admin`: **AI 예측 생성 등 관리자 UI 노출 판단용**(role=ADMIN_USER 또는 화이트리스트 이메일이면 true)
 
 ### `GET /api/user/leaderboard`  *(공개)*
-적중수 내림차순 랭킹.
-- 응답: `data` = `RankView[]`
+적중수 내림차순 랭킹 (페이지).
+- 응답: **페이지** — `data.content` = `RankView[]` (`?page=&size=8`)
 ```json
-[
-  { "rank": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58 }
-]
+{
+  "content": [
+    { "rank": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58 }
+  ],
+  "number": 0, "size": 8, "totalElements": 23, "totalPages": 3, "first": true, "last": false
+}
 ```
+- `rank`는 **페이지를 넘겨도 연속**됩니다(서버가 페이지 오프셋 기준으로 매김 — 2페이지 첫 항목은 9위).
 - 동률이면 경기수 적은 쪽이 위. 예측이 채점돼야 집계됨(`correctCount`는 경기 종료 시 자동 갱신).
+
+---
+
+## 5-3. AI 기능 (Gemini) — 승률 예측 / 골 요약
+
+> AI 값은 **Google Gemini**(`gemini-3.1-flash-lite`)로 생성. 키는 백엔드 `application.yml`(`ai.gemini.api-key`).
+> **승률 예측은 관리자만 "생성"**(트리거)하고, **결과 조회는 누구나** 가능 — 값이 `Match`에 저장돼 일반 경기 조회 응답에 그대로 포함됩니다.
+
+### `POST /api/admin/ai/predict?matchId={id}&force={bool}`  *(관리자 전용, 쿠키 동봉)*
+관리자가 고른 경기의 승률을 생성. 성공 시 `predictionEnabled=true`가 되어 목록 최상단으로 정렬.
+- `force=true`면 재생성(기본 `false`: 이미 있으면 그대로 반환).
+- 근거: **FIFA 랭킹(보조) + 리그 순위 + 최근 폼**. 합 100으로 정규화한 **1% 단위** 확률.
+- 응답: `data` = [`Match`](#match) (`aiHomePct`/`aiDrawPct`/`aiAwayPct` 채워짐)
+- 관리자 판별: `GET /api/user/me`의 `admin:true`(role=`ADMIN_USER` 또는 화이트리스트 이메일). 비관리자는 `success:false, msg:"관리자만 사용할 수 있습니다."`
+- 종료/취소 경기는 거절: `"종료/취소된 경기는 승률 예측 대상이 아닙니다."`
+
+### `GET /api/match/{matchId}/ai/summary`  *(공개)*
+**종료 경기**의 골 내용 AI 요약(한국어 해설 말투). **DB-first lazy** — 있으면 그대로 반환, 없으면 최초 1회 생성 후 캐시.
+- 1순위: FotMob 라이브티커 골 해설(영문) → Gemini가 번역·요약. 없으면 저장된 이벤트로 폴백.
+- 공개 엔드포인트라 **강제 재생성(`force`)은 제거**됨(Gemini 쿼터 남용 방지).
+- 응답: `data` = `{ "matchId": 103, "summary": "...", "generatedAt": "2026-06-09T12:07:20" }`
+- 진행 전 경기는 거절: `"아직 종료되지 않은 경기는 요약할 수 없습니다."`
 
 ---
 
@@ -229,6 +288,20 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
   "fotmobMatchId": 4667751,
   "lineupSynced": true,
   "fotmobFinalized": false,
+
+  "liveTime": null,
+  "liveStartedAt": null,
+  "homeFormation": null,
+  "awayFormation": null,
+
+  "predictionEnabled": false,
+  "aiHomePct": null,
+  "aiDrawPct": null,
+  "aiAwayPct": null,
+  "aiSummary": null,
+  "aiPredictedAt": null,
+  "aiSummaryAt": null,
+
   "createAt": "2026-06-05T14:52:42.816878"
 }
 ```
@@ -236,6 +309,17 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - `winner`: `HOME_TEAM` | `AWAY_TEAM` | `DRAW` | `null` (경기 끝나면 채워짐) → **미시작 판단은 `winner==null` 또는 `status` 로**
 - `homeScore`/`awayScore`: **경기 전엔 `0`** 으로 옴 (null 아님). 진행/종료 시 실제 스코어로 갱신
 - `tla`, `emblem`, `shortName` 은 비어있거나 name과 같을 수 있음 — UI엔 `name` + `crest` 사용 권장
+
+**라이브 / 포메이션 (진행 중·라인업 공개 시):**
+- `liveTime`: 진행 분 라벨 예 `"67'"`, 추가시간이면 `"45+2'"`, 하프타임 `"HT"`. IN_PLAY 아니면 `null`
+- `liveStartedAt`: **진행시간 앵커**(폴링시각 − 경과초, KST). 프론트가 `지금 − liveStartedAt`을 초 단위로 계산해 시계를 흘림. 하프타임("HT")이면 시계 멈추고 라벨 표시
+- `homeFormation`/`awayFormation`: 포메이션 문자열 예 `"4-3-3"` (라인업 공개 후)
+
+**AI (관리자가 예측 생성한 경기만 채워짐):**
+- `predictionEnabled`: AI 승률 예측 대상으로 선택됨 → **이 경기가 목록 최상단** (`allMatch`은 이 값 내림차순 정렬)
+- `aiHomePct`/`aiDrawPct`/`aiAwayPct`: 홈승/무/원정승 확률(정수, 합 100). 미생성이면 `null`
+- `aiSummary`: 종료 경기 골 요약 텍스트(한국어). 미생성이면 `null` (`/ai/summary`로 생성)
+- `aiPredictedAt`/`aiSummaryAt`: 각 생성 시각
 
 ### Team
 ```json
@@ -275,12 +359,15 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
   "status": "FINISHED",
   "homeScore": 5,
   "awayScore": 0,
+  "homeFormation": "4-3-3",
+  "awayFormation": "4-4-2",
   "lineupSynced": true,
   "finalized": true,
   "lineup": [ /* LineupPlayer[] */ ],
   "events": [ /* MatchEvent[] */ ]
 }
 ```
+- `homeFormation`/`awayFormation`: 포메이션 문자열(라인업 없으면 `null`)
 
 ### LineupPlayer
 실제 응답 (`lineup[0]`):
@@ -292,6 +379,8 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
   "name": "Hyeon-Woo Jo",
   "shirtNumber": 21,
   "positionId": 11,
+  "posX": 0.1,
+  "posY": 0.5,
   "home": true,
   "starter": true,
   "rating": 7.2,
@@ -301,7 +390,9 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 }
 ```
 - `home`: true=홈, false=원정 / `starter`: true=선발, false=후보
-- `rating`: FotMob 평점 (경기 전/직후 `null` 가능)
+- `posX`/`posY`: **피치 좌표(0~1)** — `posX`=깊이(0=GK쪽,1=공격), `posY`=좌우. 포메이션 배치도용. 좌표 없는 경기는 `null`
+- **선수 사진**: `https://images.fotmob.com/image_resources/playerimages/{fotmobPlayerId}.png` (백엔드 저장 X, `fotmobPlayerId`로 프론트가 URL 구성. 없으면 onError 처리)
+- `rating`: FotMob 평점 — **FotMob 스탯 커버 경기만** 있음(소규모 친선은 `null`). 경기 전/초반에도 `null`, 진행되며 채워짐
 - `subInMinute`/`subOutMinute`: 교체 투입/아웃 분 (해당 없으면 null)
 
 ### MatchEvent

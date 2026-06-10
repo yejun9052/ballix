@@ -9,6 +9,8 @@ import com.example.backend.fotmob.league.LeagueStanding;
 import com.example.backend.fotmob.league.LeagueStandingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,6 +69,7 @@ public class FotmobStandingService {
         log.info("[fotmob-standing] competitionId={} 순위 {}행 갱신", competitionId, rows.size());
     }
 
+    /** 내부용(AI 다이제스트 등): 전체 순위. 비었으면 1회 lazy 크롤. */
     @Transactional
     public List<LeagueStanding> getStandings(Long competitionId) {
         List<LeagueStanding> rows = standingRepository.findByCompetitionIdOrderByGroupNameAscRankNoAsc(competitionId);
@@ -80,5 +83,12 @@ public class FotmobStandingService {
             }
         }
         return rows;
+    }
+
+    /** 엔드포인트용: 페이지네이션. lazy 보장은 List 버전 호출로 처리(비었으면 크롤). */
+    @Transactional
+    public Page<LeagueStanding> getStandings(Long competitionId, Pageable pageable) {
+        getStandings(competitionId); // 비어있으면 lazy 크롤 트리거
+        return standingRepository.findByCompetitionIdOrderByGroupNameAscRankNoAsc(competitionId, pageable);
     }
 }

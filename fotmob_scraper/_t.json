@@ -1,0 +1,35 @@
+{
+  "header.status": {
+    "utcTime": "2026-06-09T23:00:00.000Z",
+    "timezone": "UTC",
+    "numberOfHomeRedCards": 0,
+    "numberOfAwayRedCards": 0,
+    "halfs": {
+      "firstHalfStarted": "10.06.2026 01:07:37",
+      "firstHalfEnded": "10.06.2026 01:56:42",
+      "secondHalfStarted": "10.06.2026 02:16:10",
+      "secondHalfEnded": "",
+      "firstExtraHalfStarted": "",
+      "secondExtraHalfStarted": "",
+      "gameEnded": ""
+    },
+    "finished": false,
+    "started": true,
+    "cancelled": false,
+    "ongoing": true,
+    "scoreStr": "0 - 0",
+    "liveTime": {
+      "short": "51‎’‎",
+      "shortKey": "",
+      "long": "50:11",
+      "longKey": "",
+      "maxTime": 90,
+      "basePeriod": 90,
+      "penalties": null,
+      "addedTime": 0
+    }
+  },
+  "general.matchTimeUTC": "Tue, Jun 9, 2026, 23:00 UTC",
+  "general.started": true,
+  "general.finished": false
+}

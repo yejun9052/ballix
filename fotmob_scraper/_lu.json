@@ -1,0 +1,55 @@
+{
+  "lineup_keys": [
+    "matchId",
+    "lineupType",
+    "source",
+    "availableFilters",
+    "homeTeam",
+    "awayTeam"
+  ],
+  "homeTeam_keys": [
+    "id",
+    "name",
+    "rating",
+    "formation",
+    "starters",
+    "subs",
+    "averageStarterAge"
+  ],
+  "formation": "4-4-2",
+  "player_keys": [
+    "id",
+    "age",
+    "optaId",
+    "name",
+    "positionId",
+    "usualPlayingPositionId",
+    "shirtNumber",
+    "countryName",
+    "countryCode",
+    "primaryTeamId",
+    "primaryTeamName",
+    "horizontalLayout",
+    "verticalLayout",
+    "performance",
+    "firstName",
+    "lastName",
+    "rankings"
+  ],
+  "sample_player": {
+    "name": "Mohammed Al Owais",
+    "positionId": 11,
+    "horizontalLayout": {
+      "x": 0.1,
+      "y": 0.5,
+      "height": 0.25,
+      "width": 0.2
+    },
+    "verticalLayout": {
+      "x": 0.5,
+      "y": 0.1,
+      "height": 0.2,
+      "width": 1
+    }
+  }
+}

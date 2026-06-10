@@ -4,7 +4,10 @@ import com.example.backend.fotmob.dto.FotmobMatchResponse;
 import com.example.backend.fotmob.dto.FotmobSearchResponse;
 import com.example.backend.global.common.CommonResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -21,19 +24,24 @@ public class FotmobDebugController {
     private final FotmobStandingService standingService;
     private final FotmobPollScheduler pollScheduler;
 
-    /** 리그 순위 조회 (competitionId = 내부 Competition PK). */
+    /** 리그 순위 조회 (competitionId = 내부 Competition PK, 페이지당 8). */
     @GetMapping("/standings/{competitionId}")
-    public ResponseEntity<CommonResponse<?>> standings(@PathVariable Long competitionId) {
+    public ResponseEntity<CommonResponse<?>> standings(
+            @PathVariable Long competitionId,
+            @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity.ok(
-                CommonResponse.success("순위 조회 성공", standingService.getStandings(competitionId)));
+                CommonResponse.success("순위 조회 성공", standingService.getStandings(competitionId, pageable)));
     }
 
     /** 리그 순위 강제 갱신. */
+    @PreAuthorize("hasRole('ADMIN_USER')")
     @PostMapping("/standings/{competitionId}/sync")
-    public ResponseEntity<CommonResponse<?>> syncStandings(@PathVariable Long competitionId) {
+    public ResponseEntity<CommonResponse<?>> syncStandings(
+            @PathVariable Long competitionId,
+            @PageableDefault(size = 8) Pageable pageable) {
         standingService.syncStandings(competitionId);
         return ResponseEntity.ok(
-                CommonResponse.success("순위 갱신 완료", standingService.getStandings(competitionId)));
+                CommonResponse.success("순위 갱신 완료", standingService.getStandings(competitionId, pageable)));
     }
 
     /** 폴링 주기(분) 조회. */
@@ -44,6 +52,7 @@ public class FotmobDebugController {
     }
 
     /** 폴링 주기(분) 변경 (관리자). */
+    @PreAuthorize("hasRole('ADMIN_USER')")
     @PostMapping("/poll-interval")
     public ResponseEntity<CommonResponse<?>> setPollInterval(@RequestParam int minutes) {
         pollScheduler.setIntervalMinutes(minutes);
@@ -51,30 +60,36 @@ public class FotmobDebugController {
                 CommonResponse.success("폴링 주기 변경", pollScheduler.getIntervalMinutes()));
     }
 
-    /** 과거/미래 N일치 일정 동기화 (수동 트리거). */
+    /** 과거/미래 N일치 일정 동기화 (수동 트리거). 범위는 상한 클램프(과도한 크롤 방지). */
+    @PreAuthorize("hasRole('ADMIN_USER')")
     @PostMapping("/schedule/sync")
     public ResponseEntity<CommonResponse<?>> scheduleSync(
             @RequestParam(defaultValue = "10") int pastDays,
             @RequestParam(defaultValue = "10") int futureDays) {
-        int n = scheduleService.syncRange(pastDays, futureDays);
+        int past = Math.max(0, Math.min(pastDays, 30));
+        int future = Math.max(0, Math.min(futureDays, 30));
+        int n = scheduleService.syncRange(past, future);
         return ResponseEntity.ok(CommonResponse.success("일정 " + n + "경기 동기화", n));
     }
 
     /** 특정 날짜(YYYYMMDD) 일정 동기화. */
+    @PreAuthorize("hasRole('ADMIN_USER')")
     @PostMapping("/schedule/sync/{date}")
     public ResponseEntity<CommonResponse<?>> scheduleSyncDate(@PathVariable String date) {
         int n = scheduleService.syncDate(date);
         return ResponseEntity.ok(CommonResponse.success(date + " " + n + "경기 동기화", n));
     }
 
-    /** fotmobMatchId로 라인업·평점·이벤트를 즉시 미리보기 (DB 미저장). */
+    /** fotmobMatchId로 라인업·평점·이벤트를 즉시 미리보기 (DB 미저장, 크롤 유발 → 관리자). */
+    @PreAuthorize("hasRole('ADMIN_USER')")
     @GetMapping("/preview/{fotmobId}")
     public ResponseEntity<CommonResponse<?>> preview(@PathVariable Long fotmobId) {
         FotmobMatchResponse data = fotmobClient.getMatch(fotmobId);
         return ResponseEntity.ok(CommonResponse.success("미리보기 성공", data));
     }
 
-    /** 팀명/대회로 FotMob 경기 검색 (matchId 후보 확인). */
+    /** 팀명/대회로 FotMob 경기 검색 (matchId 후보 확인, 크롤 유발 → 관리자). */
+    @PreAuthorize("hasRole('ADMIN_USER')")
     @GetMapping("/search")
     public ResponseEntity<CommonResponse<?>> search(
             @RequestParam String team1,

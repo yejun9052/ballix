@@ -14,6 +14,8 @@ public record MatchFotmobView(
         String status,
         Integer homeScore,
         Integer awayScore,
+        String homeFormation,
+        String awayFormation,
         boolean lineupSynced,
         boolean finalized,
         List<LineupPlayer> lineup,

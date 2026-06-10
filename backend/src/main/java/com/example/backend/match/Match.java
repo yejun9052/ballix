@@ -55,6 +55,21 @@ public class Match extends BaseTimeEntity {
     @Column(nullable = true)
     private String winner;
 
+    /** 진행 중 경과 시간 표시용 예: "51'". IN_PLAY일 때만 값, 그 외 null. */
+    @Column(name = "live_time", nullable = true)
+    private String liveTime;
+
+    /** 라이브 시계 앵커 = (폴링시각 - 경과초). 프론트가 (지금 - 이 값)으로 초 단위 시간을 흘린다. */
+    @Column(name = "live_started_at", nullable = true)
+    private LocalDateTime liveStartedAt;
+
+    /** 라인업 포메이션 예: "4-3-3". 라인업 공개 후 채워진다. */
+    @Column(name = "home_formation", nullable = true)
+    private String homeFormation;
+
+    @Column(name = "away_formation", nullable = true)
+    private String awayFormation;
+
     /** FotMob 경기 ID. 라인업·평점·이벤트를 가져오기 위한 매핑 키. */
     @Column(name = "fotmob_match_id", nullable = true, unique = true)
     private Long fotmobMatchId;
@@ -68,6 +83,32 @@ public class Match extends BaseTimeEntity {
     @Column(name = "fotmob_finalized", nullable = false)
     @Builder.Default
     private boolean fotmobFinalized = false;
+
+    // ── AI 승률 예측 / 골 요약 (Gemini) ─────────────────────────────────
+    /** 관리자가 AI 승률 예측 대상으로 선택했는지. 목록 최상단 정렬 키. */
+    @Column(name = "prediction_enabled", nullable = false)
+    @Builder.Default
+    private boolean predictionEnabled = false;
+
+    /** AI 승률(%) — 홈승/무/원정승. 합 100으로 정규화해 저장. */
+    @Column(name = "ai_home_pct", nullable = true)
+    private Integer aiHomePct;
+
+    @Column(name = "ai_draw_pct", nullable = true)
+    private Integer aiDrawPct;
+
+    @Column(name = "ai_away_pct", nullable = true)
+    private Integer aiAwayPct;
+
+    /** AI가 만든 골 내용 요약(경기 종료 후 조회 시 생성). */
+    @Column(name = "ai_summary", columnDefinition = "TEXT", nullable = true)
+    private String aiSummary;
+
+    @Column(name = "ai_predicted_at", nullable = true)
+    private LocalDateTime aiPredictedAt;
+
+    @Column(name = "ai_summary_at", nullable = true)
+    private LocalDateTime aiSummaryAt;
 
     /** 팀명+날짜 검색으로 확보한 FotMob matchId를 연결한다. */
     public void linkFotmob(Long fotmobMatchId) {
@@ -90,11 +131,72 @@ public class Match extends BaseTimeEntity {
         this.winner = winner;
     }
 
+    /**
+     * 폴링 시 진행 시간 갱신. IN_PLAY일 때만 값 유지.
+     * liveStartedAt = 지금 - 경과초 → 이후 어느 시점이든 (현재시각 - liveStartedAt)이 경과시간.
+     */
+    public void updateLive(String liveTime, Integer liveSeconds) {
+        if ("IN_PLAY".equals(this.status)) {
+            this.liveTime = liveTime;
+            if (liveSeconds != null) {
+                this.liveStartedAt = LocalDateTime.now().minusSeconds(liveSeconds);
+            }
+        } else {
+            this.liveTime = null;
+            this.liveStartedAt = null;
+        }
+    }
+
+    /**
+     * 진행시간 앵커가 아직 없으면 1회만 설정(라이브 진입 즉시 표시용), 이미 있으면 건드리지 않는다
+     * — 앵커 재갱신은 별도 시계 작업(11분)이 담당해 잦은 재앵커로 시계가 뒤로 튀는 것을 막는다.
+     * IN_PLAY가 아니면(종료/예정) 진행시간을 정리한다.
+     */
+    public void updateLiveIfAbsent(String liveTime, Integer liveSeconds) {
+        if (!"IN_PLAY".equals(this.status)) {
+            this.liveTime = null;
+            this.liveStartedAt = null;
+            return;
+        }
+        if (this.liveStartedAt == null && liveSeconds != null) {
+            this.liveTime = liveTime;
+            this.liveStartedAt = LocalDateTime.now().minusSeconds(liveSeconds);
+        }
+    }
+
+    public void updateFormation(String homeFormation, String awayFormation) {
+        if (homeFormation != null) this.homeFormation = homeFormation;
+        if (awayFormation != null) this.awayFormation = awayFormation;
+    }
+
     public void markLineupSynced() {
         this.lineupSynced = true;
     }
 
     public void markFinalized() {
         this.fotmobFinalized = true;
+    }
+
+    /** 관리자 선택 + AI 승률 예측 결과 반영(선택 경기는 목록 최상단으로 올라감). */
+    public void applyPrediction(int homePct, int drawPct, int awayPct) {
+        this.predictionEnabled = true;
+        this.aiHomePct = homePct;
+        this.aiDrawPct = drawPct;
+        this.aiAwayPct = awayPct;
+        this.aiPredictedAt = LocalDateTime.now();
+    }
+
+    /** AI 골 요약 반영. */
+    public void applySummary(String summary) {
+        this.aiSummary = summary;
+        this.aiSummaryAt = LocalDateTime.now();
+    }
+
+    public boolean hasPrediction() {
+        return aiPredictedAt != null;
+    }
+
+    public boolean hasSummary() {
+        return aiSummaryAt != null;
     }
 }

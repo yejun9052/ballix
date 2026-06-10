@@ -1,5 +1,6 @@
 package com.example.backend.fotmob;
 
+import com.example.backend.fotmob.dto.FotmobCommentaryResponse;
 import com.example.backend.fotmob.dto.FotmobMatchResponse;
 import com.example.backend.fotmob.dto.FotmobScheduleResponse;
 import com.example.backend.fotmob.dto.FotmobSearchResponse;
@@ -52,6 +53,14 @@ public class FotmobClient {
                 .build()
                 .toUriString();
         return restClient.get().uri(uri).retrieve().body(FotmobScheduleResponse.class);
+    }
+
+    /** 경기 골 해설(라이브티커) — 끝난 경기 요약용. */
+    public FotmobCommentaryResponse getCommentary(Long fotmobMatchId) {
+        return restClient.get()
+                .uri("/commentary/{id}", fotmobMatchId)
+                .retrieve()
+                .body(FotmobCommentaryResponse.class);
     }
 
     /** 리그 순위표 (조별 지원). */

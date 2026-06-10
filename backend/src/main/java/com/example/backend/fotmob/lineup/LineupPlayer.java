@@ -36,6 +36,13 @@ public class LineupPlayer extends BaseTimeEntity {
     @Column(nullable = true)
     private Integer positionId;
 
+    /** 피치 좌표(0~1). posX=깊이(0=GK쪽,1=공격), posY=좌우. 포메이션 배치도용. */
+    @Column(name = "pos_x", nullable = true)
+    private Double posX;
+
+    @Column(name = "pos_y", nullable = true)
+    private Double posY;
+
     /** true=홈팀, false=원정팀. */
     @Column(nullable = false)
     private boolean home;

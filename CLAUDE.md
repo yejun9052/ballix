@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Boot(:8080) ──> MySQL
                           (stateless 수집)          (스케줄·DB·폴링 소유)        │
-                                                                          React(:5174)
+                                                                          React(:5173)
 ```
 
 - **백엔드는 FotMob을 직접 긁지 않는다.** 반드시 Python FastAPI(`fotmob_scraper/api.py`)를 HTTP로 호출한다. Python은 stateless 수집기이고, 일정·DB·폴링·스케줄은 전부 Java가 소유한다.
@@ -39,9 +39,15 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 `FotmobPollScheduler`가 두 가지 `@Scheduled` 작업을 돌린다:
 
 1. **일정 동기화** (부팅 10초 뒤 + 30분마다): `FotmobScheduleService.syncRange()`가 과거/미래 N일치 날짜별 경기 목록을 가져와 Team/Competition/Match를 upsert. 수집 리그는 `fotmob.schedule.leagues`로 필터하며, 실제 필터링은 Python `api.py`의 `build_schedule`에서 한다 — **토큰이 숫자면 leagueId 정확매칭, 문자면 leagueName 부분매칭**. 기본값은 `77,114`(남자 FIFA 월드컵 + 남자 A매치 친선). FotMob은 여자/U21/클럽 파생 리그를 같은 이름("Friendlies", "World Cup")으로 주므로 **이름 매칭으론 못 거른다 → 숫자 leagueId 화이트리스트를 써야 한다**.
-2. **데이터 폴링** (1분 tick, `interval-minutes` 간격으로 게이트): 킥오프 `lineup-window-minutes`분 전부터 `FotmobSyncService.syncMatch()`로 라인업·평점·이벤트·스코어를 갱신. 라인업이 뜨면 `markLineupSynced`, 종료되면 `markFinalized` + 해당 리그 순위(`FotmobStandingService`) 갱신.
+2. **데이터 폴링** (1분 tick, `interval-minutes` 간격으로 게이트): 킥오프 `lineup-window-minutes`분 전부터 `FotmobSyncService.syncMatch()`로 라인업·평점·이벤트·스코어·**포메이션**(`Match.homeFormation/awayFormation`)·**선수 피치좌표**(`LineupPlayer.posX/posY`)를 갱신. 라인업이 뜨면 `markLineupSynced`, 종료되면 `markFinalized` + 해당 리그 순위(`FotmobStandingService`) 갱신.
+3. **라이브 시계 갱신** (`clock-ms`, 기본 11분): IN_PLAY 경기만 `FotmobSyncService.refreshLiveClock()`로 진행시간/스코어만 가볍게(라인업·이벤트 안 건드림) 갱신. 아래 "라이브 시계" 참고.
 
-폴링 주기(`interval-minutes`, 기본 5)는 `POST /api/fotmob/poll-interval?minutes=`로 런타임 변경 가능.
+폴링 주기(`interval-minutes`, 기본 3)는 `POST /api/fotmob/poll-interval?minutes=`로 런타임 변경 가능.
+
+**라이브 시계(진행 분/초) 아키텍처** — FotMob `/api/matchDetails` 직접호출은 404로 차단돼 **SSR 스냅샷(`__NEXT_DATA__`)** 만 읽을 수 있고, 이 값은 실제보다 몇 분 지연된다. 그래서 시계는 **앵커 방식**으로 흐른다:
+- 폴링 시 `Match.liveStartedAt = 지금 - 경과초`(FotMob `liveTime.long` mm:ss 환산)를 저장. 이건 고정된 실제 시각이라 **프론트가 `지금 - liveStartedAt`을 초 단위로 매초 계산**해 클라이언트에서 흘린다(서버 부하 0).
+- **재앵커는 11분 `refreshLiveClock`만** 한다. 3분 풀폴링(`syncMatch`)은 `updateLiveIfAbsent`로 **앵커가 없을 때만 1회 설정**(IN_PLAY 아니면 정리) — 잦은 재앵커가 시계를 뒤로 스냅하는 것을 방지. FotMob SSR도 ~10분 주기 갱신이라 11분이 맞다.
+- `liveTime` 라벨은 `"67'"`/`"45+2'"`(추가시간)/`"HT"`(하프타임). 프론트는 `"HT"`처럼 숫자 없는 라벨이면 시계를 멈춘다.
 
 ### 예측 도메인 (`com.example.backend.prediction`)
 
@@ -55,7 +61,17 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 
 ### 유저/리더보드 (`com.example.backend.user`)
 
-`UserController`/`UserService`(MatchController 스타일). `GET /api/user/me`(로그인, 내 전적+적중률), `GET /api/user/leaderboard`(공개, 적중수 내림차순 랭킹). 응답은 `UserView`/`RankView` DTO. 집계 원천(`User.correct_count`/`matches_played`)은 위 예측 채점이 갱신한다.
+`UserController`/`UserService`(MatchController 스타일). `GET /api/user/me`(로그인, 내 전적+적중률+`role`/`admin`), `GET /api/user/leaderboard`(공개, 적중수 내림차순 랭킹). 응답은 `UserView`/`RankView` DTO. 집계 원천(`User.correct_count`/`matches_played`)은 위 예측 채점이 갱신한다.
+
+`UserView.admin`은 **프론트의 관리자 전용 UI(AI 승률 예측 생성) 노출 판단용** — `role==ADMIN_USER` 또는 `ai.admin-emails` 화이트리스트 이메일이면 true. (`me()`가 같은 규칙으로 계산)
+
+### AI 기능 (`com.example.backend.ai`) — Google Gemini
+
+승률 예측 + 골 요약. 모델은 `ai.gemini.model`(기본 `gemini-3.1-flash-lite`), 키는 `ai.gemini.api-key`. `GeminiClient`가 별도 SDK 없이 `generateContent` REST를 RestClient로 호출(429/503 자동 재시도). **이 도메인은 `ai → user`(AdminGuard)·`ai → fotmob`(FotmobClient/Standing) 의존이 있다.**
+
+- **승률 예측** (`AiPredictionService`, `POST /api/admin/ai/predict?matchId=&force=`): **관리자만 "생성"**(`AdminGuard.requireAdmin`), 결과 조회는 누구나(값이 `Match`에 저장돼 일반 조회 응답에 포함). 입력 다이제스트 = **FIFA 랭킹(보조) + 리그 순위 + 최근 폼**(전부 DB에 있는 데이터, 추가 크롤 X). Gemini structured-output(JSON)으로 받아 **합 100·1% 단위**로 정규화해 `Match.aiHomePct/aiDrawPct/aiAwayPct`에 저장. `predictionEnabled=true`가 되어 `allMatch`에서 최상단 정렬(`findAllByOrderByPredictionEnabledDescMatchTimeAsc`). 멱등(`aiPredictedAt != null`이면 force 없이는 재호출 안 함).
+- **골 요약** (`AiSummaryService`, `GET /api/match/{id}/ai/summary?force=`, 공개): **종료 경기**만. 1순위로 **FotMob 라이브티커(ltc) 골 해설**(영문)을 `FotmobClient.getCommentary()`로 가져와 Gemini가 **한국어 해설 말투로 번역·요약**, 없으면 저장된 `MatchEvent`로 폴백. DB-first lazy(없으면 1회 생성 후 `Match.aiSummary`에 캐시).
+- **FIFA 랭킹**: `resources/fifa-rankings.json`(팀명→순위, 수정 쉬운 근사 스냅샷)을 `FifaRankingService`가 부팅 시 로드. 팀명은 FotMob 표기와 매칭.
 
 ### 인증 흐름 (기존 유지)
 
@@ -111,16 +127,22 @@ npm run build ; npm run lint
 - `GET|POST /api/fotmob/poll-interval` — 폴링 주기 조회/변경(관리자)
 - `GET /api/fotmob/preview/{fotmobMatchId}` — DB 미저장 미리보기(프록시)
 - `POST /api/prediction/predict?matchId=&predictedWinner=` · `GET /api/prediction/{myPrediction,findByMatch?matchId=,ratio?matchId=}` — 예측·분포(로그인 필요)
-- `GET /api/match/allMatch` · `/findByCompId?id=` · `/MatchDay?date=YYYY-MM-DD` · `/upcoming?compId=` — 경기 목록 조회(`upcoming`=미래 경기만, compId 옵션)
-- `GET /api/user/me`(로그인) · `GET /api/user/leaderboard`(공개) — 내 전적 / 적중순 랭킹
+- `GET /api/match/allMatch` · `/findByCompId?id=` · `/MatchDay?date=YYYY-MM-DD` · `/upcoming?compId=` — 경기 목록 조회(`upcoming`=미래 경기만, compId 옵션). **`MatchDay`는 DB-first lazy-crawl**(없는 날짜 조회 시 그 날짜를 즉석 크롤·저장 후 반환).
+- `POST /api/admin/ai/predict?matchId=&force=`(관리자) · `GET /api/match/{id}/ai/summary?force=`(공개) — AI 승률 예측 / 골 요약
+- `GET /api/user/me`(로그인, `role`/`admin` 포함) · `GET /api/user/leaderboard`(공개) — 내 전적 / 적중순 랭킹
 
 > 프론트 연동용 전체 응답 스키마/예시는 루트 **`API_SPEC.md`** 참고(프론트엔드 담당자 전달용).
+
+**Python 스크래퍼(`fotmob_scraper/api.py`) 엔드포인트**: `/match/{id}`(라인업·이벤트·평점·**liveTime/liveSeconds**·포메이션·posX/posY), `/schedule`, `/league/{id}/table`, `/commentary/{id}`(라이브티커 골 해설 — 골 요약용), `/search`. **선수 사진은 백엔드에 저장 안 한다** — 프론트가 `fotmobPlayerId`로 `https://images.fotmob.com/image_resources/playerimages/{id}.png` URL을 직접 구성.
 
 ## 함정 / 주의사항 (이 코드베이스 특유)
 
 - **`matche` 패키지는 `match`로 rename 완료됨**(과거 오타 정리). DB 테이블명은 `@Table`(예: `"matches"`)로 고정돼 패키지명과 무관하니, 엔티티 패키지 이동 시 import만 맞추면 된다.
 - **Spring Security 7에서 CSRF disable은 메서드 레퍼런스로 해야 한다**: `.csrf(AbstractHttpConfigurer::disable)`. 람다형 `.csrf(c -> c.disable())`은 조용히 적용되지 않아 모든 POST가 302(OAuth 리다이렉트)된다. CORS는 `http://localhost:*` 전체 허용(Vite 포트 변동 대응).
 - **api.py를 수정하면 uvicorn을 재시작해야 한다** — 코드 자동 리로드가 없다.
+- **Spring Boot 4는 Jackson 3(`tools.jackson.databind`)를 쓴다.** RestClient의 메시지 컨버터가 Jackson 3라, 외부 응답을 **Jackson 2 타입(`com.fasterxml.jackson.databind.JsonNode`)으로 `.body()` 받으면 `Type definition error`로 깨진다**(GeminiClient에서 겪음). 외부 JSON은 `.body(Map.class)`로 받아 직접 탐색할 것. (참고: `jackson-databind`(2.x)를 직접 의존으로 추가해뒀고, 모델 출력 JSON 문자열 파싱엔 그 `ObjectMapper.readTree`를 독립 사용 — Spring 컨버터와 무관해 OK.)
+- **`String.formatted()` 프롬프트에 리터럴 `%`를 넣지 말 것** — `%` 뒤 공백 등은 포맷 지정자로 해석돼 `UnknownFormatConversionException`. 한글 "1%"는 "1퍼센트"로 쓰거나 `%%` 이스케이프.
+- **FotMob 평점은 스탯 커버 경기만** 준다(소규모 친선은 전 선수 `rating=null`). 라이브 진행시간도 SSR 지연으로 실제보다 몇 분 느림 — 둘 다 소스 한계지 버그 아님.
 - **백엔드 재부팅 전 8080 포트의 기존 프로세스를 반드시 종료**하라. 안 그러면 새 빌드가 포트 충돌로 안 뜨고 구버전이 응답해 "엔드포인트가 302/404로 사라진 것처럼" 보인다.
 - **Python은 3.12 전용 venv(`fotmob_scraper/.venv`)를 쓴다.** 시스템 Python 3.15(alpha)는 pydantic 빌드가 깨진다.
 - **MySQL은 docker-compose(`backend/docker-compose.yml`) 또는 로컬 설치본 중 3306을 잡은 쪽에 붙는다.** 이 머신엔 로컬 MySQL 8.0이 3306을 점유 중이라 `docker compose up`이 포트 충돌날 수 있다. 어느 쪽이든 접속정보는 동일(root/1234, DB `backend`). DB를 직접 볼 땐 `& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -uroot -p1234 backend`.
@@ -133,7 +155,8 @@ npm run build ; npm run lint
 - `spring.security.oauth2.client.registration.google.*` — Google OAuth
 - `fotmob.api.base-url` — Python FastAPI 주소(기본 `http://127.0.0.1:8800`)
 - `fotmob.schedule.{leagues,past-days,future-days,refresh-past-days}` — 수집 리그/범위(기본 `77,114` ±10일; 숫자=leagueId 정확매칭, 문자=이름 부분매칭). `refresh-past-days`(기본 2)는 **부팅 후 주기 재동기화의 과거 범위** — 과거는 거의 안 변해 줄여서 크롤 부하·차단위험을 낮춤(부팅 1회는 full `past-days`).
-- `fotmob.poll.{enabled,lineup-window-minutes,interval-minutes}` — 폴링 동작
+- `fotmob.poll.{enabled,lineup-window-minutes,interval-minutes,clock-ms}` — 폴링 동작. `interval-minutes`(기본 3)=풀폴링, `clock-ms`(기본 660000=11분)=라이브 진행시간 갱신
 - `prediction.allowed-leagues` — 예측 허용 리그 fotmobLeagueId(쉼표구분, 기본 `77`=월드컵)
+- `ai.gemini.{api-key,model,base-url}` — Gemini(기본 `gemini-3.1-flash-lite`). `ai.admin-emails` — AI 예측 트리거 허용 관리자 이메일(쉼표구분, role=ADMIN_USER도 허용)
 
 JPA는 `ddl-auto: update`라 엔티티 추가 시 컬럼/테이블이 자동 생성된다(마이그레이션 불필요).

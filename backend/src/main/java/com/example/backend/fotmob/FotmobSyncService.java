@@ -54,11 +54,13 @@ public class FotmobSyncService {
                 resp.awayScore(),
                 resolveWinner(resp)
         );
+        match.updateLiveIfAbsent(resp.liveTime(), resp.liveSeconds());  // 앵커 없을 때만 1회(재앵커는 11분 시계작업)
 
         // ── 라인업 저장 (가용할 때만, 평점은 매 폴링 갱신) ────
         if (resp.lineupAvailable() && resp.lineups() != null && !resp.lineups().isEmpty()) {
             lineupPlayerRepository.deleteByMatchId(match.getId());
             lineupPlayerRepository.saveAll(toLineupEntities(match.getId(), resp.lineups()));
+            match.updateFormation(resp.homeFormation(), resp.awayFormation());
             // 선발 라인업이 한 번이라도 저장되면 synced. 평점은 라이브 폴링이 계속 갱신.
             if (!match.isLineupSynced()) {
                 match.markLineupSynced();
@@ -95,6 +97,24 @@ public class FotmobSyncService {
         matchRepository.save(match);
     }
 
+    /**
+     * 라이브 시계만 가볍게 갱신 — 스코어/상태/진행시간(앵커)만 저장하고 라인업·이벤트는 건드리지 않는다.
+     * 1분 주기로 호출해 DB의 진행시간 앵커를 최신으로 유지(재시작 시 옛 값 로딩 문제 완화).
+     */
+    @Transactional
+    public void refreshLiveClock(Match match) {
+        if (match.getFotmobMatchId() == null) {
+            return;
+        }
+        FotmobMatchResponse resp = fotmobClient.getMatch(match.getFotmobMatchId());
+        if (resp == null) {
+            return;
+        }
+        match.updateScore(resp.statusType(), resp.homeScore(), resp.awayScore(), resolveWinner(resp));
+        match.updateLive(resp.liveTime(), resp.liveSeconds());
+        matchRepository.save(match);
+    }
+
     private List<LineupPlayer> toLineupEntities(Long matchId, List<LineupDto> dtos) {
         return dtos.stream()
                 .map(d -> LineupPlayer.builder()
@@ -103,6 +123,8 @@ public class FotmobSyncService {
                         .name(d.name() == null ? "" : d.name())
                         .shirtNumber(d.shirtNumber())
                         .positionId(d.positionId())
+                        .posX(d.posX())
+                        .posY(d.posY())
                         .home(d.isHome())
                         .starter(d.isStarter())
                         .rating(d.rating())

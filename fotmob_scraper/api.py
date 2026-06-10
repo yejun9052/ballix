@@ -24,6 +24,7 @@ from scraper import (
     resolve_page_url,
     fetch_schedule_from_page,
     fetch_league_table_from_page,
+    fetch_commentary_from_page,
     BROWSER_LAUNCH_ARGS,
     CONTEXT_OPTIONS,
     STEALTH_INIT_SCRIPT,
@@ -79,11 +80,14 @@ def _lineup_rows(team_data: dict, is_home: bool) -> list[dict]:
             sub_events = perf.get("substitutionEvents") or []
             sub_in = next((e.get("time") for e in sub_events if e.get("type") == "subIn"), None)
             sub_out = next((e.get("time") for e in sub_events if e.get("type") == "subOut"), None)
+            hl = p.get("horizontalLayout") or {}  # 피치 좌표(0~1): x=깊이(0=GK쪽,1=공격), y=좌우
             rows.append({
                 "playerId": p.get("id"),
                 "name": p.get("name"),
                 "shirtNumber": _to_int(p.get("shirtNumber")),
                 "positionId": p.get("positionId"),
+                "posX": _to_float(hl.get("x")),
+                "posY": _to_float(hl.get("y")),
                 "isHome": is_home,
                 "isStarter": is_starter,
                 "rating": _to_float(perf.get("rating")),
@@ -161,11 +165,25 @@ def build_match_response(raw: dict) -> dict:
     lineups = _lineup_rows(home_lineup, True) + _lineup_rows(away_lineup, False)
     lineup_available = bool(home_lineup.get("starters") or away_lineup.get("starters"))
 
+    live = (status.get("liveTime") or {})
+    live_short = (live.get("short") or "").replace("‎", "").replace("‏", "").strip() or None
+    live_long = (live.get("long") or "").replace("‎", "").replace("‏", "").strip()
+    live_seconds = None
+    if ":" in live_long:
+        try:
+            mm, ss = live_long.split(":")[:2]
+            live_seconds = int(mm) * 60 + int(ss)
+        except (ValueError, TypeError):
+            live_seconds = None
+    is_live = _normalize_status(status) == "IN_PLAY"
+
     return {
         "matchId": general.get("matchId"),
         "leagueName": general.get("leagueName"),
         "statusType": _normalize_status(status),
         "statusReason": (status.get("reason") or {}).get("long"),
+        "liveTime": live_short if is_live else None,
+        "liveSeconds": live_seconds if is_live else None,
         "started": status.get("started", False),
         "finished": status.get("finished", False),
         "homeTeamId": home.get("id"),
@@ -330,6 +348,48 @@ async def schedule(date: str, tz: str = "Asia/Seoul", leagues: str = ""):
     print(f"[crawl] 일정 수집 완료 date={date} {len(result['matches'])}경기 "
           f"({time.perf_counter() - t0:.1f}s)", flush=True)
     return result
+
+
+def build_commentary_goals(raw: dict) -> list[dict]:
+    """ltc 피드에서 골 해설만 추출(시간순). 골 항목은 type=="G"."""
+    if not raw or not isinstance(raw, dict):
+        return []
+    out = []
+    for e in raw.get("events", []) or []:
+        typ = e.get("type") or ""
+        text = (e.get("text") or "").replace("‎", "").replace("‏", "").strip()
+        if typ != "G" and not text.startswith("Goal!"):
+            continue
+        tm = e.get("time") or {}
+        main = (tm.get("main") or "").replace("‎", "").replace("‏", "")
+        minute = "".join(c for c in main if c.isdigit()) or None
+        out.append({
+            "minute": minute,
+            "addedTime": tm.get("added"),
+            "isHome": e.get("teamEvent") == "home",
+            "text": text,
+            "_elapsed": e.get("elapsed") or 0,
+        })
+    out.sort(key=lambda g: g.pop("_elapsed"))  # 시간순(피드는 역순)
+    return out
+
+
+@app.get("/commentary/{match_id}")
+async def commentary(match_id: str):
+    """경기 골 해설(라이브티커). 끝난 경기 요약용 — 골 항목만 영문 해설 텍스트로 반환."""
+    print(f"[crawl] 커멘터리 수집 시작 matchId={match_id}", flush=True)
+    t0 = time.perf_counter()
+    page = await _new_fotmob_page()
+    try:
+        raw = await fetch_commentary_from_page(page, match_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"커멘터리 수집 실패: {e}")
+    finally:
+        await page.close()
+    goals = build_commentary_goals(raw)
+    print(f"[crawl] 커멘터리 수집 완료 matchId={match_id} 골 {len(goals)}건 "
+          f"({time.perf_counter() - t0:.1f}s)", flush=True)
+    return {"matchId": _to_int(match_id), "goals": goals}
 
 
 @app.get("/league/{league_id}/table")

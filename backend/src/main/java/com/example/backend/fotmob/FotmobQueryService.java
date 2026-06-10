@@ -10,11 +10,12 @@ import com.example.backend.global.exceptopn.NotFoundException;
 import com.example.backend.match.Match;
 import com.example.backend.match.MatchRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -29,21 +30,20 @@ public class FotmobQueryService {
     private static final long LINEUP_LAZY_WINDOW_MINUTES = 60;
 
     @Transactional
-    public List<LineupPlayer> getLineup(Long matchId) {
+    public Page<LineupPlayer> getLineup(Long matchId, Pageable pageable) {
         matchRepository.findById(matchId).ifPresent(this::lazySync);
-        return lineupPlayerRepository.findByMatchId(matchId);
+        return lineupPlayerRepository.findByMatchId(matchId, pageable);
     }
 
     @Transactional
-    public List<MatchEvent> getEvents(Long matchId) {
+    public Page<MatchEvent> getEvents(Long matchId, Pageable pageable) {
         matchRepository.findById(matchId).ifPresent(this::lazySync);
-        return matchEventRepository.findByMatchIdOrderByMinuteAsc(matchId);
+        return matchEventRepository.findByMatchIdOrderByMinuteAsc(matchId, pageable);
     }
 
     @Transactional
     public MatchFotmobView getView(Long matchId) {
-        Match match = matchRepository.findById(matchId)
-                .orElseThrow(() -> new NotFoundException("경기를 찾을 수 없습니다. id=" + matchId));
+        Match match = findMatch(matchId);
         lazySync(match);
         return new MatchFotmobView(
                 match.getId(),
@@ -51,6 +51,8 @@ public class FotmobQueryService {
                 match.getStatus(),
                 match.getHomeScore(),
                 match.getAwayScore(),
+                match.getHomeFormation(),
+                match.getAwayFormation(),
                 match.isLineupSynced(),
                 match.isFotmobFinalized(),
                 lineupPlayerRepository.findByMatchId(matchId),
@@ -61,8 +63,7 @@ public class FotmobQueryService {
     /** 스케줄을 기다리지 않고 즉시 한 경기를 동기화 (관리/테스트용). */
     @Transactional
     public MatchFotmobView syncNow(Long matchId) {
-        Match match = matchRepository.findById(matchId)
-                .orElseThrow(() -> new NotFoundException("경기를 찾을 수 없습니다. id=" + matchId));
+        Match match = findMatch(matchId);
 
         if (match.getFotmobMatchId() == null) {
             throw new BadRequestException("FotMob matchId가 없습니다. id=" + matchId + " (일정 동기화가 먼저 필요)");
@@ -88,5 +89,10 @@ public class FotmobQueryService {
         } catch (Exception e) {
             // 조회는 계속 — 현재 DB 상태를 반환
         }
+    }
+
+    private Match findMatch(Long matchId) {
+        return matchRepository.findById(matchId)
+            .orElseThrow(() -> new NotFoundException("경기를 찾을 수 없습니다. id=" + matchId));
     }
 }

@@ -13,6 +13,8 @@ public record FotmobMatchResponse(
         String leagueName,
         String statusType,      // SCHEDULED / IN_PLAY / FINISHED / CANCELLED
         String statusReason,
+        String liveTime,        // 진행 중 경과 시간 예: "51'" (라이브일 때만)
+        Integer liveSeconds,    // 경과 초(mm:ss 환산) — 초 단위 라이브 시계 앵커용
         boolean started,
         boolean finished,
         Long homeTeamId,
@@ -34,6 +36,8 @@ public record FotmobMatchResponse(
             String name,
             Integer shirtNumber,
             Integer positionId,
+            Double posX,
+            Double posY,
             boolean isHome,
             boolean isStarter,
             Double rating,

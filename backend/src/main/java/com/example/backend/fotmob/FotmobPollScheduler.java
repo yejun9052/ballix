@@ -116,6 +116,28 @@ public class FotmobPollScheduler {
         }
     }
 
+    // ── 라이브 시계 갱신: 진행 중 경기의 시간/스코어만 가볍게 (FotMob SSR ~10분 갱신 → 11분 주기) ──
+    @Scheduled(fixedDelayString = "${fotmob.poll.clock-ms:660000}")
+    public void refreshLiveClocks() {
+        if (!pollEnabled) {
+            return;
+        }
+        List<Match> live = matchRepository.findByStatusAndFotmobMatchIdIsNotNull("IN_PLAY");
+        if (live.isEmpty()) {
+            return;
+        }
+        int ok = 0;
+        for (Match m : live) {
+            try {
+                syncService.refreshLiveClock(m);
+                ok++;
+            } catch (Exception e) {
+                log.warn("[fotmob-clock] 시계 갱신 실패 matchId={} : {}", m.getId(), e.getMessage());
+            }
+        }
+        log.info("[fotmob-clock] 라이브 {}경기 시계 갱신", ok);
+    }
+
     /** 관리자: 폴링 주기(분) 런타임 변경. */
     public void setIntervalMinutes(int minutes) {
         this.intervalMinutes = Math.max(1, minutes);

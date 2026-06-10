@@ -11,6 +11,8 @@ import com.example.backend.user.UserRepository;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -72,13 +74,12 @@ public class PredictionService {
         return PredictionView.from(predictionRepository.save(prediction));
     }
 
-    // 내 예측 전부 찾기
+    // 내 예측 전부 찾기 (페이지네이션, 최신순)
     @Transactional(readOnly = true)
-    public List<PredictionView> myPrediction(Long userId) {
+    public Page<PredictionView> myPrediction(Long userId, Pageable pageable) {
         notLogin(userId);
-        return predictionRepository.findByUserId(userId).orElseThrow(
-                () -> new NotFoundException("예측 내역을 찾을 수 없습니다.")
-        ).stream().map(PredictionView::from).toList();
+        return predictionRepository.findByUserIdOrderByCreateAtDesc(userId, pageable)
+                .map(PredictionView::from);
     }
 
     // 특정 경기에 대한 내 예측 찾기
