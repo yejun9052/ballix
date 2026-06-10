@@ -36,6 +36,12 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         User user = userRepository.findByEmail(email).orElseThrow();
 
+        // 정지(비활성) 계정은 토큰 발급 차단 → 로그인 거부
+        if (!user.isActive()) {
+            response.sendRedirect("http://localhost:5173/home?error=suspended");
+            return;
+        }
+
         String accessToken = jwtProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
         cookieUtil.addCookie(response, "access_token", accessToken);
         response.sendRedirect("http://localhost:5173/home");

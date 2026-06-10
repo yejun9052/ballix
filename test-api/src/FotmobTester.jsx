@@ -70,13 +70,33 @@ function Pager({ page, totalPages, totalElements, onPage }) {
   );
 }
 
+// 공개 공지 배너 — 최신 공지 몇 개를 상단에 노출(관리자가 "공지 때린" 내용)
+function NoticeBanner() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    call("/api/notice?page=0&size=5").then((d) => setItems(asPage(d).content)).catch(() => {});
+  }, []);
+  if (items.length === 0) return null;
+  return (
+    <div style={S.noticeBanner}>
+      {items.map((n) => (
+        <div key={n.id} style={S.noticeItem}>
+          📢 <b style={{ margin: "0 6px" }}>{n.title}</b>
+          <span>{n.content}</span>
+          <span style={S.noticeMeta}> · {n.authorName} · {kst(n.createAt)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function FotmobTester() {
   const [tab, setTab] = useState("schedule");
   return (
     <div style={S.page}>
       <h1 style={S.h1}>⚽ FotMob 콘솔 <span style={S.sub}>모든 결과는 콘솔(F12)에도 출력</span></h1>
       <div style={S.tabs}>
-        {[["schedule", "📅 일정"], ["standings", "🏆 순위"], ["predict", "🎯 예측"], ["ai", "🤖 AI"], ["rank", "🏅 랭킹"], ["tools", "🛠 도구"]].map(([k, label]) => (
+        {[["schedule", "📅 일정"], ["standings", "🏆 순위"], ["predict", "🎯 예측"], ["ai", "🤖 AI"], ["rank", "🏅 랭킹"], ["admin", "🛡 관리자"], ["tools", "🛠 도구"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} style={{ ...S.tab, ...(tab === k ? S.tabOn : {}) }}>{label}</button>
         ))}
       </div>
@@ -85,6 +105,7 @@ export default function FotmobTester() {
       {tab === "predict" && <PredictionPanel />}
       {tab === "ai" && <AiPanel />}
       {tab === "rank" && <RankPanel />}
+      {tab === "admin" && <AdminPanel />}
       {tab === "tools" && <ToolsPanel />}
     </div>
   );
@@ -151,6 +172,7 @@ function SchedulePanel() {
 
   return (
     <div>
+      <NoticeBanner />
       <div style={S.panel}>
         <div style={S.row}>
           <input type="date" style={S.input} value={date} onChange={(e) => setDate(e.target.value)} />
@@ -807,6 +829,164 @@ function AiPanel() {
   );
 }
 
+// ── 관리자 탭: 공지 작성/삭제 + 유저 권한/계정상태 관리 ──
+function AdminPanel() {
+  const cred = { credentials: "include" };
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [meChecked, setMeChecked] = useState(false);
+  // 공지
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [notices, setNotices] = useState([]);
+  const [nPage, setNPage] = useState({ number: 0, totalPages: 0, totalElements: 0 });
+  // 유저
+  const [users, setUsers] = useState([]);
+  const [uPage, setUPage] = useState({ number: 0, totalPages: 0, totalElements: 0 });
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    fetch(API + "/api/user/me", { credentials: "include" })
+      .then((r) => r.json())
+      .then((j) => { setIsAdmin(!!(j && j.data && j.data.admin)); setMeChecked(true); })
+      .catch(() => setMeChecked(true));
+    loadNotices(0);
+  }, []);
+
+  function login() { window.location.href = API + "/oauth2/authorization/google"; }
+
+  async function loadNotices(p = 0) {
+    try {
+      const pg = asPage(await call(`/api/notice?page=${p}&size=${PAGE_SIZE}`));
+      setNotices(pg.content);
+      setNPage({ number: pg.number, totalPages: pg.totalPages, totalElements: pg.totalElements });
+    } catch (e) { setErr(e.message); }
+  }
+  async function createNotice() {
+    setErr(""); setMsg("");
+    if (!title.trim() || !content.trim()) { setErr("제목과 내용을 입력하세요."); return; }
+    try {
+      await call("/api/admin/notice", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content }),
+      });
+      setTitle(""); setContent(""); setMsg("✅ 공지 등록됨"); loadNotices(0);
+    } catch (e) { setErr("등록 실패: " + e.message); }
+  }
+  async function deleteNotice(id) {
+    setErr(""); setMsg("");
+    try { await call(`/api/admin/notice/${id}`, { method: "DELETE", credentials: "include" }); setMsg("🗑 삭제됨"); loadNotices(nPage.number); }
+    catch (e) { setErr("삭제 실패: " + e.message); }
+  }
+
+  async function loadUsers(p = 0) {
+    setErr("");
+    try {
+      const pg = asPage(await call(`/api/admin/users?page=${p}&size=${PAGE_SIZE}`, cred));
+      setUsers(pg.content);
+      setUPage({ number: pg.number, totalPages: pg.totalPages, totalElements: pg.totalElements });
+    } catch (e) { setErr("유저 목록 실패(관리자 권한 필요): " + e.message); setUsers([]); }
+  }
+  async function setRole(u, role) {
+    setErr(""); setMsg("");
+    try { await call(`/api/admin/users/${u.id}/role?role=${role}`, { method: "PUT", credentials: "include" }); setMsg(`${u.name} 권한 → ${role}`); loadUsers(uPage.number); }
+    catch (e) { setErr("권한 변경 실패: " + e.message); }
+  }
+  async function setActive(u, active) {
+    setErr(""); setMsg("");
+    try { await call(`/api/admin/users/${u.id}/status?active=${active}`, { method: "PUT", credentials: "include" }); setMsg(`${u.name} 계정 → ${active ? "활성" : "정지"}`); loadUsers(uPage.number); }
+    catch (e) { setErr("계정상태 변경 실패: " + e.message); }
+  }
+
+  return (
+    <div>
+      <div style={S.panel}>
+        <h3 style={S.h3}>
+          관리자 페이지 <span style={S.tag}>공지 / 유저 관리</span>
+          <span style={{ ...S.tag, background: isAdmin ? "#dcfce7" : "#f1f5f9", color: isAdmin ? "#166534" : "#64748b" }}>
+            {isAdmin ? "🟢 관리자" : "👁 비관리자"}
+          </span>
+        </h3>
+        {!isAdmin && meChecked && (
+          <div style={S.row}>
+            <span style={S.desc}>관리자만 공지 작성·유저 관리가 가능합니다.</span>
+            <button style={S.btnGhost} onClick={login}>Google 로그인</button>
+          </div>
+        )}
+        {err && <div style={S.error}>⚠️ {err}</div>}
+        {msg && <div style={S.info}>{msg}</div>}
+      </div>
+
+      {isAdmin && (
+        <div style={S.panel}>
+          <h3 style={S.h3}>📢 공지 작성</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <input style={S.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목" />
+            <textarea style={{ ...S.input, minHeight: 70, resize: "vertical" }} value={content} onChange={(e) => setContent(e.target.value)}
+                      placeholder="예) 다가오는 12일 11시에 진행하는 한국 vs 체코 많은 응원 부탁드립니다." />
+            <div><button style={S.btn} onClick={createNotice}>공지 등록</button></div>
+          </div>
+        </div>
+      )}
+
+      <div style={S.panel}>
+        <h3 style={S.h3}>공지 목록 <span style={S.tag}>{nPage.totalElements}건</span></h3>
+        {notices.length === 0 ? <p style={S.desc}>공지가 없습니다.</p> : notices.map((n) => (
+          <div key={n.id} style={S.noticeRow}>
+            <div style={{ flex: 1 }}>
+              <b>{n.title}</b>
+              <div style={S.desc}>{n.content}</div>
+              <div style={S.noticeMeta}>{n.authorName} · {kst(n.createAt)}</div>
+            </div>
+            {isAdmin && <button style={S.btnGhost} onClick={() => deleteNotice(n.id)}>삭제</button>}
+          </div>
+        ))}
+        <Pager page={nPage.number} totalPages={nPage.totalPages} totalElements={nPage.totalElements} onPage={loadNotices} />
+      </div>
+
+      {isAdmin && (
+        <div style={S.panel}>
+          <h3 style={S.h3}>👥 유저 관리</h3>
+          <button style={S.btnGhost} onClick={() => loadUsers(0)}>유저 목록 불러오기</button>
+          {users.length > 0 && (
+            <table style={{ ...S.table, marginTop: 10 }}>
+              <thead><tr>
+                <th style={S.th}>#</th><th style={S.thL}>이름</th><th style={S.thL}>이메일</th>
+                <th style={S.th}>권한</th><th style={S.th}>상태</th><th style={S.th}>관리</th>
+              </tr></thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td style={S.td}>{u.id}</td>
+                    <td style={S.tdL}>{u.name}</td>
+                    <td style={S.tdL}>{u.email}</td>
+                    <td style={S.td}>
+                      <select value={u.role} onChange={(e) => setRole(u, e.target.value)} style={{ ...S.input, padding: "4px 6px" }}>
+                        <option value="COMMON_USER">COMMON_USER</option>
+                        <option value="ADMIN_USER">ADMIN_USER</option>
+                      </select>
+                    </td>
+                    <td style={S.td}>
+                      <span style={{ color: u.active ? "#166534" : "#dc2626", fontWeight: 700 }}>{u.active ? "활성" : "정지"}</span>
+                    </td>
+                    <td style={S.td}>
+                      {u.active
+                        ? <button style={S.btnGhost} onClick={() => setActive(u, false)}>정지</button>
+                        : <button style={S.btn} onClick={() => setActive(u, true)}>활성화</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <Pager page={uPage.number} totalPages={uPage.totalPages} totalElements={uPage.totalElements} onPage={loadUsers} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const S = {
   page: { maxWidth: 940, margin: "0 auto", padding: 24, fontFamily: "system-ui, sans-serif", color: "#1a1a2e", textAlign: "left" },
   h1: { fontSize: 24, marginBottom: 12 }, sub: { fontSize: 12, color: "#94a3b8", fontWeight: 400 },
@@ -823,6 +1003,10 @@ const S = {
   btnGhost: { padding: "7px 13px", background: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: 13, cursor: "pointer" },
   error: { background: "#fef2f2", color: "#b91c1c", padding: 10, borderRadius: 8, marginTop: 10 },
   info: { background: "#eff6ff", color: "#1e40af", padding: 10, borderRadius: 8, marginTop: 4 },
+  noticeBanner: { background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px", marginBottom: 12, display: "flex", flexDirection: "column", gap: 4 },
+  noticeItem: { fontSize: 13, color: "#92400e" },
+  noticeMeta: { color: "#a16207", fontSize: 11 },
+  noticeRow: { display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid #f1f5f9" },
   matchList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 6 },
   matchRow: { display: "grid", gridTemplateColumns: "180px 1fr 150px", alignItems: "center", gap: 10, padding: "8px 12px", background: "#f8fafc", borderRadius: 8, cursor: "pointer", fontSize: 13 },
   comp: { color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },

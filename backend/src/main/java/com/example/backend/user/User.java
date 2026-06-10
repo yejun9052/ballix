@@ -61,6 +61,29 @@ public class User extends BaseTimeEntity {
         }
     }
 
+    // 계정상태 접근자 (Lombok boolean 게터 이름 혼동 방지용 명시 접근자)
+    public boolean isActive() {
+        return is_active;
+    }
+
+    // ── 관리자 조작 ──────────────────────────────────────────
+    /** 권한 변경(COMMON_USER ↔ ADMIN_USER). */
+    public void changeRole(Role role) {
+        this.role = role;
+    }
+
+    /** 계정 비활성(정지). 사유 밴타입 기록. */
+    public void deactivate(BanType type) {
+        this.is_active = false;
+        this.banType = type;
+    }
+
+    /** 계정 활성(정지 해제). */
+    public void activate() {
+        this.is_active = true;
+        this.banType = null;
+    }
+
 
 
 
