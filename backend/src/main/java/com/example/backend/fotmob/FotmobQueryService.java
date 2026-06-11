@@ -16,6 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +31,11 @@ public class FotmobQueryService {
 
     // 라인업이 공개되기 시작하는 킥오프 전 시간창(분). 이보다 더 미래면 lazy 크롤을 안 한다.
     private static final long LINEUP_LAZY_WINDOW_MINUTES = 60;
+    // lazy 크롤 쿨다운: 연속 요청이 매번 크롤을 유발하지 않도록 N분 내 재크롤 억제
+    private static final long LAZY_CRAWL_COOLDOWN_MINUTES = 3;
+
+    /** matchId → 마지막 lazy 크롤 시각 (쿨다운용, 폴링 스케줄러 lastPolled 패턴과 동일). */
+    private final Map<Long, LocalDateTime> lastLazyCrawled = new ConcurrentHashMap<>();
 
     @Transactional
     public Page<LineupPlayer> getLineup(Long matchId, Pageable pageable) {
@@ -76,6 +84,7 @@ public class FotmobQueryService {
      * 라인업이 아직 DB에 없고 킥오프가 가까운(시간창 안) 경기면 최초 1회만 크롤+저장.
      * 저장되면 lineupSynced=true 가 되어 다음부터는 DB에서만 읽는다.
      * 킥오프가 한참 남은 경기는 라인업 자체가 없으므로 크롤하지 않는다(헛크롤 방지).
+     * 쿨다운(N분) 안에 이미 크롤했으면 스킵 — 연속 요청마다 크롤 폭주 방지.
      */
     private void lazySync(Match match) {
         if (match.getFotmobMatchId() == null) return;
@@ -84,8 +93,13 @@ public class FotmobQueryService {
                 || match.getMatchTime().isAfter(LocalDateTime.now().plusMinutes(LINEUP_LAZY_WINDOW_MINUTES))) {
             return;
         }
+        LocalDateTime lastCrawl = lastLazyCrawled.get(match.getId());
+        if (lastCrawl != null && ChronoUnit.MINUTES.between(lastCrawl, LocalDateTime.now()) < LAZY_CRAWL_COOLDOWN_MINUTES) {
+            return;
+        }
         try {
             syncService.syncMatch(match);
+            lastLazyCrawled.put(match.getId(), LocalDateTime.now());
         } catch (Exception e) {
             // 조회는 계속 — 현재 DB 상태를 반환
         }

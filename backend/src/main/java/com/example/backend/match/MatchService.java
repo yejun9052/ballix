@@ -31,9 +31,9 @@ public class MatchService {
 
 
 
-    // 대회 상관 X 대회 전부 찾기 (AI 예측 선택 경기를 최상단으로)
+    // 대회 상관 X 대회 전부 찾기 (IN_PLAY 최상단, 그 다음 AI 예측 선택 경기, 그 뒤 matchTime ASC)
     public Page<Match> allMatch(Pageable pageable) {
-        return matchRepository.findAllByOrderByPredictionEnabledDescMatchTimeAsc(pageable);
+        return matchRepository.findAllSorted(pageable);
     }
 
     // 특정 대회 경기 전부 찾기

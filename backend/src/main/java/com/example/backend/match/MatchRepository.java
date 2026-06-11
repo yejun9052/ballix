@@ -13,8 +13,12 @@ import java.util.Optional;
 
 public interface MatchRepository extends JpaRepository<Match, Long> {
 
-    /** 전체 경기: AI 예측 대상으로 선택된 경기를 최상단, 그 뒤 킥오프 순(페이지네이션). */
-    Page<Match> findAllByOrderByPredictionEnabledDescMatchTimeAsc(Pageable pageable);
+    /** 전체 경기: IN_PLAY 최상단(matchTime ASC), 그 다음 AI 예측 선택 경기, 그 뒤 matchTime ASC. */
+    @Query("SELECT m FROM Match m ORDER BY " +
+            "CASE WHEN m.status = 'IN_PLAY' THEN 0 ELSE 1 END ASC, " +
+            "m.predictionEnabled DESC, " +
+            "m.matchTime ASC")
+    Page<Match> findAllSorted(Pageable pageable);
 
     /** 특정 팀의 최근 종료 경기(폼) — 킥오프 이전, 최신순. Pageable로 N건 제한. */
     @Query("SELECT m FROM Match m " +
@@ -25,17 +29,20 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
                                @Param("before") LocalDateTime before,
                                Pageable pageable);
 
-    /** 해당 날짜의 경기(페이지). */
+    /** 해당 날짜의 경기(페이지): IN_PLAY 먼저, 그 뒤 matchTime ASC. */
     @Query("SELECT m FROM Match m " +
             "WHERE FUNCTION('DATE', m.matchTime) = :date " +
-            "ORDER BY m.matchTime ASC")
+            "ORDER BY CASE WHEN m.status = 'IN_PLAY' THEN 0 ELSE 1 END ASC, m.matchTime ASC")
     Page<Match> findByMatchDate(@Param("date") LocalDate date, Pageable pageable);
 
     /** 해당 날짜에 경기가 있는지(lazy-crawl 게이트용 — 페이징과 무관). */
     @Query("SELECT COUNT(m) > 0 FROM Match m WHERE FUNCTION('DATE', m.matchTime) = :date")
     boolean existsByMatchDate(@Param("date") LocalDate date);
 
-    Page<Match> findByCompetitionId(Long compId, Pageable pageable);
+    /** 특정 대회 경기: IN_PLAY 먼저, 그 뒤 matchTime ASC. */
+    @Query("SELECT m FROM Match m WHERE m.competition.id = :compId " +
+            "ORDER BY CASE WHEN m.status = 'IN_PLAY' THEN 0 ELSE 1 END ASC, m.matchTime ASC")
+    Page<Match> findByCompetitionId(@Param("compId") Long compId, Pageable pageable);
 
     /** 다가오는 경기(킥오프 미래), 가까운 순. */
     Page<Match> findByMatchTimeAfterOrderByMatchTimeAsc(LocalDateTime now, Pageable pageable);

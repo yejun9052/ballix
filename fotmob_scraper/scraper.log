@@ -1,0 +1,207 @@
+INFO:     Started server process [28828]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8800 (Press CTRL+C to quit)
+[api] Playwright 브라우저 준비 완료
+INFO:     127.0.0.1:50326 - "GET /health HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5293170 url=https://www.fotmob.com/match/5293170
+[crawl] 경기 수집 완료 matchId=5293170 status=FINISHED score=2-1 라인업=47명 이벤트=26건 (6.8s)
+INFO:     127.0.0.1:64244 - "GET /match/5293170 HTTP/1.1" 200 OK
+[crawl] 순위 수집 시작 leagueId=114
+[crawl] 순위 수집 완료 leagueId=114 0그룹 0팀 (1.3s)
+INFO:     127.0.0.1:64244 - "GET /league/114/table HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=1-2 라인업=47명 이벤트=3건 (1.7s)
+INFO:     127.0.0.1:64244 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5213043 url=https://www.fotmob.com/match/5213043
+[crawl] 경기 수집 완료 matchId=5213043 status=FINISHED score=3-0 라인업=46명 이벤트=24건 (4.2s)
+INFO:     127.0.0.1:64244 - "GET /match/5213043 HTTP/1.1" 200 OK
+[crawl] 순위 수집 시작 leagueId=114
+[crawl] 순위 수집 완료 leagueId=114 0그룹 0팀 (1.2s)
+INFO:     127.0.0.1:64244 - "GET /league/114/table HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=1-2 라인업=47명 이벤트=3건 (2.9s)
+INFO:     127.0.0.1:65273 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=1-2 라인업=47명 이벤트=3건 (2.0s)
+INFO:     127.0.0.1:56079 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=1-2 라인업=47명 이벤트=3건 (2.7s)
+INFO:     127.0.0.1:62541 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (3.1s)
+INFO:     127.0.0.1:61768 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (1.7s)
+INFO:     127.0.0.1:59838 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (1.9s)
+INFO:     127.0.0.1:54802 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (3.3s)
+INFO:     127.0.0.1:59922 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (3.2s)
+INFO:     127.0.0.1:63442 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (2.0s)
+INFO:     127.0.0.1:59832 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (2.6s)
+INFO:     127.0.0.1:59832 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260601 leagues=77,114
+[crawl] 일정 수집 완료 date=20260601 11경기 (1.4s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260601&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260602 leagues=77,114
+[crawl] 일정 수집 완료 date=20260602 12경기 (1.2s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260602&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260603 leagues=77,114
+[crawl] 일정 수집 완료 date=20260603 11경기 (1.0s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260603&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260604 leagues=77,114
+[crawl] 일정 수집 완료 date=20260604 17경기 (1.0s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260604&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260605 leagues=77,114
+[crawl] 일정 수집 완료 date=20260605 20경기 (1.2s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260605&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260606 leagues=77,114
+[crawl] 일정 수집 완료 date=20260606 28경기 (1.0s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260606&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260607 leagues=77,114
+[crawl] 일정 수집 완료 date=20260607 21경기 (1.3s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260607&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260608 leagues=77,114
+[crawl] 일정 수집 완료 date=20260608 11경기 (1.1s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260608&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260609 leagues=77,114
+[crawl] 일정 수집 완료 date=20260609 16경기 (1.1s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260609&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260610 leagues=77,114
+[crawl] 일정 수집 완료 date=20260610 14경기 (0.9s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260610&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260611 leagues=77,114
+[crawl] 일정 수집 완료 date=20260611 5경기 (0.9s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260611&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260612 leagues=77,114
+[crawl] 일정 수집 완료 date=20260612 3경기 (1.1s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260612&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260613 leagues=77,114
+[crawl] 일정 수집 완료 date=20260613 3경기 (1.0s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260613&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260614 leagues=77,114
+[crawl] 일정 수집 완료 date=20260614 6경기 (1.0s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260614&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260615 leagues=77,114
+[crawl] 일정 수집 완료 date=20260615 6경기 (1.2s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260615&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260616 leagues=77,114
+[crawl] 일정 수집 완료 date=20260616 5경기 (1.0s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260616&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260617 leagues=77,114
+[crawl] 일정 수집 완료 date=20260617 6경기 (1.0s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260617&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260618 leagues=77,114
+[crawl] 일정 수집 완료 date=20260618 6경기 (1.4s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260618&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260619 leagues=77,114
+[crawl] 일정 수집 완료 date=20260619 5경기 (0.9s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260619&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260620 leagues=77,114
+[crawl] 일정 수집 완료 date=20260620 6경기 (1.1s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260620&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260621 leagues=77,114
+[crawl] 일정 수집 완료 date=20260621 6경기 (1.0s)
+INFO:     127.0.0.1:59832 - "GET /schedule?date=20260621&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (2.2s)
+INFO:     127.0.0.1:65264 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (2.9s)
+INFO:     127.0.0.1:53105 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (2.9s)
+INFO:     127.0.0.1:62861 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (2.7s)
+INFO:     127.0.0.1:62861 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260601 leagues=77,114
+[crawl] 일정 수집 완료 date=20260601 11경기 (1.1s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260601&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260602 leagues=77,114
+[crawl] 일정 수집 완료 date=20260602 12경기 (1.2s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260602&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260603 leagues=77,114
+[crawl] 일정 수집 완료 date=20260603 11경기 (1.1s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260603&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260604 leagues=77,114
+[crawl] 일정 수집 완료 date=20260604 17경기 (1.3s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260604&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260605 leagues=77,114
+[crawl] 일정 수집 완료 date=20260605 20경기 (1.0s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260605&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260606 leagues=77,114
+[crawl] 일정 수집 완료 date=20260606 28경기 (1.1s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260606&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260607 leagues=77,114
+[crawl] 일정 수집 완료 date=20260607 21경기 (1.1s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260607&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260608 leagues=77,114
+[crawl] 일정 수집 완료 date=20260608 11경기 (1.2s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260608&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260609 leagues=77,114
+[crawl] 일정 수집 완료 date=20260609 16경기 (1.3s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260609&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260610 leagues=77,114
+[crawl] 일정 수집 완료 date=20260610 14경기 (1.2s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260610&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260611 leagues=77,114
+[crawl] 일정 수집 완료 date=20260611 5경기 (1.0s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260611&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260612 leagues=77,114
+[crawl] 일정 수집 완료 date=20260612 3경기 (1.1s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260612&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260613 leagues=77,114
+[crawl] 일정 수집 완료 date=20260613 3경기 (1.2s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260613&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260614 leagues=77,114
+[crawl] 일정 수집 완료 date=20260614 6경기 (1.9s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260614&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260615 leagues=77,114
+[crawl] 일정 수집 완료 date=20260615 6경기 (0.9s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260615&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260616 leagues=77,114
+[crawl] 일정 수집 완료 date=20260616 5경기 (1.0s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260616&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260617 leagues=77,114
+[crawl] 일정 수집 완료 date=20260617 6경기 (1.2s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260617&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260618 leagues=77,114
+[crawl] 일정 수집 완료 date=20260618 6경기 (1.1s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260618&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260619 leagues=77,114
+[crawl] 일정 수집 완료 date=20260619 5경기 (1.1s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260619&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260620 leagues=77,114
+[crawl] 일정 수집 완료 date=20260620 6경기 (1.3s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260620&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 일정 수집 시작 date=20260621 leagues=77,114
+[crawl] 일정 수집 완료 date=20260621 6경기 (1.2s)
+INFO:     127.0.0.1:62861 - "GET /schedule?date=20260621&tz=Asia/Seoul&leagues=77,114 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (3.0s)
+INFO:     127.0.0.1:59832 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=IN_PLAY score=0-4 라인업=47명 이벤트=4건 (2.9s)
+INFO:     127.0.0.1:51817 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=FINISHED score=0-4 라인업=47명 이벤트=4건 (1.7s)
+INFO:     127.0.0.1:50606 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 순위 수집 시작 leagueId=114
+[crawl] 순위 수집 완료 leagueId=114 0그룹 0팀 (1.9s)
+INFO:     127.0.0.1:50606 - "GET /league/114/table HTTP/1.1" 200 OK
+[crawl] 경기 수집 시작 matchId=5736393 url=https://www.fotmob.com/match/5736393
+[crawl] 경기 수집 완료 matchId=5736393 status=FINISHED score=0-4 라인업=47명 이벤트=4건 (2.0s)
+INFO:     127.0.0.1:50606 - "GET /match/5736393 HTTP/1.1" 200 OK
+[crawl] 순위 수집 시작 leagueId=114
+[crawl] 순위 수집 완료 leagueId=114 0그룹 0팀 (1.2s)
+INFO:     127.0.0.1:50606 - "GET /league/114/table HTTP/1.1" 200 OK

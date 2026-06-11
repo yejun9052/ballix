@@ -49,8 +49,16 @@ public class SecurityConfig {
                         .successHandler(oAuth2SuccessHandler))
                 .formLogin(form -> form.disable())
                 .exceptionHandling(e -> e
-                        .authenticationEntryPoint((request, response, ex) ->
-                                response.sendRedirect("/oauth2/authorization/google")))
+                        .authenticationEntryPoint((request, response, ex) -> {
+                            // /api/** 는 JSON 401, 나머지는 OAuth 리다이렉트
+                            if (request.getRequestURI().startsWith("/api/")) {
+                                response.setStatus(401);
+                                response.setContentType("application/json;charset=UTF-8");
+                                response.getWriter().write("{\"success\":false,\"msg\":\"로그인이 필요합니다.\",\"data\":null}");
+                            } else {
+                                response.sendRedirect("/oauth2/authorization/google");
+                            }
+                        }))
                 .addFilterBefore(jwtFiller, UsernamePasswordAuthenticationFilter.class);
 
 

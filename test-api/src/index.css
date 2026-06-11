@@ -52,6 +52,8 @@
 
 body {
   margin: 0;
+  background: #0f172a; /* 다크 테마: #root 바깥 영역도 어둡게 */
+  color-scheme: dark;  /* 스크롤바·date picker 등 브라우저 UI도 다크로 */
 }
 
 #root {
@@ -59,7 +61,7 @@ body {
   max-width: 100%;
   margin: 0 auto;
   text-align: center;
-  border-inline: 1px solid var(--border);
+  border-inline: 1px solid #1e293b;
   min-height: 100svh;
   display: flex;
   flex-direction: column;

@@ -9,10 +9,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 하위 프로젝트 | 스택 | 루트 | 포트 |
 |---|---|---|---|
 | REST API | Java 21, Spring Boot 4, Gradle, MySQL | `backend/` | 8080 |
-| 웹 UI | React 19, Vite | `test-api/` | 5173(점유 시 5174) |
+| 웹 UI | React 19, Vite (JSX, TypeScript 없음) | `test-api/` | 5173(점유 시 5174) |
 | FotMob 스크래퍼 | Python 3.12, Playwright, FastAPI | `fotmob_scraper/` | 8800 |
 
 환경은 Windows + PowerShell입니다. gradlew는 `.\gradlew.bat` 형태로 호출하세요.
+
+> `test-api/`는 풀 프론트엔드가 아닌 **관리자/테스트 UI**다 — `src/` 아래 `App.jsx`와 `FotmobTester.jsx` 두 파일뿐이다.
 
 ## 핵심 아키텍처 (먼저 이해할 것)
 
@@ -36,9 +38,11 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 
 패키지 구조: 서비스·클라이언트·컨트롤러(`Fotmob*`)는 `fotmob` 루트에 두고, **엔티티+레포는 도메인별 하위 패키지**에 둔다 — `fotmob.lineup`(LineupPlayer), `fotmob.matchevent`(MatchEvent), `fotmob.league`(LeagueStanding). 엔티티를 옮길 땐 package 선언만 바꾸면 되고 DB 테이블명은 `@Table`로 고정돼 영향 없다.
 
+**HTTP-in-transaction 방지 패턴**: `FotmobSyncService`와 `FotmobScheduleService` 모두 `@Lazy @Autowired private XxxService self`로 자기 자신의 스프링 프록시를 주입한다. HTTP 크롤(네트워크 I/O)은 트랜잭션 밖에서 수행하고, DB 저장(`applySyncResult`/`persistSchedule`)만 `self.xxx()` 경유로 독립 트랜잭션에서 커밋한다 — `@Transactional` 자기호출(self-invocation)은 프록시를 우회해 무시되기 때문. 새 sync 서비스를 만들 때 이 패턴을 따라야 한다.
+
 `FotmobPollScheduler`가 두 가지 `@Scheduled` 작업을 돌린다:
 
-1. **일정 동기화** (부팅 10초 뒤 + 30분마다): `FotmobScheduleService.syncRange()`가 과거/미래 N일치 날짜별 경기 목록을 가져와 Team/Competition/Match를 upsert. 수집 리그는 `fotmob.schedule.leagues`로 필터하며, 실제 필터링은 Python `api.py`의 `build_schedule`에서 한다 — **토큰이 숫자면 leagueId 정확매칭, 문자면 leagueName 부분매칭**. 기본값은 `77,114`(남자 FIFA 월드컵 + 남자 A매치 친선). FotMob은 여자/U21/클럽 파생 리그를 같은 이름("Friendlies", "World Cup")으로 주므로 **이름 매칭으론 못 거른다 → 숫자 leagueId 화이트리스트를 써야 한다**.
+1. **일정 동기화** (부팅 10초 뒤 + 30분마다): `FotmobScheduleService.syncRange()`가 과거/미래 N일치 날짜별 경기 목록을 가져와 Team/Competition/Match를 upsert. 수집 리그는 `fotmob.schedule.leagues`로 필터하며, 실제 필터링은 Python `api.py`의 `build_schedule`에서 한다 — **토큰이 숫자면 leagueId 정확매칭, 문자면 leagueName 부분매칭**. 기본값은 `77,114`(남자 FIFA 월드컵 + 남자 A매치 친선). FotMob은 여자/U21/클럽 파생 리그를 같은 이름("Friendlies", "World Cup")으로 주므로 **이름 매칭으론 못 거른다 → 숫자 leagueId 화이트리스트를 써야 한다**. 일정 데이터엔 구장 정보가 없으므로, 저장 후 `enrichScheduledVenues()`가 **venue 없는 예정(SCHEDULED) 경기만** 상세(`/match/{id}`)를 추가 크롤해 `Match.venue`를 1회 채운다(멱등 — 채워지면 다음 동기화부터 스킵). 진행/종료 경기의 venue는 폴링이 채운다.
 2. **데이터 폴링** (1분 tick, `interval-minutes` 간격으로 게이트): 킥오프 `lineup-window-minutes`분 전부터 `FotmobSyncService.syncMatch()`로 라인업·평점·이벤트·스코어·**포메이션**(`Match.homeFormation/awayFormation`)·**선수 피치좌표**(`LineupPlayer.posX/posY`)를 갱신. 라인업이 뜨면 `markLineupSynced`, 종료되면 `markFinalized` + 해당 리그 순위(`FotmobStandingService`) 갱신.
 3. **라이브 시계 갱신** (`clock-ms`, 기본 11분): IN_PLAY 경기만 `FotmobSyncService.refreshLiveClock()`로 진행시간/스코어만 가볍게(라인업·이벤트 안 건드림) 갱신. 아래 "라이브 시계" 참고.
 
@@ -57,20 +61,29 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 - 예측값은 `Winner` enum(`HOME_TEAM`/`AWAY_TEAM`/`DRAW`) — **`Match.winner`와 같은 어휘**라 채점 때 `.name()`으로 그대로 비교. 잘못된 값은 enum 바인딩 실패로 거절.
 - 가드(순서대로): 비로그인 → 없는 경기 → **예측 허용 리그 아님**(`prediction.allowed-leagues` config, 기본 `77`=월드컵. 하드코딩 아님) → 킥오프 지남.
 - `ratio`는 **본인이 예측한 경기만** 조회 가능(예측 전이면 거절) → 분포 노출이 선택을 편향시키지 않게.
-- **자동 채점**: `FotmobSyncService`가 경기 종료(`markFinalized`) 시 `PredictionService.gradeMatch()` 호출 → 예측 `isCorrect` 기록 + `User.scorePrediction()`으로 전적(`matches_played`/`correct_count`) 갱신. `Prediction.isGraded()`로 멱등(재폴링 시 중복 집계 방지). 이 때문에 `fotmob → prediction` 단방향 의존이 있다.
+- **자동 채점 경로는 두 가지** — 둘 다 `PredictionService.gradeMatch()`를 호출하며 `Prediction.isGraded()`로 멱등(중복 집계 방지):
+  1. `FotmobSyncService.applySyncResult()` → 폴링으로 종료 감지 시 즉시 채점.
+  2. `FotmobScheduleService.persistSchedule()` → 일정 동기화 중 이미 FINISHED 된 경기를 발견하면 채점(폴링 창 밖에서 끝난 경기 커버).
+- 이 때문에 `fotmob → prediction` 단방향 의존이 있다.
 
 ### 유저/리더보드 (`com.example.backend.user`)
 
-`UserController`/`UserService`(MatchController 스타일). `GET /api/user/me`(로그인, 내 전적+적중률+`role`/`admin`), `GET /api/user/leaderboard`(공개, 적중수 내림차순 랭킹). 응답은 `UserView`/`RankView` DTO. 집계 원천(`User.correct_count`/`matches_played`)은 위 예측 채점이 갱신한다.
+`UserController`/`UserService`(MatchController 스타일). `GET /api/user/me`(로그인, 내 전적+적중률+`role`), `GET /api/user/leaderboard`(공개, 적중수 내림차순 랭킹). 응답은 `UserView`/`RankView` DTO. 집계 원천(`User.correct_count`/`matches_played`)은 위 예측 채점이 갱신한다.
 
-`UserView.admin`은 **프론트의 관리자 전용 UI(AI 승률 예측 생성) 노출 판단용** — `role==ADMIN_USER` 또는 `ai.admin-emails` 화이트리스트 이메일이면 true. (`me()`가 같은 규칙으로 계산)
+**관리자 판별은 `role` 단일 기준** — 프론트는 `me()`의 `role == "ADMIN_USER"`로 관리자 UI 노출을 판단하고, 백엔드 관리자 엔드포인트는 전부 `@PreAuthorize("hasRole('ADMIN_USER')")`로 보호한다(과거 `ai.admin-emails` 화이트리스트·`UserView.admin` 플래그·`AdminGuard`는 제거됨).
+
+### 공지사항 (`com.example.backend.notice`)
+
+`Notice` 엔티티 + CRUD. **조회는 공개, 작성·수정·삭제는 `@PreAuthorize("hasRole('ADMIN_USER')")`** 보호.
+- 조회: `GET /api/notice`(최신순 페이지, 기본 8건) · `GET /api/notice/{id}`
+- 관리(ADMIN_USER): `POST /api/admin/notice` · `PUT /api/admin/notice/{id}` · `DELETE /api/admin/notice/{id}` — 본문 `{title, content}`
 
 ### AI 기능 (`com.example.backend.ai`) — Google Gemini
 
-승률 예측 + 골 요약. 모델은 `ai.gemini.model`(기본 `gemini-3.1-flash-lite`), 키는 `ai.gemini.api-key`. `GeminiClient`가 별도 SDK 없이 `generateContent` REST를 RestClient로 호출(429/503 자동 재시도). **이 도메인은 `ai → user`(AdminGuard)·`ai → fotmob`(FotmobClient/Standing) 의존이 있다.**
+승률 예측 + 골 요약. 모델은 `ai.gemini.model`(기본 `gemini-3.1-flash-lite`), 키는 `ai.gemini.api-key`. `GeminiClient`가 별도 SDK 없이 `generateContent` REST를 RestClient로 호출(429/503 자동 재시도). **이 도메인은 `ai → fotmob`(FotmobClient/Standing) 의존이 있다.**
 
-- **승률 예측** (`AiPredictionService`, `POST /api/admin/ai/predict?matchId=&force=`): **관리자만 "생성"**(`AdminGuard.requireAdmin`), 결과 조회는 누구나(값이 `Match`에 저장돼 일반 조회 응답에 포함). 입력 다이제스트 = **FIFA 랭킹(보조) + 리그 순위 + 최근 폼**(전부 DB에 있는 데이터, 추가 크롤 X). Gemini structured-output(JSON)으로 받아 **합 100·1% 단위**로 정규화해 `Match.aiHomePct/aiDrawPct/aiAwayPct`에 저장. `predictionEnabled=true`가 되어 `allMatch`에서 최상단 정렬(`findAllByOrderByPredictionEnabledDescMatchTimeAsc`). 멱등(`aiPredictedAt != null`이면 force 없이는 재호출 안 함).
-- **골 요약** (`AiSummaryService`, `GET /api/match/{id}/ai/summary?force=`, 공개): **종료 경기**만. 1순위로 **FotMob 라이브티커(ltc) 골 해설**(영문)을 `FotmobClient.getCommentary()`로 가져와 Gemini가 **한국어 해설 말투로 번역·요약**, 없으면 저장된 `MatchEvent`로 폴백. DB-first lazy(없으면 1회 생성 후 `Match.aiSummary`에 캐시).
+- **승률 예측** (`AiPredictionService`, `POST /api/admin/ai/predict?matchId=&force=`): **관리자만 "생성"**(`@PreAuthorize ROLE_ADMIN_USER`), 결과 조회는 누구나(값이 `Match`에 저장돼 일반 조회 응답에 포함). 입력 다이제스트 = **FIFA 랭킹(보조) + 리그 순위 + 최근 폼**(전부 DB에 있는 데이터, 추가 크롤 X). Gemini structured-output(JSON)으로 받아 **합 100·1% 단위**로 정규화해 `Match.aiHomePct/aiDrawPct/aiAwayPct`에 저장. `predictionEnabled=true`가 되어 `allMatch`에서 최상단 정렬(`findAllByOrderByPredictionEnabledDescMatchTimeAsc`). 멱등(`aiPredictedAt != null`이면 force 없이는 재호출 안 함).
+- **골 요약** (`AiSummaryService`, `GET /api/match/{id}/ai/summary?force=`, 공개): **종료 경기**만. 1순위로 **FotMob 라이브티커(ltc) 골 해설**(영문)을 `FotmobClient.getCommentary()`로 가져와 Gemini가 **한국어 해설 말투로 번역·요약**, 없으면 저장된 `MatchEvent`로 폴백. DB-first lazy(없으면 1회 생성 후 `Match.aiSummary`에 캐시). **생성 실패 시 5분 쿨다운** — 이 시간 안에 재요청이 와도 Gemini를 재호출하지 않고 빈 값을 반환(ltc 크롤+재시도 폭주 방지).
 - **FIFA 랭킹**: `resources/fifa-rankings.json`(팀명→순위, 수정 쉬운 근사 스냅샷)을 `FifaRankingService`가 부팅 시 로드. 팀명은 FotMob 표기와 매칭.
 
 ### 인증 흐름 (기존 유지)
@@ -129,11 +142,14 @@ npm run build ; npm run lint
 - `POST /api/prediction/predict?matchId=&predictedWinner=` · `GET /api/prediction/{myPrediction,findByMatch?matchId=,ratio?matchId=}` — 예측·분포(로그인 필요)
 - `GET /api/match/allMatch` · `/findByCompId?id=` · `/MatchDay?date=YYYY-MM-DD` · `/upcoming?compId=` — 경기 목록 조회(`upcoming`=미래 경기만, compId 옵션). **`MatchDay`는 DB-first lazy-crawl**(없는 날짜 조회 시 그 날짜를 즉석 크롤·저장 후 반환).
 - `POST /api/admin/ai/predict?matchId=&force=`(관리자) · `GET /api/match/{id}/ai/summary?force=`(공개) — AI 승률 예측 / 골 요약
-- `GET /api/user/me`(로그인, `role`/`admin` 포함) · `GET /api/user/leaderboard`(공개) — 내 전적 / 적중순 랭킹
+- `GET /api/user/me`(로그인, `role` 포함) · `GET /api/user/leaderboard`(공개) — 내 전적 / 적중순 랭킹
+- `GET /api/notice`(공개, 기본 8건) · `GET /api/notice/{id}` — 공지 목록/단건
+- `POST|PUT|DELETE /api/admin/notice`(ADMIN_USER) — 공지 CRUD
+- `GET /api/admin/users`(ADMIN_USER, 기본 8건) · `PUT /api/admin/users/{id}/role?role=` · `PUT /api/admin/users/{id}/status?active=` — 유저 목록·권한·계정상태 관리
 
 > 프론트 연동용 전체 응답 스키마/예시는 루트 **`API_SPEC.md`** 참고(프론트엔드 담당자 전달용).
 
-**Python 스크래퍼(`fotmob_scraper/api.py`) 엔드포인트**: `/match/{id}`(라인업·이벤트·평점·**liveTime/liveSeconds**·포메이션·posX/posY), `/schedule`, `/league/{id}/table`, `/commentary/{id}`(라이브티커 골 해설 — 골 요약용), `/search`. **선수 사진은 백엔드에 저장 안 한다** — 프론트가 `fotmobPlayerId`로 `https://images.fotmob.com/image_resources/playerimages/{id}.png` URL을 직접 구성.
+**Python 스크래퍼(`fotmob_scraper/api.py`) 엔드포인트**: `/match/{id}`(라인업·이벤트·평점·**liveTime/liveSeconds**·포메이션·posX/posY·**venue**=구장이름 `infoBox.Stadium.name`), `/schedule`, `/league/{id}/table`, `/commentary/{id}`(라이브티커 골 해설 — 골 요약용), `/search`. **선수 사진은 백엔드에 저장 안 한다** — 프론트가 `fotmobPlayerId`로 `https://images.fotmob.com/image_resources/playerimages/{id}.png` URL을 직접 구성.
 
 ## 함정 / 주의사항 (이 코드베이스 특유)
 
@@ -155,8 +171,9 @@ npm run build ; npm run lint
 - `spring.security.oauth2.client.registration.google.*` — Google OAuth
 - `fotmob.api.base-url` — Python FastAPI 주소(기본 `http://127.0.0.1:8800`)
 - `fotmob.schedule.{leagues,past-days,future-days,refresh-past-days}` — 수집 리그/범위(기본 `77,114` ±10일; 숫자=leagueId 정확매칭, 문자=이름 부분매칭). `refresh-past-days`(기본 2)는 **부팅 후 주기 재동기화의 과거 범위** — 과거는 거의 안 변해 줄여서 크롤 부하·차단위험을 낮춤(부팅 1회는 full `past-days`).
-- `fotmob.poll.{enabled,lineup-window-minutes,interval-minutes,clock-ms}` — 폴링 동작. `interval-minutes`(기본 3)=풀폴링, `clock-ms`(기본 660000=11분)=라이브 진행시간 갱신
+- `fotmob.schedule.enabled` / `fotmob.poll.enabled` — 일정 동기화·폴링 전체 on/off(기본 true; 테스트 시 false로 끔)
+- `fotmob.poll.{lineup-window-minutes,interval-minutes,clock-ms}` — 폴링 동작. `interval-minutes`(기본 3)=풀폴링, `clock-ms`(기본 660000=11분)=라이브 진행시간 갱신
 - `prediction.allowed-leagues` — 예측 허용 리그 fotmobLeagueId(쉼표구분, 기본 `77`=월드컵)
-- `ai.gemini.{api-key,model,base-url}` — Gemini(기본 `gemini-3.1-flash-lite`). `ai.admin-emails` — AI 예측 트리거 허용 관리자 이메일(쉼표구분, role=ADMIN_USER도 허용)
+- `ai.gemini.{api-key,model,base-url}` — Gemini(기본 `gemini-3.1-flash-lite`). 관리자 판별은 화이트리스트 없이 role=ADMIN_USER만 사용.
 
 JPA는 `ddl-auto: update`라 엔티티 추가 시 컬럼/테이블이 자동 생성된다(마이그레이션 불필요).

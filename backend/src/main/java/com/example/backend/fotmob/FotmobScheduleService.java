@@ -3,10 +3,12 @@ package com.example.backend.fotmob;
 import com.example.backend.competition.Competition;
 import com.example.backend.competition.CompetitionRepository;
 import com.example.backend.competition.enums.CompType;
+import com.example.backend.fotmob.dto.FotmobMatchResponse;
 import com.example.backend.fotmob.dto.FotmobScheduleResponse;
 import com.example.backend.fotmob.dto.FotmobScheduleResponse.ScheduledMatch;
 import com.example.backend.match.Match;
 import com.example.backend.match.MatchRepository;
+import com.example.backend.prediction.PredictionService;
 import com.example.backend.team.Team;
 import com.example.backend.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class FotmobScheduleService {
     private final MatchRepository matchRepository;
     private final TeamRepository teamRepository;
     private final CompetitionRepository competitionRepository;
+    private final PredictionService predictionService;
 
     /** 자기 자신의 프록시. 날짜별 저장(persistSchedule)을 독립 트랜잭션으로 커밋하기 위해
      *  내부호출이 아닌 프록시 경유로 부른다(같은 빈 self-invocation은 @Transactional이 무시됨). */
@@ -82,7 +85,40 @@ public class FotmobScheduleService {
         if (resp == null || resp.matches() == null || resp.matches().isEmpty()) {
             return 0;
         }
-        return self.persistSchedule(date, resp);
+        int count = self.persistSchedule(date, resp);
+        enrichScheduledVenues(resp);   // 저장 커밋 후(트랜잭션 밖) 예정 경기 구장 보강
+        return count;
+    }
+
+    /**
+     * 예정 경기의 구장 이름을 상세 크롤로 채운다 — 일정 데이터엔 구장이 없어 경기 상세를 따로 긁어야 한다.
+     * venue가 아직 없는 SCHEDULED 경기만 대상이라 한 번 채워지면 다음 동기화부터 스킵(멱등, 크롤 부하 점감).
+     * 크롤(네트워크 I/O)은 트랜잭션 밖에서 돌리고, 저장만 self.applyVenue로 짧은 독립 트랜잭션에서 커밋한다.
+     */
+    private void enrichScheduledVenues(FotmobScheduleResponse resp) {
+        for (ScheduledMatch sm : resp.matches()) {
+            if (sm.matchId() == null) continue;
+            if (sm.started() || sm.finished() || sm.cancelled()) continue;   // 예정 경기만(진행/종료는 폴링이 채움)
+
+            Match m = matchRepository.findByFotmobMatchId(sm.matchId()).orElse(null);
+            if (m == null) continue;
+            if (m.getVenue() != null && !m.getVenue().isBlank()) continue;    // 이미 구장 있으면 스킵
+
+            try {
+                FotmobMatchResponse detail = fotmobClient.getMatch(sm.matchId());
+                if (detail != null && detail.venue() != null && !detail.venue().isBlank()) {
+                    self.applyVenue(m.getId(), detail.venue());
+                }
+            } catch (Exception e) {
+                log.warn("[fotmob-schedule] 구장 크롤 실패 fotmobId={} : {}", sm.matchId(), e.getMessage());
+            }
+        }
+    }
+
+    /** 구장 이름만 짧게 반영(단독 트랜잭션). */
+    @Transactional
+    public void applyVenue(Long matchId, String venue) {
+        matchRepository.findById(matchId).ifPresent(m -> m.updateVenue(venue));
     }
 
     /** 크롤 결과를 DB에 업서트(날짜 단위 트랜잭션). */
@@ -114,10 +150,24 @@ public class FotmobScheduleService {
         String status = resolveStatus(sm);
         String winner = resolveWinner(sm);
 
+        if (kickoffKst == null) {
+            log.warn("[fotmob-schedule] utcTime 없는 경기 스킵 fotmobId={}", sm.matchId());
+            return;
+        }
+
         Match existing = matchRepository.findByFotmobMatchId(sm.matchId()).orElse(null);
         if (existing != null) {
+            boolean wasFinished = "FINISHED".equals(existing.getStatus());
             existing.updateSchedule(kickoffKst, null, groupName, status);
             existing.updateScore(status, sm.homeScore(), sm.awayScore(), winner);
+            // 일정 동기화가 FINISHED를 뒤늦게 확인한 경우에도 예측 채점(폴링 창 밖 경기 누락 방지)
+            if (!wasFinished && "FINISHED".equals(status)) {
+                try {
+                    predictionService.gradeMatch(existing);
+                } catch (Exception e) {
+                    log.warn("[fotmob-schedule] 예측 채점 실패 fotmobId={} : {}", sm.matchId(), e.getMessage());
+                }
+            }
             return;
         }
 
@@ -186,10 +236,10 @@ public class FotmobScheduleService {
         return CompType.LEAGUE;
     }
 
-    /** UTC ISO 문자열을 KST(UTC+9) LocalDateTime으로. */
+    /** UTC ISO 문자열을 KST(UTC+9) LocalDateTime으로. utcTime 없으면 null 반환 → 호출부에서 스킵. */
     private LocalDateTime toKst(String utcTime) {
         if (utcTime == null || utcTime.isBlank()) {
-            return LocalDateTime.now();
+            return null;
         }
         return OffsetDateTime.parse(utcTime).plusHours(9).toLocalDateTime();
     }

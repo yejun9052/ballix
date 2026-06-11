@@ -13,7 +13,8 @@ public class CookieUtil {
         Cookie cookie = new Cookie(name, value);
         cookie.setHttpOnly(true);
         cookie.setPath("/");
-        cookie.setMaxAge(60 * 60 * 24);
+        cookie.setMaxAge(60 * 60);              // JWT 만료(1h)와 일치
+        cookie.setAttribute("SameSite", "Lax"); // CSRF 방지
         response.addCookie(cookie);
     }
     public void deleteCookie(HttpServletResponse response, String name) {

@@ -162,6 +162,11 @@ def build_match_response(raw: dict) -> dict:
     home_lineup = lineup.get("homeTeam", {}) or {}
     away_lineup = lineup.get("awayTeam", {}) or {}
 
+    # 구장 이름: content.matchFacts.infoBox.Stadium.name (없는 경기도 있어 전부 방어)
+    info_box = ((raw.get("content", {}) or {}).get("matchFacts", {}) or {}).get("infoBox", {}) or {}
+    stadium = info_box.get("Stadium") or {}
+    venue = stadium.get("name") if isinstance(stadium, dict) else None
+
     lineups = _lineup_rows(home_lineup, True) + _lineup_rows(away_lineup, False)
     lineup_available = bool(home_lineup.get("starters") or away_lineup.get("starters"))
 
@@ -180,6 +185,7 @@ def build_match_response(raw: dict) -> dict:
     return {
         "matchId": general.get("matchId"),
         "leagueName": general.get("leagueName"),
+        "venue": venue,
         "statusType": _normalize_status(status),
         "statusReason": (status.get("reason") or {}).get("long"),
         "liveTime": live_short if is_live else None,

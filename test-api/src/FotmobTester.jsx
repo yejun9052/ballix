@@ -11,6 +11,31 @@ async function call(path, opts) {
   return json.data;
 }
 
+// ── 로그인 정보(/me) 공통 조회 ──
+// 홈 접속 시 1회만 네트워크 호출하고 모든 패널이 결과를 공유한다.
+// 로그인(OAuth 리다이렉트) 후엔 페이지가 새로 로드되므로 자동으로 다시 조회된다.
+let meCache;            // undefined=미조회, null=비로그인, object=UserView
+let mePromise = null;
+function fetchMe() {
+  if (!mePromise) {
+    mePromise = fetch(API + "/api/user/me", { credentials: "include" })
+      .then((r) => r.json())
+      .then((j) => { meCache = j && j.success ? j.data : null; return meCache; })
+      .catch(() => { meCache = null; return null; });
+  }
+  return mePromise;
+}
+function useMe() {
+  const [me, setMe] = useState(meCache);
+  const [checked, setChecked] = useState(meCache !== undefined);
+  useEffect(() => {
+    let alive = true;
+    fetchMe().then((m) => { if (alive) { setMe(m); setChecked(true); } });
+    return () => { alive = false; };
+  }, []);
+  return { me, checked, isAdmin: me?.role === "ADMIN_USER" };
+}
+
 // 미리보기/뷰 필드명 흡수
 const normLineup = (p) => ({
   name: p.name, shirt: p.shirtNumber ?? p.shirt,
@@ -31,13 +56,26 @@ const kst = (iso) => iso ? iso.replace("T", " ").slice(0, 16) : "";
 
 // 진행 시간 초 단위 시계: 백엔드가 준 시작앵커(liveStartedAt)에서 (지금 - 앵커)를 mm:ss로 흘림.
 // 앵커가 실제 시각 기준이라 stale 없이 정확하고, 폴링 없이 매초 흐름(서버 부하 0).
+const parseAnchorMs = (v) => {
+  if (v == null) return null;
+  // Jackson 배열 [yr,mo,d,h,min,s,ns] 형식 방어 (write-dates-as-timestamps=true 환경)
+  if (Array.isArray(v)) {
+    const [yr, mo, d, h, min, s] = v;
+    const ms = new Date(yr, mo - 1, d, h, min, s).getTime();
+    return isNaN(ms) ? null : ms;
+  }
+  // ISO 문자열: 나노초(9자리)가 포함돼 있으면 밀리초(3자리)로 잘라 파싱
+  const ms = new Date(String(v).replace(/(\.\d{3})\d*/, "$1")).getTime();
+  return isNaN(ms) ? null : ms;
+};
 const liveClock = (m, now) => {
   if (m.status !== "IN_PLAY") return null;
   const lt = String(m.liveTime || "");
   // 하프타임 등 숫자 없는 상태 라벨은 시계 멈추고 그대로 표시
   if (lt && !/\d/.test(lt)) return lt === "HT" ? "HT(하프타임)" : lt;
-  if (m.liveStartedAt) {
-    const sec = Math.max(0, Math.floor((now - new Date(m.liveStartedAt).getTime()) / 1000));
+  const anchorMs = parseAnchorMs(m.liveStartedAt);
+  if (anchorMs != null) {
+    const sec = Math.max(0, Math.floor((now - anchorMs) / 1000));
     const mm = Math.floor(sec / 60);
     const ss = sec % 60;
     let label = `${mm}:${String(ss).padStart(2, "0")}`;
@@ -92,9 +130,16 @@ function NoticeBanner() {
 
 export default function FotmobTester() {
   const [tab, setTab] = useState("schedule");
+  const { me, checked } = useMe();   // 홈 접속 시 /me 1회 조회 (전 패널 공유)
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>⚽ FotMob 콘솔 <span style={S.sub}>모든 결과는 콘솔(F12)에도 출력</span></h1>
+      <h1 style={S.h1}>⚽ FotMob 콘솔 <span style={S.sub}>모든 결과는 콘솔(F12)에도 출력</span>
+        <span style={{ float: "right", fontSize: 13, fontWeight: 400 }}>
+          {checked && (me
+            ? <span style={{ color: "#86efac" }}>👤 {me.name}{me.role === "ADMIN_USER" ? " · 🛡 관리자" : ""}</span>
+            : <span style={S.desc}>비로그인</span>)}
+        </span>
+      </h1>
       <div style={S.tabs}>
         {[["schedule", "📅 일정"], ["standings", "🏆 순위"], ["predict", "🎯 예측"], ["ai", "🤖 AI"], ["rank", "🏅 랭킹"], ["admin", "🛡 관리자"], ["tools", "🛠 도구"]].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} style={{ ...S.tab, ...(tab === k ? S.tabOn : {}) }}>{label}</button>
@@ -221,6 +266,7 @@ function MatchDetail({ detail }) {
   return (
     <div style={S.panel}>
       <h3 style={S.h3}>{match.homeTeam?.name} vs {match.awayTeam?.name}</h3>
+      {match.venue && <div style={{ ...S.desc, marginBottom: 10 }}>🏟 {match.venue}</div>}
       {events.length > 0 && (
         <div style={S.timeline}>
           {events.filter((e) => e.type !== "Half").map((e, i) => (
@@ -236,8 +282,8 @@ function MatchDetail({ detail }) {
         <>
           {hasCoords && (
             <div style={S.lineupWrap}>
-              <Pitch title={match.homeTeam?.name} formation={homeFormation} players={home} />
-              <Pitch title={match.awayTeam?.name} formation={awayFormation} players={away} />
+              <Pitch title={match.homeTeam?.name} formation={homeFormation} players={home} isHome={true} />
+              <Pitch title={match.awayTeam?.name} formation={awayFormation} players={away} isHome={false} />
             </div>
           )}
           <div style={S.lineupWrap}>
@@ -251,14 +297,17 @@ function MatchDetail({ detail }) {
 }
 
 // 포메이션 배치도: 선발을 피치 좌표(posX=깊이,posY=좌우)에 배치. GK 아래, 공격 위.
-function Pitch({ title, formation, players }) {
+// FotMob 좌표계는 홈팀 관점 절대좌표 → 어웨이팀은 posY를 미러(1-y)해야 좌우가 맞음.
+function Pitch({ title, formation, players, isHome }) {
   const starters = players.filter((p) => p.starter && p.posX != null && p.posY != null);
   return (
     <div style={S.col}>
       <h4 style={S.colTitle}>{title} {formation && <span style={S.tag}>{formation}</span>}</h4>
       <div style={S.pitch}>
-        {starters.map((p, i) => (
-          <div key={i} style={{ ...S.pitchPlayer, bottom: `${(p.posX ?? 0) * 86 + 5}%`, left: `${(p.posY ?? 0.5) * 80 + 10}%` }}>
+        {starters.map((p, i) => {
+          const posY = isHome ? (p.posY ?? 0.5) : 1 - (p.posY ?? 0.5);
+          return (
+          <div key={i} style={{ ...S.pitchPlayer, bottom: `${(p.posX ?? 0) * 86 + 5}%`, left: `${posY * 80 + 10}%` }}>
             <div style={{ ...S.pitchDot, border: `2px solid ${ratingColor(p.rating)}` }}>
               <span>{p.shirt ?? ""}</span>
               {p.playerId && (
@@ -268,7 +317,8 @@ function Pitch({ title, formation, players }) {
             </div>
             <div style={S.pitchName}>{shortName(p.name)}{p.rating != null ? ` ${p.rating.toFixed(1)}` : ""}</div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -371,7 +421,7 @@ function RatioRow({ label, pct, count }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0", fontSize: 13 }}>
       <span style={{ width: 100, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      <div style={{ flex: 1, background: "#f1f5f9", borderRadius: 6, height: 18 }}>
+      <div style={{ flex: 1, background: "#334155", borderRadius: 6, height: 18 }}>
         <div style={{ width: `${pct}%`, background: "#2563eb", height: "100%", borderRadius: 6, minWidth: pct > 0 ? 2 : 0 }} />
       </div>
       <span style={{ width: 78 }}>{pct}% ({count})</span>
@@ -542,10 +592,12 @@ function PredictionPanel() {
 // ── 랭킹 탭: 내 전적 + 리더보드 ──
 function RankPanel() {
   const cred = { credentials: "include" };
+  const { me: cachedMe } = useMe();         // 홈 접속 시 조회된 /me 공유
   const [me, setMe] = useState(null);
   const [board, setBoard] = useState([]);
   const [boardPage, setBoardPage] = useState({ number: 0, totalPages: 0, totalElements: 0 });
   const [err, setErr] = useState("");
+  const shownMe = me || cachedMe;           // 새로고침 전엔 캐시 값 표시
 
   useEffect(() => { loadBoard(0); }, []);
 
@@ -568,8 +620,8 @@ function RankPanel() {
       <div style={S.panel}>
         <h3 style={S.h3}>내 정보 <span style={S.tag}>로그인 필요</span></h3>
         <div style={S.row}>
-          <button style={S.btn} onClick={loadMe}>내 전적 보기</button>
-          {me && <span style={S.desc}><b>{me.name}</b> · 참여 {me.matchesPlayed} · 적중 {me.correctCount} · 적중률 <b>{me.accuracy}%</b></span>}
+          <button style={S.btn} onClick={loadMe}>내 전적 새로고침</button>
+          {shownMe && <span style={S.desc}><b style={{ color: "#e2e8f0" }}>{shownMe.name}</b> · 참여 {shownMe.matchesPlayed} · 적중 {shownMe.correctCount} · 적중률 <b style={{ color: "#e2e8f0" }}>{shownMe.accuracy}%</b></span>}
         </div>
       </div>
       <div style={S.panel}>
@@ -671,7 +723,7 @@ function WinBar({ home, draw, away, homeName, awayName }) {
         <div style={seg(draw, "#94a3b8")}>{draw >= 10 ? `${draw}%` : ""}</div>
         <div style={seg(away, "#dc2626")}>{away >= 10 ? `${away}%` : ""}</div>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748b", marginTop: 3 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8", marginTop: 3 }}>
         <span>🔵 {homeName} {home}%</span>
         <span>⚪ 무 {draw}%</span>
         <span>🔴 {awayName} {away}%</span>
@@ -690,15 +742,7 @@ function AiPanel() {
   const [busy, setBusy] = useState(null); // 처리 중 matchId
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false); // 예측 생성 UI는 관리자에게만
-
-  // /api/user/me 의 admin 플래그로 판단 (비로그인이면 조용히 false)
-  useEffect(() => {
-    fetch(API + "/api/user/me", { credentials: "include" })
-      .then((r) => r.json())
-      .then((j) => setIsAdmin(!!(j && j.data && j.data.admin)))
-      .catch(() => setIsAdmin(false));
-  }, []);
+  const { isAdmin } = useMe(); // 예측 생성 UI는 관리자에게만 (공통 /me 캐시 사용)
 
   function login() { window.location.href = API + "/oauth2/authorization/google"; }
 
@@ -750,7 +794,7 @@ function AiPanel() {
       <div style={S.panel}>
         <h3 style={S.h3}>
           AI 승률 예측 / 골 요약 <span style={S.tag}>예측=관리자 / 요약=공개</span>
-          <span style={{ ...S.tag, background: isAdmin ? "#dcfce7" : "#f1f5f9", color: isAdmin ? "#166534" : "#64748b" }}>
+          <span style={{ ...S.tag, background: isAdmin ? "#14532d" : "#334155", color: isAdmin ? "#86efac" : "#94a3b8" }}>
             {isAdmin ? "🟢 관리자 모드" : "👁 조회 모드"}
           </span>
         </h3>
@@ -832,8 +876,7 @@ function AiPanel() {
 // ── 관리자 탭: 공지 작성/삭제 + 유저 권한/계정상태 관리 ──
 function AdminPanel() {
   const cred = { credentials: "include" };
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [meChecked, setMeChecked] = useState(false);
+  const { isAdmin, checked: meChecked } = useMe(); // 공통 /me 캐시 사용
   // 공지
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -844,14 +887,13 @@ function AdminPanel() {
   const [uPage, setUPage] = useState({ number: 0, totalPages: 0, totalElements: 0 });
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  // 경기 즉시 동기화
+  const [syncMatchId, setSyncMatchId] = useState("");
+  const [syncDate, setSyncDate] = useState("");
+  const [syncMatches, setSyncMatches] = useState([]);
+  const [syncBusy, setSyncBusy] = useState(false);
 
-  useEffect(() => {
-    fetch(API + "/api/user/me", { credentials: "include" })
-      .then((r) => r.json())
-      .then((j) => { setIsAdmin(!!(j && j.data && j.data.admin)); setMeChecked(true); })
-      .catch(() => setMeChecked(true));
-    loadNotices(0);
-  }, []);
+  useEffect(() => { loadNotices(0); }, []);
 
   function login() { window.location.href = API + "/oauth2/authorization/google"; }
 
@@ -899,12 +941,30 @@ function AdminPanel() {
     catch (e) { setErr("계정상태 변경 실패: " + e.message); }
   }
 
+  async function loadSyncMatches(date) {
+    setSyncMatches([]);
+    if (!date) return;
+    try {
+      const pg = asPage(await call(`/api/match/MatchDay?date=${date}&page=0&size=20`));
+      setSyncMatches(pg.content);
+    } catch { setSyncMatches([]); }
+  }
+  async function syncNow() {
+    if (!syncMatchId) { setErr("matchId를 입력하거나 경기를 선택하세요."); return; }
+    setErr(""); setMsg(""); setSyncBusy(true);
+    try {
+      const view = await call(`/api/match/${syncMatchId}/fotmob/sync`, { method: "POST", credentials: "include" });
+      setMsg(`✅ matchId=${syncMatchId} 동기화 완료 — ${view.status} / 라인업 ${view.lineup?.length ?? 0}명 / 이벤트 ${view.events?.length ?? 0}건`);
+    } catch (e) { setErr("동기화 실패: " + e.message); }
+    finally { setSyncBusy(false); }
+  }
+
   return (
     <div>
       <div style={S.panel}>
         <h3 style={S.h3}>
           관리자 페이지 <span style={S.tag}>공지 / 유저 관리</span>
-          <span style={{ ...S.tag, background: isAdmin ? "#dcfce7" : "#f1f5f9", color: isAdmin ? "#166534" : "#64748b" }}>
+          <span style={{ ...S.tag, background: isAdmin ? "#14532d" : "#334155", color: isAdmin ? "#86efac" : "#94a3b8" }}>
             {isAdmin ? "🟢 관리자" : "👁 비관리자"}
           </span>
         </h3>
@@ -917,6 +977,38 @@ function AdminPanel() {
         {err && <div style={S.error}>⚠️ {err}</div>}
         {msg && <div style={S.info}>{msg}</div>}
       </div>
+
+      {isAdmin && (
+        <div style={S.panel}>
+          <h3 style={S.h3}>🔄 경기 즉시 동기화 <span style={S.tag}>이벤트·라인업·스코어 재수집</span></h3>
+          <div style={S.row}>
+            <input type="date" style={S.input} value={syncDate}
+              onChange={(e) => { setSyncDate(e.target.value); loadSyncMatches(e.target.value); }} />
+            <input style={{ ...S.input, width: 110 }} value={syncMatchId}
+              onChange={(e) => setSyncMatchId(e.target.value)} placeholder="matchId" />
+            <button style={S.btn} disabled={syncBusy} onClick={syncNow}>
+              {syncBusy ? "동기화 중..." : "지금 동기화"}
+            </button>
+          </div>
+          {syncMatches.length > 0 && (
+            <div style={{ ...S.matchList, marginTop: 8 }}>
+              {syncMatches.map((m) => (
+                <div key={m.id}
+                  style={{ ...S.matchRow, outline: String(m.id) === String(syncMatchId) ? "2px solid #2563eb" : "none" }}
+                  onClick={() => setSyncMatchId(String(m.id))}>
+                  <span style={S.comp}>{m.competition?.name}{m.groupName ? ` · ${m.groupName}` : ""}</span>
+                  <div style={S.teams}>
+                    <Team t={m.homeTeam} align="right" />
+                    <b style={S.vs}>{m.homeScore ?? "-"} : {m.awayScore ?? "-"}</b>
+                    <Team t={m.awayTeam} align="left" />
+                  </div>
+                  <span style={S.time}>#{m.id} · {m.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {isAdmin && (
         <div style={S.panel}>
@@ -968,7 +1060,7 @@ function AdminPanel() {
                       </select>
                     </td>
                     <td style={S.td}>
-                      <span style={{ color: u.active ? "#166534" : "#dc2626", fontWeight: 700 }}>{u.active ? "활성" : "정지"}</span>
+                      <span style={{ color: u.active ? "#4ade80" : "#f87171", fontWeight: 700 }}>{u.active ? "활성" : "정지"}</span>
                     </td>
                     <td style={S.td}>
                       {u.active
@@ -987,61 +1079,62 @@ function AdminPanel() {
   );
 }
 
+// 다크 테마 팔레트: 배경 #0f172a(페이지)/#1e293b(패널)/#0f172a(카드), 텍스트 #e2e8f0, 보조 #94a3b8
 const S = {
-  page: { maxWidth: 940, margin: "0 auto", padding: 24, fontFamily: "system-ui, sans-serif", color: "#1a1a2e", textAlign: "left" },
-  h1: { fontSize: 24, marginBottom: 12 }, sub: { fontSize: 12, color: "#94a3b8", fontWeight: 400 },
+  page: { maxWidth: 940, margin: "0 auto", padding: 24, fontFamily: "system-ui, sans-serif", color: "#e2e8f0", textAlign: "left" },
+  h1: { fontSize: 24, marginBottom: 12, color: "#f1f5f9" }, sub: { fontSize: 12, color: "#94a3b8", fontWeight: 400 },
   tabs: { display: "flex", gap: 6, marginBottom: 16 },
-  tab: { padding: "8px 18px", border: "1px solid #cbd5e1", background: "#fff", borderRadius: 8, cursor: "pointer", fontSize: 14 },
+  tab: { padding: "8px 18px", border: "1px solid #334155", background: "#1e293b", color: "#cbd5e1", borderRadius: 8, cursor: "pointer", fontSize: 14 },
   tabOn: { background: "#2563eb", color: "#fff", borderColor: "#2563eb", fontWeight: 600 },
-  panel: { background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 18, marginBottom: 16 },
-  h3: { fontSize: 16, margin: "0 0 10px" }, h4: { fontSize: 14, margin: "0 0 6px", color: "#334155" },
-  tag: { fontSize: 11, background: "#eef2ff", color: "#4338ca", padding: "2px 8px", borderRadius: 10, marginLeft: 6 },
+  panel: { background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 18, marginBottom: 16 },
+  h3: { fontSize: 16, margin: "0 0 10px", color: "#f1f5f9" }, h4: { fontSize: 14, margin: "0 0 6px", color: "#cbd5e1" },
+  tag: { fontSize: 11, background: "#312e81", color: "#c7d2fe", padding: "2px 8px", borderRadius: 10, marginLeft: 6 },
   row: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" },
   desc: { color: "#94a3b8", fontSize: 12 },
-  input: { padding: "8px 10px", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: 14 },
+  input: { padding: "8px 10px", border: "1px solid #475569", borderRadius: 8, fontSize: 14, background: "#0f172a", color: "#e2e8f0", colorScheme: "dark" },
   btn: { padding: "8px 16px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 600 },
-  btnGhost: { padding: "7px 13px", background: "#f1f5f9", color: "#334155", border: "1px solid #cbd5e1", borderRadius: 8, fontSize: 13, cursor: "pointer" },
-  error: { background: "#fef2f2", color: "#b91c1c", padding: 10, borderRadius: 8, marginTop: 10 },
-  info: { background: "#eff6ff", color: "#1e40af", padding: 10, borderRadius: 8, marginTop: 4 },
-  noticeBanner: { background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px", marginBottom: 12, display: "flex", flexDirection: "column", gap: 4 },
-  noticeItem: { fontSize: 13, color: "#92400e" },
-  noticeMeta: { color: "#a16207", fontSize: 11 },
-  noticeRow: { display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid #f1f5f9" },
+  btnGhost: { padding: "7px 13px", background: "#334155", color: "#e2e8f0", border: "1px solid #475569", borderRadius: 8, fontSize: 13, cursor: "pointer" },
+  error: { background: "#450a0a", color: "#fca5a5", padding: 10, borderRadius: 8, marginTop: 10 },
+  info: { background: "#172554", color: "#93c5fd", padding: 10, borderRadius: 8, marginTop: 4 },
+  noticeBanner: { background: "#451a03", border: "1px solid #92400e", borderRadius: 10, padding: "10px 14px", marginBottom: 12, display: "flex", flexDirection: "column", gap: 4 },
+  noticeItem: { fontSize: 13, color: "#fcd34d" },
+  noticeMeta: { color: "#d97706", fontSize: 11 },
+  noticeRow: { display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: "1px solid #334155" },
   matchList: { marginTop: 12, display: "flex", flexDirection: "column", gap: 6 },
-  matchRow: { display: "grid", gridTemplateColumns: "180px 1fr 150px", alignItems: "center", gap: 10, padding: "8px 12px", background: "#f8fafc", borderRadius: 8, cursor: "pointer", fontSize: 13 },
-  comp: { color: "#64748b", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  matchRow: { display: "grid", gridTemplateColumns: "180px 1fr 150px", alignItems: "center", gap: 10, padding: "8px 12px", background: "#0f172a", borderRadius: 8, cursor: "pointer", fontSize: 13 },
+  comp: { color: "#94a3b8", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   teams: { display: "flex", alignItems: "center", gap: 10, justifyContent: "center" },
   team: { display: "flex", alignItems: "center", gap: 6, flex: 1 },
   vs: { fontSize: 14, minWidth: 44, textAlign: "center" },
-  time: { color: "#64748b", fontSize: 12, textAlign: "right" },
+  time: { color: "#94a3b8", fontSize: 12, textAlign: "right" },
   timeline: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 },
-  event: { fontSize: 14, padding: "4px 8px", background: "#f8fafc", borderRadius: 6, position: "relative" },
-  min: { display: "inline-block", minWidth: 32, color: "#64748b", fontWeight: 600 },
-  detail: { color: "#64748b", fontSize: 13 }, side: { position: "absolute", right: 8, top: 4, fontSize: 11, color: "#94a3b8" },
+  event: { fontSize: 14, padding: "4px 8px", background: "#0f172a", borderRadius: 6, position: "relative" },
+  min: { display: "inline-block", minWidth: 32, color: "#94a3b8", fontWeight: 600 },
+  detail: { color: "#94a3b8", fontSize: 13 }, side: { position: "absolute", right: 8, top: 4, fontSize: 11, color: "#64748b" },
   lineupWrap: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 },
-  col: { background: "#f8fafc", borderRadius: 10, padding: 12 },
-  colTitle: { fontSize: 14, margin: "0 0 8px", textAlign: "center" },
+  col: { background: "#0f172a", borderRadius: 10, padding: 12 },
+  colTitle: { fontSize: 14, margin: "0 0 8px", textAlign: "center", color: "#e2e8f0" },
   subhead: { fontSize: 12, color: "#94a3b8", margin: "8px 0 4px", fontWeight: 600 },
   player: { display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 13 },
-  shirt: { minWidth: 22, textAlign: "center", color: "#64748b" },
+  shirt: { minWidth: 22, textAlign: "center", color: "#94a3b8" },
   pname: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  subInfo: { fontSize: 11, color: "#dc2626" },
+  subInfo: { fontSize: 11, color: "#f87171" },
   rating: { color: "#fff", fontSize: 12, fontWeight: 700, padding: "1px 6px", borderRadius: 6, minWidth: 30, textAlign: "center" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: { padding: "6px 4px", borderBottom: "2px solid #e2e8f0", textAlign: "center", color: "#64748b", fontSize: 12 },
-  thL: { padding: "6px 4px", borderBottom: "2px solid #e2e8f0", textAlign: "left", color: "#64748b", fontSize: 12 },
-  td: { padding: "5px 4px", borderBottom: "1px solid #f1f5f9", textAlign: "center" },
-  tdL: { padding: "5px 4px", borderBottom: "1px solid #f1f5f9", textAlign: "left" },
-  aiCard: { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12 },
-  summaryBox: { marginTop: 8, padding: "10px 12px", background: "#eff6ff", borderRadius: 8, fontSize: 13, lineHeight: 1.6, color: "#1e3a8a" },
+  th: { padding: "6px 4px", borderBottom: "2px solid #475569", textAlign: "center", color: "#94a3b8", fontSize: 12 },
+  thL: { padding: "6px 4px", borderBottom: "2px solid #475569", textAlign: "left", color: "#94a3b8", fontSize: 12 },
+  td: { padding: "5px 4px", borderBottom: "1px solid #334155", textAlign: "center" },
+  tdL: { padding: "5px 4px", borderBottom: "1px solid #334155", textAlign: "left" },
+  aiCard: { background: "#0f172a", border: "1px solid #334155", borderRadius: 10, padding: 12 },
+  summaryBox: { marginTop: 8, padding: "10px 12px", background: "#172554", borderRadius: 8, fontSize: 13, lineHeight: 1.6, color: "#bfdbfe" },
   pitch: { position: "relative", height: 300, borderRadius: 8, margin: "4px 0",
-    background: "repeating-linear-gradient(0deg,#15803d 0 30px,#16a34a 30px 60px)", border: "2px solid #0f5132", overflow: "hidden" },
+    background: "repeating-linear-gradient(0deg,#14532d 0 30px,#15803d 30px 60px)", border: "2px solid #052e16", overflow: "hidden" },
   pitchPlayer: { position: "absolute", transform: "translate(-50%, 50%)", textAlign: "center", width: 56 },
   pitchDot: { position: "relative", width: 30, height: 30, borderRadius: "50%", color: "#111", fontSize: 11,
     fontWeight: 700, lineHeight: "30px", margin: "0 auto", background: "#e2e8f0", overflow: "hidden",
     boxShadow: "0 1px 3px rgba(0,0,0,.45)" },
   pitchImg: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" },
-  avatar: { width: 22, height: 22, borderRadius: "50%", objectFit: "cover", background: "#e2e8f0",
+  avatar: { width: 22, height: 22, borderRadius: "50%", objectFit: "cover", background: "#334155",
     display: "inline-block", flexShrink: 0 },
   pitchName: { fontSize: 9, color: "#fff", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis",
     whiteSpace: "nowrap", textShadow: "0 1px 2px rgba(0,0,0,.7)" },

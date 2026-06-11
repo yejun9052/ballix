@@ -169,7 +169,7 @@ public class AiPredictionService {
             }
             int dd = Math.round(d * 100f / sum);
             int aa = Math.round(a * 100f / sum);
-            int hh = 100 - dd - aa;
+            int hh = Math.max(0, 100 - dd - aa);  // 반올림 오버플로우 음수 방지
             return new int[]{hh, dd, aa};
         } catch (BadRequestException e) {
             throw e;

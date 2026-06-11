@@ -12,6 +12,8 @@ import com.example.backend.match.MatchRepository;
 import com.example.backend.prediction.PredictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +36,13 @@ public class FotmobSyncService {
     private final FotmobStandingService standingService;
     private final PredictionService predictionService;
 
-    @Transactional
+    /** 자기 자신의 프록시. HTTP 크롤은 트랜잭션 밖에서, DB 저장만 트랜잭션 안에서(M4·M2 방지).
+     *  FotmobScheduleService의 self 패턴과 동일. */
+    @Lazy
+    @Autowired
+    private FotmobSyncService self;
+
+    /** HTTP 크롤 후 트랜잭션 경유 저장. 트랜잭션 없이 호출해야 HTTP-in-tx 커넥션 점유가 없다. */
     public void syncMatch(Match match) {
         Long fotmobId = match.getFotmobMatchId();
         if (fotmobId == null) {
@@ -46,6 +54,14 @@ public class FotmobSyncService {
             log.warn("[fotmob-sync] 빈 응답 fotmobId={}", fotmobId);
             return;
         }
+        self.applySyncResult(match.getId(), resp);
+    }
+
+    /** 크롤 결과를 DB에 반영(단독 트랜잭션). 최신 엔티티를 재조회해 동시 변경 덮어쓰기 방지. */
+    @Transactional
+    public void applySyncResult(Long matchId, FotmobMatchResponse resp) {
+        Match match = matchRepository.findById(matchId).orElse(null);
+        if (match == null) return;
 
         // ── 스코어/status 갱신 ──────────────────────────────
         match.updateScore(
@@ -55,11 +71,12 @@ public class FotmobSyncService {
                 resolveWinner(resp)
         );
         match.updateLiveIfAbsent(resp.liveTime(), resp.liveSeconds());  // 앵커 없을 때만 1회(재앵커는 11분 시계작업)
+        match.updateVenue(resp.venue());                                // 구장 이름(값 있을 때만)
 
         // ── 라인업 저장 (가용할 때만, 평점은 매 폴링 갱신) ────
         if (resp.lineupAvailable() && resp.lineups() != null && !resp.lineups().isEmpty()) {
-            lineupPlayerRepository.deleteByMatchId(match.getId());
-            lineupPlayerRepository.saveAll(toLineupEntities(match.getId(), resp.lineups()));
+            lineupPlayerRepository.deleteByMatchId(matchId);
+            lineupPlayerRepository.saveAll(toLineupEntities(matchId, resp.lineups()));
             match.updateFormation(resp.homeFormation(), resp.awayFormation());
             // 선발 라인업이 한 번이라도 저장되면 synced. 평점은 라이브 폴링이 계속 갱신.
             if (!match.isLineupSynced()) {
@@ -69,15 +86,15 @@ public class FotmobSyncService {
 
         // ── 이벤트 저장 (골/카드/교체) ───────────────────────
         if (resp.events() != null) {
-            matchEventRepository.deleteByMatchId(match.getId());
-            matchEventRepository.saveAll(toEventEntities(match.getId(), resp.events()));
+            matchEventRepository.deleteByMatchId(matchId);
+            matchEventRepository.saveAll(toEventEntities(matchId, resp.events()));
         }
 
         // ── 종료 처리: 확정 + 리그 순위 갱신 ─────────────────
         if (resp.finished()) {
             match.markFinalized();
             log.info("[fotmob-sync] 최종 확정 fotmobId={} ({} {}-{} {})",
-                    fotmobId, resp.homeTeamName(), resp.homeScore(), resp.awayScore(), resp.awayTeamName());
+                    match.getFotmobMatchId(), resp.homeTeamName(), resp.homeScore(), resp.awayScore(), resp.awayTeamName());
             if (match.getCompetition() != null) {
                 try {
                     standingService.syncStandings(match.getCompetition().getId());
@@ -90,7 +107,7 @@ public class FotmobSyncService {
             try {
                 predictionService.gradeMatch(match);
             } catch (Exception e) {
-                log.warn("[fotmob-sync] 예측 채점 실패 matchId={} : {}", match.getId(), e.getMessage());
+                log.warn("[fotmob-sync] 예측 채점 실패 matchId={} : {}", matchId, e.getMessage());
             }
         }
 
@@ -99,9 +116,8 @@ public class FotmobSyncService {
 
     /**
      * 라이브 시계만 가볍게 갱신 — 스코어/상태/진행시간(앵커)만 저장하고 라인업·이벤트는 건드리지 않는다.
-     * 1분 주기로 호출해 DB의 진행시간 앵커를 최신으로 유지(재시작 시 옛 값 로딩 문제 완화).
+     * HTTP 크롤은 트랜잭션 밖에서, DB 저장만 트랜잭션 안에서.
      */
-    @Transactional
     public void refreshLiveClock(Match match) {
         if (match.getFotmobMatchId() == null) {
             return;
@@ -110,6 +126,14 @@ public class FotmobSyncService {
         if (resp == null) {
             return;
         }
+        self.applyLiveClock(match.getId(), resp);
+    }
+
+    /** 라이브 시계만 가볍게 반영(단독 트랜잭션). 최신 엔티티 재조회로 덮어쓰기 방지. */
+    @Transactional
+    public void applyLiveClock(Long matchId, FotmobMatchResponse resp) {
+        Match match = matchRepository.findById(matchId).orElse(null);
+        if (match == null) return;
         match.updateScore(resp.statusType(), resp.homeScore(), resp.awayScore(), resolveWinner(resp));
         match.updateLive(resp.liveTime(), resp.liveSeconds());
         matchRepository.save(match);

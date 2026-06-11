@@ -63,6 +63,10 @@ public class Match extends BaseTimeEntity {
     @Column(name = "live_started_at", nullable = true)
     private LocalDateTime liveStartedAt;
 
+    /** 구장 이름 (FotMob infoBox.Stadium.name). 경기 상세 동기화 시 채워진다. */
+    @Column(name = "venue", nullable = true)
+    private String venue;
+
     /** 라인업 포메이션 예: "4-3-3". 라인업 공개 후 채워진다. */
     @Column(name = "home_formation", nullable = true)
     private String homeFormation;
@@ -167,6 +171,11 @@ public class Match extends BaseTimeEntity {
     public void updateFormation(String homeFormation, String awayFormation) {
         if (homeFormation != null) this.homeFormation = homeFormation;
         if (awayFormation != null) this.awayFormation = awayFormation;
+    }
+
+    /** 구장 이름 갱신 — 값이 있을 때만(없는 경기에서 기존 값 덮어쓰기 방지). */
+    public void updateVenue(String venue) {
+        if (venue != null && !venue.isBlank()) this.venue = venue;
     }
 
     public void markLineupSynced() {

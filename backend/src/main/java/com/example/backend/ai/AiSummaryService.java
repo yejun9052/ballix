@@ -15,8 +15,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 종료된 경기의 골 내용 AI 요약.
@@ -33,6 +36,10 @@ public class AiSummaryService {
     private final FotmobClient fotmobClient;
     private final GeminiClient geminiClient;
 
+    // Gemini 생성 실패 시 N분 동안 재시도 억제 — ltc 크롤 + 4회 재시도 반복 방지
+    private static final long SUMMARY_FAIL_COOLDOWN_MINUTES = 5;
+    private final Map<Long, LocalDateTime> failedAt = new ConcurrentHashMap<>();
+
     /** 종료 경기의 골 요약 조회 — DB-first lazy(있으면 가져오고, 없으면 1회 생성·저장 후 반환).
      *  1순위: FotMob 라이브티커 골 해설(영문) → Gemini가 해설 말투로 번역·요약.
      *  폴백: 라이브티커가 없으면 저장된 MatchEvent(득점자/어시스트)로 요약.
@@ -48,6 +55,12 @@ public class AiSummaryService {
         }
         if (!match.isFotmobFinalized() && !"FINISHED".equals(match.getStatus())) {
             throw new BadRequestException("아직 종료되지 않은 경기는 요약할 수 없습니다.");
+        }
+
+        // 최근 생성 실패 경기면 쿨다운 동안 재시도 억제
+        LocalDateTime failed = failedAt.get(matchId);
+        if (failed != null && ChronoUnit.MINUTES.between(failed, LocalDateTime.now()) < SUMMARY_FAIL_COOLDOWN_MINUTES) {
+            return match;
         }
 
         String prompt = null;
@@ -70,12 +83,17 @@ public class AiSummaryService {
             prompt = buildPrompt(buildDigest(match, events));
         }
 
-        String summary = geminiClient.generate(prompt, summaryConfig());
-        match.applySummary(summary);
-        matchRepository.save(match);
-
-        log.info("[ai-summary] matchId={} 요약 생성 ({}자, {})",
-                matchId, summary.length(), prompt.contains("해설") ? "라이브티커" : "이벤트폴백");
+        try {
+            String summary = geminiClient.generate(prompt, summaryConfig());
+            failedAt.remove(matchId);
+            match.applySummary(summary);
+            matchRepository.save(match);
+            log.info("[ai-summary] matchId={} 요약 생성 ({}자, {})",
+                    matchId, summary.length(), prompt.contains("해설") ? "라이브티커" : "이벤트폴백");
+        } catch (Exception e) {
+            failedAt.put(matchId, LocalDateTime.now());
+            throw e;
+        }
         return match;
     }
 

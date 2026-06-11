@@ -197,10 +197,10 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 내 정보 + 전적.
 - 응답: `data` = `UserView`
 ```json
-{ "id": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58, "role": "ADMIN_USER", "admin": true }
+{ "id": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58, "role": "ADMIN_USER" }
 ```
 - `accuracy`: 적중률 0~100 정수 (`correctCount/matchesPlayed`), 참여 0이면 0
-- `role`: `COMMON_USER` | `ADMIN_USER` / `admin`: **AI 예측 생성 등 관리자 UI 노출 판단용**(role=ADMIN_USER 또는 화이트리스트 이메일이면 true)
+- `role`: `COMMON_USER` | `ADMIN_USER` — **관리자 UI 노출 판단은 `role === "ADMIN_USER"`로 검증**(과거 `admin` 불리언 필드는 제거됨)
 
 ### `GET /api/user/leaderboard`  *(공개)*
 적중수 내림차순 랭킹 (페이지).
@@ -228,7 +228,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - `force=true`면 재생성(기본 `false`: 이미 있으면 그대로 반환).
 - 근거: **FIFA 랭킹(보조) + 리그 순위 + 최근 폼**. 합 100으로 정규화한 **1% 단위** 확률.
 - 응답: `data` = [`Match`](#match) (`aiHomePct`/`aiDrawPct`/`aiAwayPct` 채워짐)
-- 관리자 판별: `GET /api/user/me`의 `admin:true`(role=`ADMIN_USER` 또는 화이트리스트 이메일). 비관리자는 `success:false, msg:"관리자만 사용할 수 있습니다."`
+- 관리자 판별: `GET /api/user/me`의 `role === "ADMIN_USER"`. 비관리자는 403(권한 없음) 응답.
 - 종료/취소 경기는 거절: `"종료/취소된 경기는 승률 예측 대상이 아닙니다."`
 
 ### `GET /api/match/{matchId}/ai/summary`  *(공개)*
@@ -350,6 +350,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
   "homeScore": 0,
   "awayScore": 0,
   "winner": null,
+  "venue": "Estadio Akron",
   "fotmobMatchId": 4667751,
   "lineupSynced": true,
   "fotmobFinalized": false,
@@ -373,6 +374,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - `status`: `SCHEDULED` | `IN_PLAY` | `FINISHED` | `CANCELLED` (문자열)
 - `winner`: `HOME_TEAM` | `AWAY_TEAM` | `DRAW` | `null` (경기 끝나면 채워짐) → **미시작 판단은 `winner==null` 또는 `status` 로**
 - `homeScore`/`awayScore`: **경기 전엔 `0`** 으로 옴 (null 아님). 진행/종료 시 실제 스코어로 갱신
+- `venue`: 구장 이름 예 `"Estadio Akron"`. **경기 상세 동기화(폴링/lazy-crawl) 후 채워짐** — 그 전엔 `null`. 일부 소규모 경기는 FotMob에 구장 정보가 없어 계속 `null`일 수 있음
 - `tla`, `emblem`, `shortName` 은 비어있거나 name과 같을 수 있음 — UI엔 `name` + `crest` 사용 권장
 
 **라이브 / 포메이션 (진행 중·라인업 공개 시):**
