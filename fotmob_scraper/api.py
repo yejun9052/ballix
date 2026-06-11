@@ -220,6 +220,17 @@ def _to_float(v) -> Optional[float]:
         return None
 
 
+def _parse_score_str(s) -> tuple[Optional[int], Optional[int]]:
+    """리그 fixtures의 scoreStr "2 - 0" → (2, 0). 미진행 경기(빈값)는 (None, None)."""
+    if not s or "-" not in str(s):
+        return None, None
+    try:
+        a, b = str(s).split("-")[:2]
+        return int(a.strip()), int(b.strip())
+    except (ValueError, TypeError):
+        return None, None
+
+
 # ── 엔드포인트 ────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
@@ -396,6 +407,66 @@ async def commentary(match_id: str):
     print(f"[crawl] 커멘터리 수집 완료 matchId={match_id} 골 {len(goals)}건 "
           f"({time.perf_counter() - t0:.1f}s)", flush=True)
     return {"matchId": _to_int(match_id), "goals": goals}
+
+
+def build_league_fixtures(raw: dict, league_id: int) -> dict:
+    """리그 상세 raw의 fixtures.allMatches(시즌 전체 경기, 결승까지)를 /schedule 과 같은 평탄 형식으로 정제.
+
+    날짜 ±N일 동기화로는 먼 미래 경기(결승 등)를 못 가져오므로, 토너먼트(월드컵)는 이걸로 전체를 한 번에 받는다.
+    백엔드 ScheduledMatch 와 동일한 키를 내려 같은 upsert 로직을 그대로 태운다.
+    """
+    league_name = (raw.get("details", {}) or {}).get("name") or ""
+    fixtures = (raw.get("fixtures", {}) or {}).get("allMatches", []) or []
+    out = []
+    for m in fixtures:
+        st = m.get("status", {}) or {}
+        home = m.get("home", {}) or {}
+        away = m.get("away", {}) or {}
+        hs, as_ = _parse_score_str(st.get("scoreStr"))
+        group = m.get("group")
+        # 백엔드 groupName 추출용으로 leagueName에 "Grp. X" 합성(조별리그만). 토너먼트 라운드는 그룹 없음.
+        name = f"{league_name} Grp. {group}".strip() if group else league_name
+        out.append({
+            "matchId": _to_int(m.get("id")),
+            "leagueId": league_id,
+            "parentLeagueId": league_id,   # 월드컵 전체를 한 competition(77)으로 묶는다
+            "leagueName": name,
+            "ccode": None,
+            "homeId": _to_int(home.get("id")),
+            "homeName": home.get("name"),
+            "homeCrest": _team_logo(home.get("id")),
+            "homeScore": hs,
+            "awayId": _to_int(away.get("id")),
+            "awayName": away.get("name"),
+            "awayCrest": _team_logo(away.get("id")),
+            "awayScore": as_,
+            "utcTime": st.get("utcTime"),
+            "started": st.get("started", False),
+            "finished": st.get("finished", False),
+            "cancelled": st.get("cancelled", False),
+        })
+    return {"date": f"league-{league_id}", "matches": out}
+
+
+@app.get("/league/{league_id}/fixtures")
+async def league_fixtures(league_id: int):
+    """리그/토너먼트 시즌 전체 경기 일정(결승까지). 월드컵 같은 토너먼트 전체 동기화용."""
+    print(f"[crawl] 리그 전체 일정 수집 시작 leagueId={league_id}", flush=True)
+    t0 = time.perf_counter()
+    page = await _new_fotmob_page()
+    try:
+        raw = await fetch_league_table_from_page(page, league_id)
+    except Exception as e:
+        print(f"[crawl] 리그 전체 일정 수집 실패 leagueId={league_id}: {e}", flush=True)
+        raise HTTPException(status_code=502, detail=f"리그 일정 수집 실패: {e}")
+    finally:
+        await page.close()
+    if not raw:
+        raise HTTPException(status_code=502, detail="리그 일정을 가져오지 못했습니다.")
+    result = build_league_fixtures(raw, league_id)
+    print(f"[crawl] 리그 전체 일정 수집 완료 leagueId={league_id} {len(result['matches'])}경기 "
+          f"({time.perf_counter() - t0:.1f}s)", flush=True)
+    return result
 
 
 @app.get("/league/{league_id}/table")

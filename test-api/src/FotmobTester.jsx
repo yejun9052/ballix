@@ -746,18 +746,31 @@ function AiPanel() {
 
   function login() { window.location.href = API + "/oauth2/authorization/google"; }
 
+  // 필터 바뀌면 자동 재로드 (예정↔종료 전환 시 즉시 반영). date 변경은 버튼으로.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(0); }, [filter]);
+
   async function load(p = 0) {
     setErr(""); setMsg("");
     try {
-      const path = date
-        ? `/api/match/MatchDay?date=${date}&page=${p}&size=${PAGE_SIZE}`
-        : `/api/match/allMatch?page=${p}&size=${PAGE_SIZE}`;
+      // allMatch는 matchTime 오름차순(과거가 위)이라 첫 페이지가 종료 경기로 차서 "예정"이 안 보인다.
+      // 예정(예측용)은 미래 경기만 주는 upcoming을, 종료/전체는 allMatch를 쓴다. 날짜 지정 시엔 그 날짜만.
+      let path;
+      if (date) {
+        path = `/api/match/MatchDay?date=${date}&page=${p}&size=${PAGE_SIZE}`;
+      } else if (filter === "SCHEDULED") {
+        path = `/api/match/upcoming?page=${p}&size=${PAGE_SIZE}`;
+      } else {
+        path = `/api/match/allMatch?page=${p}&size=${PAGE_SIZE}`;
+      }
       const pg = asPage(await call(path));
       setMatches(pg.content);
       setPageInfo({ number: pg.number, totalPages: pg.totalPages, totalElements: pg.totalElements });
       setMsg(date
         ? `${date} ${pg.totalElements}경기`
-        : `전체 ${pg.totalElements}경기 — 예측 선택된 경기가 최상단`);
+        : filter === "SCHEDULED"
+          ? `다가오는 ${pg.totalElements}경기 (예측 대상)`
+          : `전체 ${pg.totalElements}경기 — 예측 선택된 경기가 최상단`);
     } catch (e) {
       // MatchDay는 경기 없으면 에러를 던지므로 부드럽게 처리
       setMatches([]); setPageInfo({ number: 0, totalPages: 0, totalElements: 0 });

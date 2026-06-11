@@ -73,7 +73,8 @@ public class FotmobPollScheduler {
         // 부팅 첫 동기화는 전체 과거범위, 이후 주기 동기화는 최근 과거만 (과거는 거의 안 변함)
         int past = firstSync ? pastDays : refreshPastDays;
         try {
-            scheduleService.syncRange(past, futureDays);
+            scheduleService.syncRange(past, futureDays);   // 날짜 ±N일(친선 등)
+            scheduleService.syncFullLeagues();             // 시즌 전체 일정(월드컵 — 결승까지)
             firstSync = false;
         } catch (Exception e) {
             log.warn("[fotmob-poll] 일정 동기화 실패(Python 서버 확인): {}", e.getMessage());

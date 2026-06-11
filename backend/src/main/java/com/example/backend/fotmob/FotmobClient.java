@@ -55,6 +55,14 @@ public class FotmobClient {
         return restClient.get().uri(uri).retrieve().body(FotmobScheduleResponse.class);
     }
 
+    /** 리그/토너먼트 시즌 전체 경기 일정(결승까지) — 월드컵 등 전체 동기화용. */
+    public FotmobScheduleResponse getLeagueFixtures(Long leagueId) {
+        return restClient.get()
+                .uri("/league/{id}/fixtures", leagueId)
+                .retrieve()
+                .body(FotmobScheduleResponse.class);
+    }
+
     /** 경기 골 해설(라이브티커) — 끝난 경기 요약용. */
     public FotmobCommentaryResponse getCommentary(Long fotmobMatchId) {
         return restClient.get()

@@ -51,9 +51,15 @@ public class FotmobScheduleService {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
     // "World Cup Grp. A" → 그룹명 "Grp. A" 분리
     private static final Pattern GROUP_PAT = Pattern.compile("\\s*(Grp\\.?\\s*\\w+|Group\\s*\\w+)\\s*$", Pattern.CASE_INSENSITIVE);
+    /** 구장 보강은 향후 N일 이내 예정 경기만 — 먼 미래(결승 등)까지 미리 크롤하는 폭주 방지(가까워지면 채워짐). */
+    private static final int VENUE_ENRICH_AHEAD_DAYS = 14;
 
     @Value("${fotmob.schedule.leagues:World Cup,Friendlies}")
     private String leaguesFilter;
+
+    /** 시즌 전체 일정으로 받을 리그 leagueId(쉼표구분). 월드컵 등 토너먼트 — 결승까지 한 번에. */
+    @Value("${fotmob.schedule.full-season-leagues:}")
+    private String fullSeasonLeaguesCsv;
 
     /**
      * 과거~미래 N일치 일정을 동기화.
@@ -96,6 +102,7 @@ public class FotmobScheduleService {
      * 크롤(네트워크 I/O)은 트랜잭션 밖에서 돌리고, 저장만 self.applyVenue로 짧은 독립 트랜잭션에서 커밋한다.
      */
     private void enrichScheduledVenues(FotmobScheduleResponse resp) {
+        LocalDateTime venueCutoff = LocalDateTime.now().plusDays(VENUE_ENRICH_AHEAD_DAYS);
         for (ScheduledMatch sm : resp.matches()) {
             if (sm.matchId() == null) continue;
             if (sm.started() || sm.finished() || sm.cancelled()) continue;   // 예정 경기만(진행/종료는 폴링이 채움)
@@ -103,6 +110,7 @@ public class FotmobScheduleService {
             Match m = matchRepository.findByFotmobMatchId(sm.matchId()).orElse(null);
             if (m == null) continue;
             if (m.getVenue() != null && !m.getVenue().isBlank()) continue;    // 이미 구장 있으면 스킵
+            if (m.getMatchTime() != null && m.getMatchTime().isAfter(venueCutoff)) continue;  // 너무 먼 경기는 가까워지면
 
             try {
                 FotmobMatchResponse detail = fotmobClient.getMatch(sm.matchId());
@@ -119,6 +127,45 @@ public class FotmobScheduleService {
     @Transactional
     public void applyVenue(Long matchId, String venue) {
         matchRepository.findById(matchId).ifPresent(m -> m.updateVenue(venue));
+    }
+
+    /**
+     * 시즌 전체 일정 리그(월드컵 등)를 동기화 — 결승까지 모든 경기를 한 번에 받는다.
+     * 날짜 ±N일 방식(syncRange)으로는 못 닿는 먼 미래 경기를 커버한다.
+     */
+    public int syncFullLeagues() {
+        int total = 0;
+        for (Long leagueId : parseLeagueIds(fullSeasonLeaguesCsv)) {
+            try {
+                total += syncFullLeague(leagueId);
+            } catch (Exception e) {
+                log.warn("[fotmob-schedule] 리그 {} 전체 일정 동기화 실패: {}", leagueId, e.getMessage());
+            }
+        }
+        return total;
+    }
+
+    /** 단일 리그의 시즌 전체 일정 동기화. */
+    public int syncFullLeague(Long leagueId) {
+        FotmobScheduleResponse resp = fotmobClient.getLeagueFixtures(leagueId);
+        if (resp == null || resp.matches() == null || resp.matches().isEmpty()) {
+            return 0;
+        }
+        int count = self.persistSchedule("league-" + leagueId, resp);
+        enrichScheduledVenues(resp);   // 저장 커밋 후(트랜잭션 밖) 가까운 예정 경기 구장 보강
+        log.info("[fotmob-schedule] 리그 {} 전체 일정 {}경기 동기화", leagueId, count);
+        return count;
+    }
+
+    private java.util.List<Long> parseLeagueIds(String csv) {
+        java.util.List<Long> ids = new java.util.ArrayList<>();
+        if (csv == null || csv.isBlank()) return ids;
+        for (String t : csv.split(",")) {
+            String s = t.trim();
+            if (s.isEmpty()) continue;
+            try { ids.add(Long.parseLong(s)); } catch (NumberFormatException ignored) {}
+        }
+        return ids;
     }
 
     /** 크롤 결과를 DB에 업서트(날짜 단위 트랜잭션). */
