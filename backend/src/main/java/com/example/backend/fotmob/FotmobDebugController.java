@@ -69,6 +69,7 @@ public class FotmobDebugController {
         int past = Math.max(0, Math.min(pastDays, 30));
         int future = Math.max(0, Math.min(futureDays, 30));
         int n = scheduleService.syncRange(past, future);
+        n += scheduleService.syncFullLeagues();   // 월드컵 등 시즌 전체(결승 대진 확정 갱신 포함)
         return ResponseEntity.ok(CommonResponse.success("일정 " + n + "경기 동기화", n));
     }
 

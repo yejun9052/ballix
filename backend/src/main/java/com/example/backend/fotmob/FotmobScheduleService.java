@@ -205,6 +205,7 @@ public class FotmobScheduleService {
         Match existing = matchRepository.findByFotmobMatchId(sm.matchId()).orElse(null);
         if (existing != null) {
             boolean wasFinished = "FINISHED".equals(existing.getStatus());
+            existing.updateTeams(home, away);   // 토너먼트 대진 확정(미정→실제 팀) 반영
             existing.updateSchedule(kickoffKst, null, groupName, status);
             existing.updateScore(status, sm.homeScore(), sm.awayScore(), winner);
             // 일정 동기화가 FINISHED를 뒤늦게 확인한 경우에도 예측 채점(폴링 창 밖 경기 누락 방지)

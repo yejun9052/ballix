@@ -127,6 +127,12 @@ public class Match extends BaseTimeEntity {
         this.status = status;
     }
 
+    /** 대진 팀 갱신 — 토너먼트 대진 확정 시 미정(예: "Winner SF 1")→실제 팀 반영. 값 있을 때만. */
+    public void updateTeams(Team homeTeam, Team awayTeam) {
+        if (homeTeam != null) this.homeTeam = homeTeam;
+        if (awayTeam != null) this.awayTeam = awayTeam;
+    }
+
     /** 폴링 시 status/스코어 갱신. */
     public void updateScore(String status, Integer homeScore, Integer awayScore, String winner) {
         this.status = status;
