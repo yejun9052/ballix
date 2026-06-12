@@ -149,7 +149,7 @@ npm run build ; npm run lint
 
 > 프론트 연동용 전체 응답 스키마/예시는 루트 **`API_SPEC.md`** 참고(프론트엔드 담당자 전달용).
 
-**Python 스크래퍼(`fotmob_scraper/api.py`) 엔드포인트**: `/match/{id}`(라인업·이벤트·평점·**liveTime/liveSeconds**·포메이션·posX/posY·**venue**=구장이름 `infoBox.Stadium.name`), `/schedule`, `/league/{id}/table`, `/commentary/{id}`(라이브티커 골 해설 — 골 요약용), `/search`. **선수 사진은 백엔드에 저장 안 한다** — 프론트가 `fotmobPlayerId`로 `https://images.fotmob.com/image_resources/playerimages/{id}.png` URL을 직접 구성.
+**Python 스크래퍼(`fotmob_scraper/api.py`) 엔드포인트**: `/match/{id}`(라인업·이벤트·평점·**liveTime/liveSeconds**·포메이션·posX/posY·**venue**=구장이름 `infoBox.Stadium.name`), `/schedule`, `/league/{id}/table`, `/league/{id}/fixtures`(시즌 전체 경기 — 결승까지, `syncFullLeagues` 전용), `/commentary/{id}`(라이브티커 골 해설 — 골 요약용), `/search`. **선수 사진은 백엔드에 저장 안 한다** — 프론트가 `fotmobPlayerId`로 `https://images.fotmob.com/image_resources/playerimages/{id}.png` URL을 직접 구성.
 
 ## 함정 / 주의사항 (이 코드베이스 특유)
 
@@ -170,7 +170,8 @@ npm run build ; npm run lint
 - `spring.datasource.*` — MySQL (docker-compose 기준 root/1234, DB `backend`)
 - `spring.security.oauth2.client.registration.google.*` — Google OAuth
 - `fotmob.api.base-url` — Python FastAPI 주소(기본 `http://127.0.0.1:8800`)
-- `fotmob.schedule.{leagues,past-days,future-days,refresh-past-days}` — 수집 리그/범위(기본 `77,114` ±10일; 숫자=leagueId 정확매칭, 문자=이름 부분매칭). `refresh-past-days`(기본 2)는 **부팅 후 주기 재동기화의 과거 범위** — 과거는 거의 안 변해 줄여서 크롤 부하·차단위험을 낮춤(부팅 1회는 full `past-days`).
+- `fotmob.schedule.{leagues,past-days,future-days,refresh-past-days}` — 날짜 ±N일 방식 수집 리그/범위(기본 `77,114` ±10일; 숫자=leagueId 정확매칭, 문자=이름 부분매칭). `refresh-past-days`(기본 2)는 **부팅 후 주기 재동기화의 과거 범위** — 과거는 거의 안 변해 줄여서 크롤 부하·차단위험을 낮춤(부팅 1회는 full `past-days`).
+- `fotmob.schedule.full-season-leagues` — 시즌 전체 일정 수집 리그 leagueId(쉼표구분, 기본 비어있음). 설정하면 매 일정 동기화마다 `/league/{id}/fixtures`로 결승까지 모든 경기를 upsert(월드컵 등 토너먼트용 — 날짜 ±N일 방식만으론 먼 미래 경기를 못 가져옴).
 - `fotmob.schedule.enabled` / `fotmob.poll.enabled` — 일정 동기화·폴링 전체 on/off(기본 true; 테스트 시 false로 끔)
 - `fotmob.poll.{lineup-window-minutes,interval-minutes,clock-ms}` — 폴링 동작. `interval-minutes`(기본 3)=풀폴링, `clock-ms`(기본 660000=11분)=라이브 진행시간 갱신
 - `prediction.allowed-leagues` — 예측 허용 리그 fotmobLeagueId(쉼표구분, 기본 `77`=월드컵)
