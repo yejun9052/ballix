@@ -13,8 +13,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
@@ -37,22 +35,22 @@ public class FotmobQueryService {
     /** matchId → 마지막 lazy 크롤 시각 (쿨다운용, 폴링 스케줄러 lastPolled 패턴과 동일). */
     private final Map<Long, LocalDateTime> lastLazyCrawled = new ConcurrentHashMap<>();
 
-    @Transactional
     public Page<LineupPlayer> getLineup(Long matchId, Pageable pageable) {
         matchRepository.findById(matchId).ifPresent(this::lazySync);
         return lineupPlayerRepository.findByMatchId(matchId, pageable);
     }
 
-    @Transactional
     public Page<MatchEvent> getEvents(Long matchId, Pageable pageable) {
         matchRepository.findById(matchId).ifPresent(this::lazySync);
         return matchEventRepository.findByMatchIdOrderByMinuteAsc(matchId, pageable);
     }
 
-    @Transactional
     public MatchFotmobView getView(Long matchId) {
         Match match = findMatch(matchId);
-        lazySync(match);
+        if (!match.isLineupSynced()) {
+            lazySync(match);
+            match = findMatch(matchId);  // sync 후 formation·lineupSynced 등 fresh 상태 반영
+        }
         return new MatchFotmobView(
                 match.getId(),
                 match.getFotmobMatchId(),
@@ -69,7 +67,6 @@ public class FotmobQueryService {
     }
 
     /** 스케줄을 기다리지 않고 즉시 한 경기를 동기화 (관리/테스트용). */
-    @Transactional
     public MatchFotmobView syncNow(Long matchId) {
         Match match = findMatch(matchId);
 
