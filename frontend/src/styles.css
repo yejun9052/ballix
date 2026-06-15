@@ -2,6 +2,7 @@
   color-scheme: light;
   --bg: #f1f5f9;
   --surface: #ffffff;
+  --surface-2: #f8fafc;
   --ink: #111827;
   --muted: #7b8798;
   --line: #e2e8f0;
@@ -19,6 +20,32 @@
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
+}
+
+/* ── 다크 모드 ─────────────────────────────────────────────
+   라이트모드는 위 :root 값 그대로 유지. data-theme="dark"가 붙으면
+   표면/텍스트/경계 변수만 어두운 팔레트로 교체된다. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f141b;
+  --surface: #1a212b;
+  --surface-2: #222b37;
+  --ink: #e8edf3;
+  --muted: #9aa7b6;
+  --line: #2e3946;
+  --green-soft: #14361f;
+  --red-soft: #3a1620;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  /* aliases */
+  --border: #2e3946;
+  --surface2: #2a3340;
+  --text: #e8edf3;
+  --purple-soft: #2a2347;
+}
+
+/* 다크모드 미세 보정: 라이트 전용 하드코딩 잔여분을 변수 톤에 맞춘다. */
+:root[data-theme="dark"] .player-photo {
+  background: var(--surface-2);
 }
 
 * {
@@ -132,7 +159,7 @@ button {
 }
 
 .preview-buttons span:nth-child(2) {
-  background: #eef2f7;
+  background: var(--surface-2);
   color: #64748b;
 }
 
@@ -223,7 +250,7 @@ button {
   margin-top: 20px;
   border-radius: 18px;
   padding: 16px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .role-note strong {
@@ -480,6 +507,26 @@ button {
   white-space: nowrap;
 }
 
+/* 테마 토글 — 아이콘 정사각 버튼 (변수 기반이라 다크/라이트 모두 자연스러움) */
+.account-actions button.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.account-actions button.theme-toggle:hover {
+  background: var(--surface);
+  color: var(--violet);
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -554,7 +601,7 @@ button {
   min-height: 36px;
   border-radius: 999px;
   padding: 0 13px;
-  background: #f1f5f9;
+  background: var(--bg);
   color: var(--ink);
   font-size: 13px;
   font-weight: 900;
@@ -585,7 +632,7 @@ button {
   margin-bottom: 14px;
   border-radius: 18px;
   padding: 14px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .match-filters label {
@@ -607,7 +654,7 @@ button {
   border: 0;
   border-radius: 12px;
   padding: 0 12px;
-  background: #ffffff;
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
   font-weight: 900;
@@ -624,7 +671,7 @@ button {
   border: 0;
   border-radius: 22px;
   padding: 18px;
-  background: #f8fafc;
+  background: var(--surface-2);
   text-align: center;
 }
 
@@ -669,7 +716,7 @@ button {
 
 .item-meta span {
   border: 0;
-  background: #ffffff;
+  background: var(--surface);
   color: #153b8f;
 }
 
@@ -734,7 +781,7 @@ button {
   place-items: center;
   border: 0;
   border-radius: 16px;
-  background: #ffffff;
+  background: var(--surface);
   color: #153b8f;
   font-size: 13px;
   font-weight: 900;
@@ -814,7 +861,7 @@ button {
 }
 
 .vote-buttons button:nth-child(2) {
-  background: #eef2f7;
+  background: var(--surface-2);
   color: #64748b;
 }
 
@@ -837,7 +884,7 @@ button {
   gap: 4px;
   border-radius: 14px;
   padding: 10px;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .status-pill strong {
@@ -861,7 +908,7 @@ button {
   border: 0;
   border-radius: 18px;
   padding: 16px;
-  background: #f8fafc;
+  background: var(--surface-2);
   text-align: center;
 }
 
@@ -877,7 +924,7 @@ button {
 .ai-note {
   border-radius: 18px;
   padding: 16px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .ai-note strong {
@@ -977,7 +1024,7 @@ button {
   display: grid;
   place-items: center;
   border-radius: 18px;
-  background: #f8fafc;
+  background: var(--surface-2);
   color: #153b8f;
   font-weight: 900;
 }
@@ -999,7 +1046,7 @@ button {
   flex: 0 0 42px;
   border: 3px solid rgba(255, 255, 255, 0.72);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--surface);
   overflow: hidden;
 }
 
@@ -1015,7 +1062,7 @@ button {
   gap: 12px;
   border-radius: 18px;
   padding: 28px 18px;
-  background: #f8fafc;
+  background: var(--surface-2);
   color: var(--muted);
   text-align: center;
   font-weight: 900;
@@ -1058,7 +1105,7 @@ button {
 .lineup-card {
   overflow: hidden;
   border-radius: 24px;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .lineup-top {
@@ -1278,12 +1325,24 @@ button {
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
 }
 
+.pitch-info {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  pointer-events: none;
+}
+
 .pitch-name {
   display: flex;
   justify-content: center;
   gap: 5px;
-  width: 100%;
-  min-width: 0;
+  white-space: nowrap;
   font-size: clamp(12px, 1.1vw, 14px);
   line-height: 1.1;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
@@ -1295,10 +1354,6 @@ button {
 }
 
 .pitch-name strong {
-  max-width: 84px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-weight: 900;
 }
 
@@ -1323,7 +1378,7 @@ button {
   margin-top: 14px;
   border-radius: 18px;
   padding: 16px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .rating-chip,
@@ -1405,17 +1460,17 @@ button {
   gap: 8px;
   border-radius: 18px;
   padding: 14px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .bench-list strong {
   margin-bottom: 4px;
 }
 
-.bench-list span {
+.bench-list > span {
   border-radius: 12px;
   padding: 9px 10px;
-  background: #ffffff;
+  background: var(--surface);
   color: var(--muted);
   font-weight: 800;
 }
@@ -1432,7 +1487,7 @@ button {
   gap: 14px;
   border-radius: 10px;
   padding: 18px;
-  background: #f8fbff;
+  background: var(--surface-2);
 }
 
 .probability-meta,
@@ -1554,7 +1609,7 @@ button {
   gap: 12px;
   border-radius: 18px;
   padding: 24px;
-  background: #f8fafc;
+  background: var(--surface-2);
   text-align: center;
 }
 
@@ -1585,7 +1640,7 @@ button {
   margin-top: 18px;
   border-radius: 18px;
   padding: 16px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .locked-vote {
@@ -1611,7 +1666,7 @@ button {
 .vote-choice-grid button {
   min-height: 64px;
   border-radius: 18px;
-  background: #f8fafc;
+  background: var(--surface-2);
   color: var(--ink);
   font-size: 18px;
   font-weight: 900;
@@ -1740,7 +1795,7 @@ button {
     padding: 18px 22px;
     border: 0;
     border-radius: 18px;
-    background: #f8fafc;
+    background: var(--surface-2);
     box-shadow: none;
   }
 
@@ -1783,7 +1838,7 @@ button {
     border: 0;
     border-radius: 20px;
     padding: 22px 24px;
-    background: #f8fafc;
+    background: var(--surface-2);
     box-shadow: none;
   }
 
@@ -1836,14 +1891,14 @@ button {
     padding: 20px;
     border: 0;
     border-radius: 16px;
-    background: #f8fafc;
+    background: var(--surface-2);
   }
 
   .match-card {
     border: 0;
     border-radius: 12px;
     padding: 14px;
-    background: #ffffff;
+    background: var(--surface);
   }
 
   .ai-note {
@@ -2030,7 +2085,7 @@ button {
   }
 
   .pitch-name strong {
-    max-width: 46px;
+    font-weight: 900;
   }
 
   .pitch-rating {
@@ -2213,6 +2268,20 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.detail-live-clock {
+  display: flex;
+  justify-content: center;
+}
+
+.detail-live-clock .live-clock {
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 10px;
+  padding: 4px 14px;
+}
+
 .live-clock::first-letter {
   animation: live-pulse 1.4s ease-in-out infinite;
 }
@@ -2289,7 +2358,7 @@ button {
 
 .player-photo.has-img {
   overflow: hidden;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .player-photo.has-img img {
@@ -2312,7 +2381,7 @@ button {
   grid-template-columns: 1fr 1fr;
   gap: 14px;
   padding: 18px;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .formation-column {
@@ -2344,7 +2413,7 @@ button {
   gap: 10px;
   border-radius: 12px;
   padding: 8px 10px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .formation-row-name {
@@ -2391,11 +2460,11 @@ button {
   gap: 10px;
   border-radius: 12px;
   padding: 10px 12px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .event-timeline-row.away {
-  background: #f1f5f9;
+  background: var(--bg);
 }
 
 .event-minute {
@@ -2446,7 +2515,7 @@ button {
   gap: 12px;
   border-radius: 16px;
   padding: 22px;
-  background: #f8fafc;
+  background: var(--surface-2);
   text-align: center;
 }
 
@@ -2528,7 +2597,7 @@ button {
   gap: 6px;
   border-radius: 16px;
   padding: 22px;
-  background: #f8fafc;
+  background: var(--surface-2);
   text-align: center;
 }
 
@@ -2547,7 +2616,7 @@ button {
   gap: 10px;
   border-radius: 16px;
   padding: 16px;
-  background: #f8fbff;
+  background: var(--surface-2);
 }
 
 .ratio-head {
@@ -2584,7 +2653,7 @@ button {
 }
 
 .account-chip.subtle {
-  background: #f1f5f9;
+  background: var(--bg);
   color: var(--muted);
 }
 
@@ -2609,7 +2678,7 @@ button {
   gap: 8px;
   border-radius: 12px;
   padding: 12px 14px;
-  background: #f8fafc;
+  background: var(--surface-2);
 }
 
 .rank-head {
@@ -2682,7 +2751,7 @@ button {
   gap: 14px;
   border-radius: 14px;
   padding: 14px 16px;
-  background: #f8fafc;
+  background: var(--surface-2);
   border-left: 5px solid var(--line);
 }
 
@@ -2735,7 +2804,7 @@ button {
 }
 
 .my-pred-result.pending {
-  background: #eef2f7;
+  background: var(--surface-2);
   color: #64748b;
 }
 
@@ -2836,21 +2905,42 @@ button {
 
 .pitch-player.abs .player-photo-wrap .pitch-rating {
   position: absolute;
-  top: auto;
-  bottom: -6px;
+  top: -6px;
+  bottom: auto;
   left: auto;
   right: -8px;
   z-index: 4;
 }
 
-.player-marks {
+/* 피치: 카드 → 왼쪽 위 */
+.player-photo-wrap .player-marks.cards {
   position: absolute;
   top: -6px;
-  right: -10px;
+  left: -8px;
   z-index: 4;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  align-items: center;
+}
+
+/* 피치: 골/어시스트 → 오른쪽 아래 */
+.player-photo-wrap .player-marks.goals {
+  position: absolute;
+  bottom: -6px;
+  right: -8px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+
+/* 벤치: flex 흐름 안에서 inline 표시 */
+.bench-row .player-marks.cards,
+.bench-row .player-marks.goals {
+  display: flex;
+  gap: 3px;
   align-items: center;
 }
 
@@ -2867,7 +2957,7 @@ button {
 
 .mark.goal,
 .mark.assist {
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .mark.card {
@@ -2900,6 +2990,13 @@ button {
   font-size: 11px;
   font-weight: 950;
   white-space: nowrap;
+}
+
+/* 피치 이름 아래 교체 표시 */
+.sub-badge.pitch-sub {
+  position: static;
+  transform: none;
+  margin-top: 1px;
 }
 
 /* 범례용 sub-badge: absolute 위치 해제 */
@@ -2948,7 +3045,7 @@ button {
   gap: 8px;
   border-radius: 12px;
   padding: 7px 10px;
-  background: #ffffff;
+  background: var(--surface);
   position: relative;
 }
 
@@ -2969,6 +3066,17 @@ button {
 
 .bench-name b {
   color: var(--muted);
+}
+
+.bench-pos {
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+  color: #6b7280;
+  background: var(--bg);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
 }
 
 .bench-in {
@@ -3018,7 +3126,7 @@ button {
   height: 26px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   font-size: 16px;
   font-weight: 900;
@@ -3845,7 +3953,7 @@ button {
 }
 
 .data-result {
-  background: #f8fafc;
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;

@@ -1,6 +1,6 @@
-import { BarChart3, Chrome, ShieldCheck, Trophy, UsersRound } from "lucide-react";
+import { BarChart3, Chrome, Moon, ShieldCheck, Sun, Trophy, UsersRound } from "lucide-react";
 import { createElement, useEffect, useRef, useState } from "react";
-import { adminApi, authApi, fotmobAdminApi, matchApi, noticeApi, predictionApi, standingsApi, userApi } from "./services/api";
+import { adminApi, ApiError, authApi, fotmobAdminApi, matchApi, noticeApi, predictionApi, standingsApi, userApi } from "./services/api";
 
 const loginBenefits = [
   {
@@ -37,6 +37,9 @@ const winnerLabels = {
 
 const WORLD_CUP_LEAGUE_ID = 77;
 const LEADERBOARD_MIN_MATCHES = 5;
+// 메인 일정은 현재 클라이언트에서 한 번에 전부 받아 프론트에서 필터링한다.
+// TODO: DB 경기 수가 이 값을 넘으면 누락된다 → 서버측 필터/페이지네이션으로 전환 필요.
+const MATCH_LIST_FETCH_SIZE = 500;
 
 const aiFallback = {
   aiPick: "AI 분석 대기",
@@ -154,18 +157,30 @@ function getTeamNameByOriginal(originalName) {
   return countryNameKo[originalName] || originalName;
 }
 
-function formatMatchDateTime(matchTime) {
-  if (!matchTime) {
-    return "일정 미정";
+const KST_TIME_ZONE = "Asia/Seoul";
+
+// 백엔드 matchTime은 타임존 표기 없는 KST 벽시계("2026-06-15T05:00:00").
+// 브라우저 타임존과 무관하게 같은 순간을 가리키도록 +09:00을 보정해 파싱한다.
+function parseKstDate(value) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
   }
+  if (!value) {
+    return null;
+  }
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(value);
+  const date = new Date(hasZone ? value : `${value}+09:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
-  const date = new Date(matchTime);
-
-  if (Number.isNaN(date.getTime())) {
-    return matchTime;
+function formatMatchDateTime(matchTime) {
+  const date = parseKstDate(matchTime);
+  if (!date) {
+    return matchTime ? String(matchTime) : "일정 미정";
   }
 
   return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: KST_TIME_ZONE,
     month: "long",
     day: "numeric",
     hour: "2-digit",
@@ -175,14 +190,11 @@ function formatMatchDateTime(matchTime) {
 }
 
 function isToday(matchTime) {
-  const date = new Date(matchTime);
-
-  if (Number.isNaN(date.getTime())) {
+  const date = parseKstDate(matchTime);
+  if (!date) {
     return false;
   }
-
-  const today = new Date();
-  return date.toDateString() === today.toDateString();
+  return formatDateInputValue(date) === formatDateInputValue(new Date());
 }
 
 function getMatchScore(match) {
@@ -255,16 +267,18 @@ function getCompetitionFilterValue(match) {
 }
 
 function formatDateInputValue(matchTime) {
-  const date = new Date(matchTime);
-
-  if (Number.isNaN(date.getTime())) {
+  const date = parseKstDate(matchTime);
+  if (!date) {
     return "";
   }
 
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  // en-CA 로케일은 YYYY-MM-DD 형식을 준다. KST 기준으로 날짜를 뽑는다.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: KST_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function getGroupLabel(group) {
@@ -293,6 +307,10 @@ function compareMatches(a, b) {
 // ─────────────────────────────────────────────────────────────
 // 라이브 시계 (liveStartedAt 앵커 → 클라이언트에서 초 단위로 흐름)
 // ─────────────────────────────────────────────────────────────
+// FotMob SSR 스냅샷은 실제 경기 진행시간보다 몇 분 지연된다. 화면 시계가
+// 실제와 가깝게 보이도록 앵커 경과초에 이만큼 더해 보정한다.
+const FOTMOB_SSR_DELAY_COMPENSATION_SECONDS = 180;
+
 function useTicker(active, intervalMs = 1000) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -305,6 +323,41 @@ function useTicker(active, intervalMs = 1000) {
   }, [active, intervalMs]);
 
   return now;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 다크/라이트 테마 토글 (data-theme 속성 + localStorage 저장)
+// ─────────────────────────────────────────────────────────────
+const THEME_STORAGE_KEY = "ballix-theme";
+
+function getStoredTheme() {
+  if (typeof document !== "undefined" && document.documentElement.dataset.theme) {
+    return document.documentElement.dataset.theme;
+  }
+  const saved = typeof localStorage !== "undefined" ? localStorage.getItem(THEME_STORAGE_KEY) : null;
+  return saved === "dark" ? "dark" : "light";
+}
+
+function ThemeToggle() {
+  const [theme, setTheme] = useState(getStoredTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  const isDark = theme === "dark";
+  return (
+    <button
+      type="button"
+      className="theme-toggle"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label={isDark ? "라이트 모드로 전환" : "다크 모드로 전환"}
+      title={isDark ? "라이트 모드" : "다크 모드"}
+    >
+      {isDark ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
+  );
 }
 
 // 좁은 화면(모바일) 여부 — 라인업을 세로 피치로 전환하는 데 사용
@@ -334,13 +387,18 @@ function LiveClock({ match }) {
   const ticking = Boolean(isPlaying && anchor && label && /\d/.test(label));
   const now = useTicker(ticking);
 
-  if (!isPlaying || !label) {
+  if (!isPlaying) {
     return null;
+  }
+  if (!label) {
+    return <span className="live-clock">● 진행 중</span>;
   }
 
   let text = label;
   if (ticking) {
-    const elapsed = Math.max(0, Math.floor((now - new Date(anchor).getTime()) / 1000));
+    const elapsed =
+      Math.max(0, Math.floor((now - new Date(anchor).getTime()) / 1000)) +
+      FOTMOB_SSR_DELAY_COMPENSATION_SECONDS;
     const minute = Math.floor(elapsed / 60);
     const second = elapsed % 60;
     text = `${minute}:${String(second).padStart(2, "0")}`;
@@ -393,7 +451,7 @@ export default function App() {
     }
 
     try {
-      const response = await matchApi.getAllMatches({ size: 500 });
+      const response = await matchApi.getAllMatches({ size: MATCH_LIST_FETCH_SIZE });
       const dbMatches = getPageContent(response);
       const normalizedMatches = [...dbMatches]
         .sort((a, b) => new Date(a.matchTime).getTime() - new Date(b.matchTime).getTime())
@@ -707,11 +765,15 @@ function MainScreen({
             )}
           </nav>
           {!isLoggedIn ? (
-            <button type="button" onClick={onLogin}>
-              {isAuthLoading ? "확인 중" : "로그인"}
-            </button>
+            <div className="account-actions">
+              <ThemeToggle />
+              <button type="button" onClick={onLogin}>
+                {isAuthLoading ? "확인 중" : "로그인"}
+              </button>
+            </div>
           ) : (
             <div className="account-actions">
+              <ThemeToggle />
               <span className="account-chip">{user?.name || "사용자"}</span>
               {isAdmin && <span className="admin-badge">관리자</span>}
               <button type="button" onClick={onLogout}>
@@ -1280,7 +1342,7 @@ function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi, onLogi
           }
         })
         .catch(() => {});
-    }, 60000);
+    }, 600000); // 10분마다 갱신 (초당 client-side tick으로 보완)
     return () => {
       mounted = false;
       clearInterval(id);
@@ -1351,9 +1413,13 @@ function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi, onLogi
           <button type="button" onClick={onBack}>← 일정으로</button>
           <strong>경기 상세</strong>
           {!isLoggedIn ? (
-            <button type="button" onClick={onLogin}>로그인</button>
+            <div className="account-actions">
+              <ThemeToggle />
+              <button type="button" onClick={onLogin}>로그인</button>
+            </div>
           ) : (
             <div className="account-actions">
+              <ThemeToggle />
               <span className="account-chip">{user?.name || "사용자"}</span>
               {isAdmin && <span className="admin-badge">관리자</span>}
               <button type="button" onClick={onLogout}>로그아웃</button>
@@ -1370,7 +1436,9 @@ function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi, onLogi
             </div>
             <div className="match-center">
               <b>{match.score || "VS"}</b>
-              {match.statusRaw === "IN_PLAY" && <LiveClock match={match} />}
+              {match.statusRaw === "IN_PLAY" && (
+                <span className="detail-live-clock"><LiveClock match={match} /></span>
+              )}
               <span>{match.matchTime}</span>
               <small>{match.venue}</small>
             </div>
@@ -1592,8 +1660,12 @@ function collectPlayerMarks(events, player) {
         }
       }
     } else if (event.type === "CARD") {
-      const idMatch = samePlayerId(eid, pid);
-      const nameMatch = !idMatch &&
+      // 카드 이벤트에 선수 ID가 있으면 ID로만 매칭한다.
+      // (이름/성 매칭은 동명이인·같은 성에서 오탐 → 카드 안 받은 선수에게 표시되는 버그)
+      // 이름 폴백은 이벤트에 ID가 아예 없을 때만 사용한다.
+      const eventHasId = eid != null;
+      const idMatch = eventHasId && samePlayerId(eid, pid);
+      const nameMatch = !eventHasId &&
         playerNameMatchesEvent(event.playerName, pname, event.home, player.home);
       if (idMatch || nameMatch) {
         if (event.detail === "Red" || event.detail === "YellowRed") marks.red += 1;
@@ -1645,17 +1717,31 @@ const DEPTH_BY_LINE = {
   11: 0.95,
 };
 
-function lineLabel(line) {
-  if (line <= 1) {
-    return "GK";
+// posX(깊이) + posY(좌우: 0=오른쪽, 1=왼쪽) → 상세 포지션 라벨
+function getDetailedLabel(depth, lateral) {
+  const isR = lateral < 0.28;
+  const isL = lateral > 0.72;
+
+  if (depth < 0.1)  return "GK";
+
+  if (depth < 0.37) {                        // 수비 라인
+    if (isR) return "RB";
+    if (isL) return "LB";
+    return "CB";
   }
-  if (line <= 5) {
-    return "DF";
+
+  if (depth < 0.67) {                        // 미드필드 라인
+    if (isR) return "RM";
+    if (isL) return "LM";
+    if (depth < 0.49) return "CDM";
+    if (depth > 0.57) return "CAM";
+    return "CM";
   }
-  if (line <= 8) {
-    return "MF";
-  }
-  return "FW";
+
+  // 공격 라인
+  if (isR) return "RW";
+  if (isL) return "LW";
+  return "ST";
 }
 
 // 선수의 피치 배치 좌표 + 포지션 라벨을 구한다.
@@ -1665,24 +1751,18 @@ function getPlayerLayout(player) {
     return null;
   }
   if (Number.isFinite(player.posX) && Number.isFinite(player.posY)) {
-    const posX = player.posX;
-    let label = "MF";
-    if (posX < 0.1) {
-      label = "GK";
-    } else if (posX < 0.36) {
-      label = "DF";
-    } else if (posX >= 0.66) {
-      label = "FW";
-    }
-    return { depth: posX, lateral: player.posY, label };
+    const depth = player.posX;
+    // FotMob posY는 positionId 좌우 기준과 미러링돼 있다(예: 우측 RB가 posY≈0.875).
+    // positionId 경로(종료 경기, 정상)와 좌우를 맞추기 위해 1 - posY로 뒤집는다.
+    const lateral = 1 - player.posY;
+    return { depth, lateral, label: getDetailedLabel(depth, lateral) };
   }
   if (Number.isFinite(player.positionId)) {
     const line = Math.floor(player.positionId / 10);
     const digit = player.positionId % 10;
     const depth = DEPTH_BY_LINE[line] ?? 0.5;
-    // 끝자리=좌우(1~9, 5=중앙). GK(line 1)는 항상 중앙.
     const lateral = line === 1 || digit === 0 ? 0.5 : (digit - 1) / 8;
-    return { depth, lateral, label: lineLabel(line) };
+    return { depth, lateral, label: getDetailedLabel(depth, lateral) };
   }
   return null;
 }
@@ -1708,20 +1788,28 @@ function getRatingClass(rating) {
 }
 
 function PlayerMarks({ marks }) {
-  if (!marks.goals && !marks.assists && !marks.yellow && !marks.red) {
-    return null;
-  }
+  const hasGoals = marks.goals > 0 || marks.assists > 0;
+  const hasCards = marks.yellow > 0 || marks.red > 0;
+  if (!hasGoals && !hasCards) return null;
   return (
-    <span className="player-marks">
-      {Array.from({ length: marks.goals }).map((_, index) => (
-        <span className="mark goal" key={`g${index}`} title="골">⚽</span>
-      ))}
-      {Array.from({ length: marks.assists }).map((_, index) => (
-        <span className="mark assist" key={`a${index}`} title="어시스트">🅰️</span>
-      ))}
-      {marks.yellow > 0 && <span className="mark card yellow" title="옐로카드" />}
-      {marks.red > 0 && <span className="mark card red" title="레드카드" />}
-    </span>
+    <>
+      {hasCards && (
+        <span className="player-marks cards">
+          {marks.yellow > 0 && <span className="mark card yellow" title="옐로카드" />}
+          {marks.red > 0 && <span className="mark card red" title="레드카드" />}
+        </span>
+      )}
+      {hasGoals && (
+        <span className="player-marks goals">
+          {Array.from({ length: marks.goals }).map((_, i) => (
+            <span className="mark goal" key={`g${i}`} title="골">⚽</span>
+          ))}
+          {Array.from({ length: marks.assists }).map((_, i) => (
+            <span className="mark assist" key={`a${i}`} title="어시스트">🅰️</span>
+          ))}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -1833,11 +1921,6 @@ function PitchPlayer({ events, player, side, vertical = false }) {
 
   return (
     <div className={`pitch-player abs ${side}`} style={{ left: `${left}%`, top: `${top}%` }}>
-      {subOut !== null && (
-        <span className="sub-badge out" title={`${subOut}분 교체 아웃`}>
-          ↓{subOut}'
-        </span>
-      )}
       <div className="player-photo-wrap">
         <PlayerPhoto id={player.fotmobPlayerId} name={player.name} />
         <PlayerMarks marks={marks} />
@@ -1845,11 +1928,18 @@ function PitchPlayer({ events, player, side, vertical = false }) {
           <span className={`rating-chip pitch-rating ${getRatingClass(player.rating)}`}>{player.rating}</span>
         )}
       </div>
-      <div className="pitch-name">
-        {Number.isFinite(player.shirtNumber) && <span>{player.shirtNumber}</span>}
-        <strong>{player.name}</strong>
+      <div className="pitch-info" title={player.name || ""}>
+        <div className="pitch-name">
+          {Number.isFinite(player.shirtNumber) && <span>{player.shirtNumber}</span>}
+          <strong>{(player.name || "").split(" ").pop()}</strong>
+        </div>
+        {subOut !== null && (
+          <span className="sub-badge out pitch-sub" title={`${subOut}분 교체 아웃`}>
+            ↓{subOut}'
+          </span>
+        )}
+        {position && <span className="pos-tag">{position}</span>}
       </div>
-      {position && <span className="pos-tag">{position}</span>}
     </div>
   );
 }
@@ -1888,6 +1978,7 @@ function FormationColumn({ events, formation, players, title }) {
     </div>
   );
 }
+
 
 function PlayerPhoto({ id, name, small = false }) {
   const [failed, setFailed] = useState(false);
@@ -2059,6 +2150,7 @@ function PredictionPanel({ isLoggedIn, match, onLogin }) {
   const [ratio, setRatio] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const kickoffPassed = new Date(match.matchTimeRaw).getTime() <= Date.now();
@@ -2068,10 +2160,12 @@ function PredictionPanel({ isLoggedIn, match, onLogin }) {
     if (!isLoggedIn) {
       setMyPrediction(null);
       setRatio(null);
+      setLoadError("");
       return undefined;
     }
     let mounted = true;
     setIsLoading(true);
+    setLoadError("");
 
     predictionApi
       .findByMatch(match.id)
@@ -2086,11 +2180,21 @@ function PredictionPanel({ isLoggedIn, match, onLogin }) {
           }
         });
       })
-      .catch(() => {
-        // 예측 전이면 findByMatch가 실패한다 — 정상 흐름
-        if (mounted) {
-          setMyPrediction(null);
-          setRatio(null);
+      .catch((loadErr) => {
+        if (!mounted) {
+          return;
+        }
+        // 서버/세션 오류는 "예측 안 함"과 구분해서 사용자에게 알린다.
+        // (예측 전이면 백엔드가 400/404로 응답 → 정상 흐름이라 메시지 없음)
+        const status = loadErr instanceof ApiError ? loadErr.status : undefined;
+        setMyPrediction(null);
+        setRatio(null);
+        if (status === 401) {
+          setLoadError("로그인이 만료되었습니다. 다시 로그인해 주세요.");
+        } else if (status === 0 || status >= 500) {
+          setLoadError("예측 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        } else {
+          setLoadError("");
         }
       })
       .finally(() => {
@@ -2150,6 +2254,7 @@ function PredictionPanel({ isLoggedIn, match, onLogin }) {
 
       {!isLoading && (
         <>
+          {loadError && <p className="action-error">{loadError}</p>}
           <div className="vote-choice-grid">
             {voteOptions.map((option) => {
               const isPicked = myPrediction?.predictedWinner === option.value;
@@ -2724,7 +2829,8 @@ function AdminDataTab() {
   }
 
   function today() {
-    return new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    // KST 기준 오늘 날짜(YYYYMMDD). toISOString은 UTC라 한국 새벽에 하루 어긋난다.
+    return formatDateInputValue(new Date()).replace(/-/g, "");
   }
 
   async function handleSearch() {

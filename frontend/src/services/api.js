@@ -1,23 +1,52 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
-export async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-    ...options,
-  });
+// HTTP status와 원본 payload를 보존하는 에러 — 호출부가 404/401/500 등을 구분할 수 있다.
+// status 0 = 네트워크 오류(서버 꺼짐 등 fetch 자체가 실패).
+export class ApiError extends Error {
+  constructor(message, status, payload) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
 
-  const payload = await response.json().catch(() => null);
+export async function apiRequest(path, options = {}) {
+  const hasBody = options.body != null;
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      credentials: "include",
+      headers: {
+        // body가 있는 요청에만 Content-Type을 붙인다(GET에 불필요한 헤더 방지).
+        ...(hasBody ? { "Content-Type": "application/json" } : {}),
+        ...options.headers,
+      },
+      ...options,
+    });
+  } catch {
+    // fetch 자체 실패 = 네트워크 오류/서버 꺼짐. status 0으로 구분 가능하게 한다.
+    throw new ApiError("서버에 연결할 수 없습니다.", 0, null);
+  }
+
+  // 204 No Content / HTML 에러 페이지 등 JSON이 아닌 응답도 안전하게 처리.
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json().catch(() => null)
+    : null;
+
+  if (!response.ok) {
+    const message = payload?.msg || "요청에 실패했습니다.";
+    throw new ApiError(message, response.status, payload);
+  }
 
   if (!payload) {
-    throw new Error("서버 응답을 읽을 수 없습니다.");
+    throw new ApiError("서버 응답을 읽을 수 없습니다.", response.status, null);
   }
 
   if (!payload.success) {
-    throw new Error(payload.msg || "요청에 실패했습니다.");
+    throw new ApiError(payload.msg || "요청에 실패했습니다.", response.status, payload);
   }
 
   return payload.data;
