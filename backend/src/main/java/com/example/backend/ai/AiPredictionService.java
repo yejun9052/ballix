@@ -55,13 +55,13 @@ public class AiPredictionService {
 
         String digest = buildDigest(match);
         String json = geminiClient.generate(buildPrompt(digest), predictionConfig());
-        int[] pct = parseAndNormalize(json);
-        match.applyPrediction(pct[0], pct[1], pct[2]);
+        Parsed p = parseAndNormalize(json);
+        match.applyPrediction(p.homePct, p.drawPct, p.awayPct, p.homeScore, p.awayScore);
         matchRepository.save(match);
 
-        log.info("[ai-predict] matchId={} {} {}%/{}%/{}%", matchId,
+        log.info("[ai-predict] matchId={} {} {}%/{}%/{}% 예상스코어 {}:{}", matchId,
                 teamName(match.getHomeTeam()) + " vs " + teamName(match.getAwayTeam()),
-                pct[0], pct[1], pct[2]);
+                p.homePct, p.drawPct, p.awayPct, p.homeScore, p.awayScore);
         return match;
     }
 
@@ -86,6 +86,14 @@ public class AiPredictionService {
         appendStanding(sb, m, m.getAwayTeam(), "원정");
         sb.append("최근폼 ").append(home).append(": ").append(formLine(m.getHomeTeam(), m.getMatchTime())).append("\n");
         sb.append("최근폼 ").append(away).append(": ").append(formLine(m.getAwayTeam(), m.getMatchTime())).append("\n");
+        // 진행 중이면 라이브 상태(현재 스코어·경과시간) 주입 → 남은 결과 확률을 실시간으로 갱신
+        if ("IN_PLAY".equals(m.getStatus())) {
+            sb.append("[라이브] 현재 스코어 ").append(home).append(" ").append(nz(m.getHomeScore()))
+                    .append(" - ").append(nz(m.getAwayScore())).append(" ").append(away);
+            if (m.getLiveTime() != null) sb.append(" (경과 ").append(m.getLiveTime()).append(")");
+            sb.append("\n진행 중인 경기다. 현재 스코어와 남은 시간을 가장 크게 반영해 '최종 결과' 확률을 다시 추정하라");
+            sb.append("(이미 리드 중이면 그 팀 승 확률을 높이고, 남은 시간이 적을수록 현재 스코어를 더 확정적으로 반영).\n");
+        }
         return sb.toString();
     }
 
@@ -126,8 +134,9 @@ public class AiPredictionService {
     // ── 프롬프트 / 출력 스키마 ──────────────────────────────────────────
     private String buildPrompt(String digest) {
         return """
-                당신은 축구 경기 결과를 예측하는 분석가입니다. 아래 정보를 바탕으로 결과 확률을 추정하세요.
+                당신은 축구 경기 결과를 예측하는 분석가입니다. 아래 정보를 바탕으로 결과 확률과 예상 스코어를 추정하세요.
                 홈팀 승(homeWin), 무승부(draw), 원정팀 승(awayWin)을 정수 퍼센트로 주고 세 값의 합은 반드시 100이어야 합니다.
+                추가로 가장 가능성 높은 최종 스코어를 홈팀 득점(homeScore)·원정팀 득점(awayScore) 정수로 주세요.
 
                 가중치 우선순위:
                 1) 최근 폼·최근 전적과 순위표를 가장 크게 반영하세요(주요 근거).
@@ -135,6 +144,11 @@ public class AiPredictionService {
                 최근 폼/전적이 FIFA랭킹과 상충하면 최근 폼/전적을 더 신뢰하고, FIFA랭킹 차이만으로 한쪽을 과도하게 몰지 마세요.
                 홈 어드밴티지도 고려하고, 과도한 확신 없이 합리적으로 배분하세요.
                 확률은 5나 10 단위로 반올림하지 말고 1퍼센트 단위로 세밀하게 추정하세요(예: 47, 28, 25). 끝자리가 0이나 5에 치우치지 않게 하세요.
+
+                예상 스코어 규칙:
+                - 실제 축구에서 흔히 나오는 현실적인 점수로만 예측하세요(보통 한 팀당 0~4골, 합계 0~5골 범위). 과장된 점수(예: 6-0)는 압도적 전력차가 명확할 때만 쓰세요.
+                - 예상 스코어의 승패 방향은 위 확률에서 가장 높은 결과와 일치해야 합니다(홈승 확률이 가장 높으면 홈 우세 스코어, 무승부 확률이 가장 높으면 동점, 원정승 확률이 가장 높으면 원정 우세 스코어).
+                - 최근 폼의 득실 경향을 반영해 현실적인 골 수를 정하세요.
                 JSON 외 다른 텍스트는 출력하지 마세요.
 
                 [경기 정보]
@@ -147,8 +161,10 @@ public class AiPredictionService {
                 "properties", Map.of(
                         "homeWin", Map.of("type", "INTEGER"),
                         "draw", Map.of("type", "INTEGER"),
-                        "awayWin", Map.of("type", "INTEGER")),
-                "required", List.of("homeWin", "draw", "awayWin"));
+                        "awayWin", Map.of("type", "INTEGER"),
+                        "homeScore", Map.of("type", "INTEGER"),
+                        "awayScore", Map.of("type", "INTEGER")),
+                "required", List.of("homeWin", "draw", "awayWin", "homeScore", "awayScore"));
         return Map.of(
                 "temperature", 0.4,
                 "responseMimeType", "application/json",
@@ -156,8 +172,11 @@ public class AiPredictionService {
                 "thinkingConfig", Map.of("thinkingBudget", 0));
     }
 
-    /** JSON 파싱 후 합 100으로 정규화(반올림 오차는 홈 확률에 흡수). */
-    private int[] parseAndNormalize(String json) {
+    /** 파싱 결과: 정규화된 승률(합 100) + 예상 스코어. */
+    private record Parsed(int homePct, int drawPct, int awayPct, int homeScore, int awayScore) {}
+
+    /** JSON 파싱 후 합 100으로 정규화(반올림 오차는 홈 확률에 흡수). 예상 스코어는 0~9로 클램프. */
+    private Parsed parseAndNormalize(String json) {
         try {
             JsonNode n = objectMapper.readTree(json);
             int h = n.path("homeWin").asInt(0);
@@ -170,12 +189,29 @@ public class AiPredictionService {
             int dd = Math.round(d * 100f / sum);
             int aa = Math.round(a * 100f / sum);
             int hh = Math.max(0, 100 - dd - aa);  // 반올림 오버플로우 음수 방지
-            return new int[]{hh, dd, aa};
+
+            int hs = clampScore(n.path("homeScore").asInt(0));
+            int as = clampScore(n.path("awayScore").asInt(0));
+            // 예상 스코어 방향이 최고 확률 결과와 어긋나면 동점으로 보정(모순 표시 방지).
+            boolean homeTop = hh >= dd && hh >= aa;
+            boolean awayTop = aa > hh && aa >= dd;
+            if (homeTop && hs <= as) hs = as + 1;
+            else if (awayTop && as <= hs) as = hs + 1;
+            else if (!homeTop && !awayTop && hs != as) {  // 무승부가 최고 확률인데 스코어가 갈리면 동점화
+                int lvl = Math.min(hs, as);
+                hs = lvl;
+                as = lvl;
+            }
+            return new Parsed(hh, dd, aa, clampScore(hs), clampScore(as));
         } catch (BadRequestException e) {
             throw e;
         } catch (Exception e) {
             throw new BadRequestException("AI 예측 응답 파싱 실패: " + e.getMessage());
         }
+    }
+
+    private int clampScore(int v) {
+        return Math.max(0, Math.min(9, v));
     }
 
     // ── 헬퍼 ────────────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ public class JwtProvider {
     }
 
     // 2. 정식 토큰
-    public String createAccessToken(Long userId, String email, Role role) {
+    public String createAccessToken(Long userId, String email, Role role, String sessionId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + 60 * 60 * 1000); // 1시간
 
@@ -29,6 +29,7 @@ public class JwtProvider {
                 .subject(String.valueOf(userId))
                 .claim("email", email)
                 .claim("role", role)
+                .claim("sid", sessionId)   // 동시 로그인 차단용 세션 식별자
                 .claim("type", "ACCESS")
                 .issuedAt(now)
                 .expiration(expiry)
@@ -38,6 +39,11 @@ public class JwtProvider {
 
     public Long getUserId(String token) {
         return Long.valueOf(getClaims(token).getSubject());
+    }
+
+    /** 토큰에 박힌 세션 식별자(sid). 구버전 토큰엔 없어 null일 수 있다. */
+    public String getSessionId(String token) {
+        return getClaims(token).get("sid", String.class);
     }
 
     public String getRole(String token) {

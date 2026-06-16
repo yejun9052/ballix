@@ -32,6 +32,8 @@ public class Prediction extends BaseTimeEntity {
 
     private Boolean isCorrect; // 맞춤 / 안맞춤 / null(경기 안끝남)
 
+    private Integer earnedPoints; // 이 예측으로 얻은 포인트(역배 가중). 채점 전 null, 틀리면 0
+
     // 예측 생성 (유저 1명이 경기 1개에 처음 예측할 때)
     public static Prediction create(User user, Match match, Winner predictedWinner) {
         return Prediction.builder()
@@ -47,9 +49,10 @@ public class Prediction extends BaseTimeEntity {
         this.predictedWinner = predictedWinner;
     }
 
-    // 경기 종료 후 채점 (맞춤/틀림 기록)
-    public void grade(boolean correct) {
+    // 경기 종료 후 채점 (맞춤/틀림 + 획득 포인트 기록)
+    public void grade(boolean correct, int points) {
         this.isCorrect = correct;
+        this.earnedPoints = points;
     }
 
     // 이미 채점됐는지 (중복 채점 방지용)

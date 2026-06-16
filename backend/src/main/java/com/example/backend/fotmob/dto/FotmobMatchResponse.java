@@ -16,6 +16,8 @@ public record FotmobMatchResponse(
         String statusReason,
         String liveTime,        // 진행 중 경과 시간 예: "51'" (라이브일 때만)
         Integer liveSeconds,    // 경과 초(mm:ss 환산) — 초 단위 라이브 시계 앵커용
+        Integer firstHalfAddedTime,   // 전반 추가시간(분), 없으면 null
+        Integer secondHalfAddedTime,  // 후반 추가시간(분), 없으면 null
         boolean started,
         boolean finished,
         Long homeTeamId,

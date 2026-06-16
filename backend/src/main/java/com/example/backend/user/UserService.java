@@ -35,6 +35,26 @@ public class UserService {
         return UserView.from(user);
     }
 
+    // 본인 닉네임 변경 (로그인 필요). 2~20자, 공백 불가, 다른 유저와 중복 불가.
+    @Transactional
+    public UserView changeName(Long userId, String rawName) {
+        if (userId == null) {
+            throw new UnauthorizedException("로그인이 필요합니다.");
+        }
+        String name = rawName == null ? "" : rawName.trim();
+        if (name.length() < 2 || name.length() > 20) {
+            throw new BadRequestException("닉네임은 2~20자여야 합니다.");
+        }
+        if (userRepository.existsByNameAndIdNot(name, userId)) {
+            throw new BadRequestException("이미 사용 중인 닉네임입니다.");
+        }
+        User user = userRepository.findById(userId).orElseThrow(
+                () -> new NotFoundException("유저를 찾을 수 없습니다.")
+        );
+        user.changeName(name);
+        return UserView.from(user);
+    }
+
     // 리더보드 (적중수 내림차순, 순위 부여 — 페이지네이션. 순위는 페이지 오프셋 기준 전역 번호)
     public Page<RankView> leaderboard(Pageable pageable) {
         Page<User> page = userRepository.findLeaderboard(pageable);
@@ -48,10 +68,14 @@ public class UserService {
     }
 
     // ── 관리자 페이지: 유저 관리 ───────────────────────────────────────
-    /** 전체 유저 목록(관리자, 페이지네이션). email·권한·계정상태 포함. */
+    /** 전체 유저 목록(관리자, 페이지네이션). q 주면 이름 부분일치 검색. email·권한·계정상태 포함. */
     @Transactional(readOnly = true)
-    public Page<AdminUserView> listUsers(Pageable pageable) {
-        return userRepository.findAll(pageable).map(AdminUserView::from);
+    public Page<AdminUserView> listUsers(String q, Pageable pageable) {
+        String query = q == null ? "" : q.trim();
+        Page<User> page = query.isBlank()
+                ? userRepository.findAll(pageable)
+                : userRepository.findByNameContainingIgnoreCase(query, pageable);
+        return page.map(AdminUserView::from);
     }
 
     /** 권한 변경. 본인 권한은 변경 불가(셀프 잠금 방지). */
@@ -69,9 +93,9 @@ public class UserService {
         return AdminUserView.from(u);
     }
 
-    /** 계정상태 변경(활성/정지). 본인 계정은 변경 불가. */
+    /** 계정상태 변경(활성/정지). 본인 계정은 변경 불가. 정지 시 안내 메시지(선택)를 함께 저장. */
     @Transactional
-    public AdminUserView changeActive(Long adminUserId, Long targetId, boolean active) {
+    public AdminUserView changeActive(Long adminUserId, Long targetId, boolean active, String message) {
         if (adminUserId != null && adminUserId.equals(targetId)) {
             throw new BadRequestException("본인 계정상태는 변경할 수 없습니다.");
         }
@@ -80,7 +104,7 @@ public class UserService {
         if (active) {
             u.activate();
         } else {
-            u.deactivate(BanType.ADMIN);
+            u.deactivate(BanType.ADMIN, message);
         }
         return AdminUserView.from(u);
     }

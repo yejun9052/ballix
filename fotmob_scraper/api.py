@@ -137,6 +137,21 @@ def _event_rows(raw: dict) -> list[dict]:
     return out
 
 
+def _added_times(raw: dict) -> tuple[Optional[int], Optional[int]]:
+    """전·후반 추가시간(분). FotMob의 type="AddedTime" 이벤트에서 time=45→전반, 90→후반."""
+    events = ((raw.get("content", {}) or {}).get("matchFacts", {}) or {}).get("events", {}) or {}
+    first = second = None
+    for ev in events.get("events", []) or []:
+        if ev.get("type") != "AddedTime":
+            continue
+        mins = _to_int(ev.get("minutesAddedInput"))
+        if ev.get("time") == 45:
+            first = mins
+        elif ev.get("time") == 90:
+            second = mins
+    return first, second
+
+
 def _event(etype, minute, added, is_home, player_id, player_name, detail) -> dict:
     return {
         "type": etype,
@@ -181,6 +196,7 @@ def build_match_response(raw: dict) -> dict:
         except (ValueError, TypeError):
             live_seconds = None
     is_live = _normalize_status(status) == "IN_PLAY"
+    first_added, second_added = _added_times(raw)
 
     return {
         "matchId": general.get("matchId"),
@@ -190,6 +206,8 @@ def build_match_response(raw: dict) -> dict:
         "statusReason": (status.get("reason") or {}).get("long"),
         "liveTime": live_short if is_live else None,
         "liveSeconds": live_seconds if is_live else None,
+        "firstHalfAddedTime": first_added,    # 전반 추가시간(분), 없으면 null
+        "secondHalfAddedTime": second_added,  # 후반 추가시간(분), 없으면 null
         "started": status.get("started", False),
         "finished": status.get("finished", False),
         "homeTeamId": home.get("id"),

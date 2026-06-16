@@ -13,11 +13,16 @@ import org.springframework.security.web.authentication.SimpleUrlAuthenticationSu
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 
 @Component
 @RequiredArgsConstructor
 public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
+
+    private static final String FRONTEND_BASE = "http://localhost:5173";
 
     private final JwtProvider jwtProvider;
     private final CookieUtil cookieUtil;
@@ -36,15 +41,26 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         User user = userRepository.findByEmail(email).orElseThrow();
 
-        // 정지(비활성) 계정은 토큰 발급 차단 → 로그인 거부
+        // 정지(비활성) 계정은 토큰 발급 차단 → 로그인 거부.
+        // 관리자가 등록한 안내 메시지를 ?error=banned&msg=... 로 실어보내 프론트가 그대로 표시.
         if (!user.isActive()) {
-            response.sendRedirect("http://localhost:5173/home?error=suspended");
+            String url = FRONTEND_BASE + "/home?error=banned";
+            String msg = user.getBanMessage();
+            if (msg != null && !msg.isBlank()) {
+                url += "&msg=" + URLEncoder.encode(msg, StandardCharsets.UTF_8);
+            }
+            response.sendRedirect(url);
             return;
         }
 
-        String accessToken = jwtProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
+        // 새 세션 발급(이전 기기 토큰 무효화 → 동시 로그인 차단). DB에 저장 후 토큰에 동일 sid 심음.
+        String sessionId = UUID.randomUUID().toString();
+        user.startSession(sessionId);
+        userRepository.save(user);
+
+        String accessToken = jwtProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole(), sessionId);
         cookieUtil.addCookie(response, "access_token", accessToken);
-        response.sendRedirect("http://localhost:5173/home");
+        response.sendRedirect(FRONTEND_BASE + "/home");
     }
 
 

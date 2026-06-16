@@ -11,7 +11,8 @@ public record PredictionView(
         String homeTeamName,
         String awayTeamName,
         Winner predictedWinner,
-        Boolean isCorrect
+        Boolean isCorrect,
+        Integer earnedPoints
 ) {
     public static PredictionView from(Prediction p) {
         var m = p.getMatch();
@@ -21,7 +22,8 @@ public record PredictionView(
                 m == null || m.getHomeTeam() == null ? null : m.getHomeTeam().getName(),
                 m == null || m.getAwayTeam() == null ? null : m.getAwayTeam().getName(),
                 p.getPredictedWinner(),
-                p.getIsCorrect()
+                p.getIsCorrect(),
+                p.getEarnedPoints()
         );
     }
 }

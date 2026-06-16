@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Google Gemini(무료 플랜, 기본 gemini-2.5-flash) 호출 클라이언트.
+ * Google Gemini(무료 플랜, 기본 gemini-3.1-flash-lite) 호출 클라이언트.
  * 별도 SDK 없이 generateContent REST를 RestClient로 직접 호출한다(FotmobClient와 동일 패턴).
  * 토큰 절약을 위해 thinkingBudget=0(추론 비활성)을 기본으로 권장한다 — 호출부 generationConfig에서 지정.
  */
@@ -28,7 +28,7 @@ public class GeminiClient {
 
     public GeminiClient(
             @Value("${ai.gemini.base-url:https://generativelanguage.googleapis.com/v1beta}") String baseUrl,
-            @Value("${ai.gemini.model:gemini-2.5-flash}") String model,
+            @Value("${ai.gemini.model:gemini-3.1-flash-lite}") String model,
             @Value("${ai.gemini.api-key:}") String apiKey) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(5));

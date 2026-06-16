@@ -5,10 +5,12 @@ import com.example.backend.fotmob.dto.FotmobMatchResponse.EventDto;
 import com.example.backend.fotmob.dto.FotmobMatchResponse.LineupDto;
 import com.example.backend.fotmob.lineup.LineupPlayer;
 import com.example.backend.fotmob.lineup.LineupPlayerRepository;
+import com.example.backend.fotmob.lineup.PositionResolver;
 import com.example.backend.fotmob.matchevent.MatchEvent;
 import com.example.backend.fotmob.matchevent.MatchEventRepository;
 import com.example.backend.match.Match;
 import com.example.backend.match.MatchRepository;
+import com.example.backend.notify.NtfyClient;
 import com.example.backend.prediction.PredictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,7 @@ public class FotmobSyncService {
     private final MatchEventRepository matchEventRepository;
     private final FotmobStandingService standingService;
     private final PredictionService predictionService;
+    private final NtfyClient ntfy;
 
     /** 자기 자신의 프록시. HTTP 크롤은 트랜잭션 밖에서, DB 저장만 트랜잭션 안에서(M4·M2 방지).
      *  FotmobScheduleService의 self 패턴과 동일. */
@@ -72,6 +75,7 @@ public class FotmobSyncService {
         );
         match.updateLiveIfAbsent(resp.liveTime(), resp.liveSeconds());  // 앵커 없을 때만 1회(재앵커는 11분 시계작업)
         match.updateVenue(resp.venue());                                // 구장 이름(값 있을 때만)
+        match.updateAddedTime(resp.firstHalfAddedTime(), resp.secondHalfAddedTime());  // 전·후반 추가시간(값 있을 때만)
 
         // ── 라인업 저장 (가용할 때만, 평점은 매 폴링 갱신) ────
         if (resp.lineupAvailable() && resp.lineups() != null && !resp.lineups().isEmpty()) {
@@ -92,9 +96,16 @@ public class FotmobSyncService {
 
         // ── 종료 처리: 확정 + 리그 순위 갱신 ─────────────────
         if (resp.finished()) {
+            boolean firstFinalize = !match.isFotmobFinalized();   // 첫 종료 감지 시에만 알림(폴링 중복 방지)
             match.markFinalized();
             log.info("[fotmob-sync] 최종 확정 fotmobId={} ({} {}-{} {})",
                     match.getFotmobMatchId(), resp.homeTeamName(), resp.homeScore(), resp.awayScore(), resp.awayTeamName());
+            if (firstFinalize) {
+                ntfy.send("Full Time",
+                        String.format("%s %s-%s %s 경기 종료",
+                                resp.homeTeamName(), nz(resp.homeScore()), nz(resp.awayScore()), resp.awayTeamName()),
+                        "checkered_flag");
+            }
             if (match.getCompetition() != null) {
                 try {
                     standingService.syncStandings(match.getCompetition().getId());
@@ -129,6 +140,11 @@ public class FotmobSyncService {
         self.applyLiveClock(match.getId(), resp);
     }
 
+    /** 알림 표시용: null 스코어를 "-"로. */
+    private String nz(Integer v) {
+        return v == null ? "-" : v.toString();
+    }
+
     /** 라이브 시계만 가볍게 반영(단독 트랜잭션). 최신 엔티티 재조회로 덮어쓰기 방지. */
     @Transactional
     public void applyLiveClock(Long matchId, FotmobMatchResponse resp) {
@@ -136,6 +152,7 @@ public class FotmobSyncService {
         if (match == null) return;
         match.updateScore(resp.statusType(), resp.homeScore(), resp.awayScore(), resolveWinner(resp));
         match.updateLive(resp.liveTime(), resp.liveSeconds());
+        match.updateAddedTime(resp.firstHalfAddedTime(), resp.secondHalfAddedTime());
         matchRepository.save(match);
     }
 
@@ -147,6 +164,7 @@ public class FotmobSyncService {
                         .name(d.name() == null ? "" : d.name())
                         .shirtNumber(d.shirtNumber())
                         .positionId(d.positionId())
+                        .position(PositionResolver.resolve(d.positionId(), d.posX(), d.posY(), d.isHome()))
                         .posX(d.posX())
                         .posY(d.posY())
                         .home(d.isHome())

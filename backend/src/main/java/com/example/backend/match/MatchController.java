@@ -42,6 +42,16 @@ public class MatchController {
         return ResponseEntity
                 .ok(CommonResponse.success("데이터 조회 성공", matchService.findByDate(date, pageable)));
     }
+    // 팀 이름으로 경기 검색 (관리자 UI: matchId 대신 팀명으로 찾기). status 옵션(FINISHED 등)
+    @GetMapping("/search")
+    public ResponseEntity<CommonResponse<?>> search(
+            @RequestParam String q,
+            @RequestParam(required = false) String status,
+            @PageableDefault(size = 8) Pageable pageable) {
+        return ResponseEntity
+                .ok(CommonResponse.success("데이터 조회 성공", matchService.search(q, status, pageable)));
+    }
+
     // 다가오는 경기 조회 (compId 옵션 — WC만 보려면 6)
     @GetMapping("/upcoming")
     public ResponseEntity<CommonResponse<?>> upcoming(

@@ -25,11 +25,13 @@ public class AdminUserController {
 
     private final UserService userService;
 
-    /** 유저 목록(페이지당 8). */
+    /** 유저 목록(페이지당 8). q 주면 이름 부분일치 검색. */
     @PreAuthorize("hasRole('ADMIN_USER')")
     @GetMapping
-    public ResponseEntity<CommonResponse<?>> list(@PageableDefault(size = 8) Pageable pageable) {
-        return ResponseEntity.ok(CommonResponse.success("조회 성공", userService.listUsers(pageable)));
+    public ResponseEntity<CommonResponse<?>> list(
+            @RequestParam(required = false) String q,
+            @PageableDefault(size = 8) Pageable pageable) {
+        return ResponseEntity.ok(CommonResponse.success("조회 성공", userService.listUsers(q, pageable)));
     }
 
     /** 권한 변경: ?role=ADMIN_USER | COMMON_USER */
@@ -42,13 +44,14 @@ public class AdminUserController {
         return ResponseEntity.ok(CommonResponse.success("권한 변경", userService.changeRole(userId, id, role)));
     }
 
-    /** 계정상태 변경: ?active=true(활성) | false(정지) */
+    /** 계정상태 변경: ?active=true(활성) | false(정지)&message=정지 안내문(정지 시만, 선택) */
     @PreAuthorize("hasRole('ADMIN_USER')")
     @PutMapping("/{id}/status")
     public ResponseEntity<CommonResponse<?>> changeStatus(
             @AuthenticationPrincipal Long userId,
             @PathVariable Long id,
-            @RequestParam boolean active) {
-        return ResponseEntity.ok(CommonResponse.success("계정상태 변경", userService.changeActive(userId, id, active)));
+            @RequestParam boolean active,
+            @RequestParam(required = false) String message) {
+        return ResponseEntity.ok(CommonResponse.success("계정상태 변경", userService.changeActive(userId, id, active, message)));
     }
 }

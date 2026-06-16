@@ -30,6 +30,10 @@ public class User extends BaseTimeEntity {
     @Column(nullable = false)
     private int correct_count; // 맞춘 경기 수
 
+    @Column(nullable = false)
+    @Builder.Default
+    private int score = 0; // 누적 포인트(역배 가중) — 리더보드 순위 기준
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role; // 권한
@@ -38,8 +42,14 @@ public class User extends BaseTimeEntity {
     @Column(nullable = true)
     private BanType banType; // 밴 타입
 
+    @Column(columnDefinition = "TEXT", nullable = true)
+    private String banMessage; // 정지 시 관리자가 등록한 안내 메시지(정지된 유저에게 표시)
+
     @Column(nullable = false)
     private boolean is_active; // 계정상태 true : 활성 / false : 비활성
+
+    @Column(nullable = true)
+    private String sessionId; // 현재 유효 세션 식별자(동시 로그인 차단). 로그인할 때마다 새로 발급 → 이전 기기 토큰 무효화
 
     public static User create(CreateUserRequest request) {
         return User.builder()
@@ -53,17 +63,28 @@ public class User extends BaseTimeEntity {
                 .build();
     }
 
-    // 예측 채점 결과를 전적에 반영 (참여 경기 수 +1, 맞췄으면 적중 수 +1)
-    public void scorePrediction(boolean correct) {
+    // 예측 채점 결과를 전적에 반영 (참여 경기 수 +1, 맞췄으면 적중 수 +1, 획득 포인트 누적)
+    public void scorePrediction(boolean correct, int points) {
         this.matches_played++;
         if (correct) {
             this.correct_count++;
         }
+        this.score += points;
     }
 
     // 계정상태 접근자 (Lombok boolean 게터 이름 혼동 방지용 명시 접근자)
     public boolean isActive() {
         return is_active;
+    }
+
+    /** 로그인 시 새 세션 발급(이전 기기의 토큰을 무효화 — 동시 로그인 차단). */
+    public void startSession(String sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    /** 본인 닉네임 변경. */
+    public void changeName(String name) {
+        this.name = name;
     }
 
     // ── 관리자 조작 ──────────────────────────────────────────
@@ -72,16 +93,18 @@ public class User extends BaseTimeEntity {
         this.role = role;
     }
 
-    /** 계정 비활성(정지). 사유 밴타입 기록. */
-    public void deactivate(BanType type) {
+    /** 계정 비활성(정지). 밴타입 + 정지된 유저에게 보여줄 안내 메시지 기록. */
+    public void deactivate(BanType type, String message) {
         this.is_active = false;
         this.banType = type;
+        this.banMessage = message;
     }
 
-    /** 계정 활성(정지 해제). */
+    /** 계정 활성(정지 해제). 정지 사유/메시지도 함께 정리. */
     public void activate() {
         this.is_active = true;
         this.banType = null;
+        this.banMessage = null;
     }
 
 

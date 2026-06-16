@@ -5,7 +5,9 @@ import com.example.backend.global.exceptopn.NotFoundException;
 import com.example.backend.global.exceptopn.UnauthorizedException;
 import com.example.backend.match.Match;
 import com.example.backend.match.MatchRepository;
+import com.example.backend.notify.NtfyClient;
 import com.example.backend.prediction.enums.Winner;
+import com.example.backend.team.Team;
 import com.example.backend.user.User;
 import com.example.backend.user.UserRepository;
 import jakarta.annotation.PostConstruct;
@@ -29,6 +31,7 @@ public class PredictionService {
     private final PredictionRepository predictionRepository;
     private final UserRepository userRepository;
     private final MatchRepository matchRepository;
+    private final NtfyClient ntfy;
 
     @Value("${prediction.allowed-leagues:77}")
     private String allowedLeaguesRaw;   // 예측 허용 리그 fotmobLeagueId (쉼표구분, 기본 77=월드컵)
@@ -113,7 +116,7 @@ public class PredictionService {
         return total == 0 ? 0 : (int) Math.round(n * 100.0 / total);
     }
 
-    // 경기 종료 시 해당 경기의 모든 예측 채점 (종료 폴링에서 호출)
+    // 경기 종료 시 해당 경기의 모든 예측 채점 (종료 폴링 + 일정 동기화에서 호출)
     @Transactional
     public void gradeMatch(Match match) {
         String actualWinner = match.getWinner();
@@ -121,16 +124,49 @@ public class PredictionService {
             return; // 승자 미확정이면 채점 보류
         }
 
-        List<Prediction> predictions = predictionRepository.findByMatchId(match.getId()).orElse(List.of());
+        // 예측 행을 잠그고 읽어 동시 채점(폴링 vs 수동 동기화)으로 인한 전적 중복 집계를 방지.
+        List<Prediction> predictions = predictionRepository.findByMatchIdForUpdate(match.getId());
         for (Prediction prediction : predictions) {
             if (prediction.isGraded()) {
                 continue; // 이미 채점됨 (멱등)
             }
             boolean correct = prediction.getPredictedWinner().name().equals(actualWinner);
-            prediction.grade(correct);
-            prediction.getUser().scorePrediction(correct); // 유저 전적 갱신
+            int points = computePoints(match, prediction.getPredictedWinner(), correct);
+            prediction.grade(correct, points);
+            prediction.getUser().scorePrediction(correct, points); // 유저 전적·포인트 갱신
+            ntfy.send(correct ? "Prediction WIN" : "Prediction LOSE",
+                    String.format("%s — %s vs %s%n예측 %s%s",
+                            prediction.getUser().getName(),
+                            teamName(match.getHomeTeam()), teamName(match.getAwayTeam()),
+                            correct ? "적중 ✅" : "실패 ❌",
+                            correct ? " (+" + points + "점)" : ""),
+                    correct ? "white_check_mark" : "x");
         }
         predictionRepository.saveAll(predictions);
+    }
+
+    /**
+     * 역배 가중 포인트 계산. 맞췄을 때만 점수, AI 승률 순위로 차등:
+     * 본명(최고확률)=1점 / 2위=2점 / 최대 역배(최저확률)=3점. 틀리면 0점.
+     * AI 예측이 없는 경기는 역배 판정이 불가하므로 맞추면 일괄 1점.
+     */
+    private int computePoints(Match match, Winner pick, boolean correct) {
+        if (!correct) {
+            return 0;
+        }
+        if (!match.hasPrediction() || match.getAiHomePct() == null
+                || match.getAiDrawPct() == null || match.getAiAwayPct() == null) {
+            return 1; // AI 예측 없음 → 일괄 1점
+        }
+        int h = match.getAiHomePct(), d = match.getAiDrawPct(), a = match.getAiAwayPct();
+        int picked = switch (pick) {
+            case HOME_TEAM -> h;
+            case DRAW -> d;
+            case AWAY_TEAM -> a;
+        };
+        // 내가 고른 결과보다 AI 확률이 더 높은 결과의 개수 + 1 = 순위(1~3). 동률은 같은 순위로 묶임.
+        int higher = (h > picked ? 1 : 0) + (d > picked ? 1 : 0) + (a > picked ? 1 : 0);
+        return higher + 1;
     }
 
 
@@ -139,6 +175,11 @@ public class PredictionService {
         if (userId == null) {
             throw new UnauthorizedException("로그인이 필요합니다.");
         }
+    }
+
+    /** 알림 표시용 팀명(LAZY는 gradeMatch 트랜잭션 안에서 로드). */
+    private String teamName(Team t) {
+        return t == null || t.getName() == null ? "미정" : t.getName();
     }
 
 }

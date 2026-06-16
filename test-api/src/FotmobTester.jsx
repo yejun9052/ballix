@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import Stadium3D from "./Stadium3D";
 
 const API = "http://localhost:8080";
 
@@ -41,7 +42,7 @@ const normLineup = (p) => ({
   name: p.name, shirt: p.shirtNumber ?? p.shirt,
   home: p.isHome ?? p.home, starter: p.isStarter ?? p.starter,
   rating: p.rating, subIn: p.subInMinute, subOut: p.subOutMinute,
-  posX: p.posX, posY: p.posY, positionId: p.positionId,
+  posX: p.posX, posY: p.posY, positionId: p.positionId, position: p.position,
   playerId: p.fotmobPlayerId ?? p.playerId,
 });
 const shortName = (n) => { const a = String(n || "").trim().split(" "); return a[a.length - 1]; };
@@ -74,16 +75,22 @@ const liveClock = (m, now) => {
   // 하프타임 등 숫자 없는 상태 라벨은 시계 멈추고 그대로 표시
   if (lt && !/\d/.test(lt)) return lt === "HT" ? "HT(하프타임)" : lt;
   const anchorMs = parseAnchorMs(m.liveStartedAt);
-  if (anchorMs != null) {
-    const sec = Math.max(0, Math.floor((now - anchorMs) / 1000));
-    const mm = Math.floor(sec / 60);
-    const ss = sec % 60;
-    let label = `${mm}:${String(ss).padStart(2, "0")}`;
-    const added = String(m.liveTime || "").match(/\+\s*(\d+)/); // FotMob "45+2'"에서 추가시간 추출
-    if (added) label += ` +${added[1]}'`;
-    return label;
-  }
-  return m.liveTime || null; // 앵커 없으면 분 표기 폴백
+  if (anchorMs == null) return m.liveTime || null; // 앵커 없으면 분 표기 폴백
+
+  const sec = Math.max(0, Math.floor((now - anchorMs) / 1000));
+  const mm = Math.floor(sec / 60);
+  const ss = sec % 60;
+  // 어느 하프인지 서버 라벨 선행 숫자로 판정(분 경계 모호성 회피). 라벨 없으면 경과분으로 폴백.
+  const lead = parseInt(lt, 10);
+  const inFirst = Number.isFinite(lead) ? lead <= 45 : mm < 45;
+  const base = inFirst ? 45 : 90;
+  const cap = inFirst ? m.firstHalfAddedTime : m.secondHalfAddedTime;
+  // 정규 시간(전반 ~45, 후반 ~90): mm:ss 로 매초 흐름
+  if (mm < base) return `${mm}:${String(ss).padStart(2, "0")}`;
+  // 추가시간: "45+N'" / "90+N'" (N=경과분-base+1, DB 추가시간 값으로 상한)
+  let extra = mm - base + 1;
+  if (cap != null && extra > cap) extra = cap;
+  return `${base}+${extra}'`;
 };
 
 // 백엔드 Page<T> 응답에서 목록/메타 추출. 배열(비페이지 응답)이 와도 안전하게 흡수.
@@ -260,6 +267,7 @@ function Team({ t, align }) {
 
 function MatchDetail({ detail }) {
   const { match, lineups, events, homeFormation, awayFormation } = detail;
+  const [show3D, setShow3D] = useState(false);
   const home = lineups.filter((p) => p.home);
   const away = lineups.filter((p) => !p.home);
   const hasCoords = lineups.some((p) => p.starter && p.posX != null && p.posY != null);
@@ -267,6 +275,14 @@ function MatchDetail({ detail }) {
     <div style={S.panel}>
       <h3 style={S.h3}>{match.homeTeam?.name} vs {match.awayTeam?.name}</h3>
       {match.venue && <div style={{ ...S.desc, marginBottom: 10 }}>🏟 {match.venue}</div>}
+      {hasCoords && (
+        <div style={{ marginBottom: 10 }}>
+          <button style={S.btn} onClick={() => setShow3D((v) => !v)}>
+            {show3D ? "🏟 3D 경기장 닫기" : "🏟 3D 경기장에서 라인업 보기"}
+          </button>
+        </div>
+      )}
+      {show3D && <div style={{ marginBottom: 14 }}><Stadium3D lineups={lineups} /></div>}
       {events.length > 0 && (
         <div style={S.timeline}>
           {events.filter((e) => e.type !== "Half").map((e, i) => (
@@ -316,6 +332,7 @@ function Pitch({ title, formation, players, isHome }) {
               )}
             </div>
             <div style={S.pitchName}>{shortName(p.name)}{p.rating != null ? ` ${p.rating.toFixed(1)}` : ""}</div>
+            {p.position && <div style={S.pitchPos}>{p.position}</div>}
           </div>
           );
         })}
@@ -342,6 +359,7 @@ function Rows({ label, players }) {
     {players.map((p, i) => (
       <div key={i} style={S.player}>
         <span style={S.shirt}>{p.shirt ?? "-"}</span>
+        {p.position && <span style={S.pos}>{p.position}</span>}
         {p.playerId
           ? <img src={playerPhoto(p.playerId)} style={S.avatar} alt=""
                  onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
@@ -887,36 +905,128 @@ function AiPanel() {
 }
 
 // ── 관리자 탭: 공지 작성/삭제 + 유저 권한/계정상태 관리 ──
+// 공지 게시 상태 배지: SCHEDULED(예약·노랑) / ACTIVE(게시중·초록) / EXPIRED(내려감·회색)
+function NoticeStatus({ s }) {
+  const map = {
+    SCHEDULED: { t: "예약", bg: "#422006", c: "#fbbf24" },
+    ACTIVE: { t: "게시중", bg: "#14532d", c: "#86efac" },
+    EXPIRED: { t: "내려감", bg: "#334155", c: "#94a3b8" },
+  };
+  const v = map[s] || map.ACTIVE;
+  return <span style={{ fontSize: 11, background: v.bg, color: v.c, padding: "1px 7px", borderRadius: 9, marginLeft: 4 }}>{v.t}</span>;
+}
+
+// 팀 이름으로 경기를 검색해 고르는 재사용 컴포넌트(관리자 UI에서 matchId 직접 입력 대신).
+// 입력하면 디바운스로 /api/match/search 호출 → 후보를 팀명/일시/스코어로 보여주고, 고르면 onPick(match).
+// status 주면 그 상태(예: "FINISHED")만 검색. selected(현재 선택된 경기)는 선택 칩 표시용.
+function MatchPicker({ status, onPick, selected, placeholder = "팀 이름으로 검색 (예: 한국, Korea)" }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const query = q.trim();
+    // setState는 전부 디바운스 콜백(비동기) 안에서만 호출 — effect 본문 동기 setState 회피
+    const t = setTimeout(async () => {
+      if (!query) { setResults([]); setOpen(false); return; }
+      setLoading(true);
+      try {
+        const path = `/api/match/search?q=${encodeURIComponent(query)}&size=8` + (status ? `&status=${status}` : "");
+        const pg = asPage(await call(path));
+        setResults(pg.content); setOpen(true);
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, query ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [q, status]);
+
+  function pick(m) {
+    onPick(m);
+    setQ(""); setResults([]); setOpen(false);
+  }
+
+  return (
+    <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
+      <input style={{ ...S.input, width: "100%", boxSizing: "border-box" }} value={q}
+             onChange={(e) => setQ(e.target.value)}
+             onFocus={() => results.length && setOpen(true)}
+             onBlur={() => setTimeout(() => setOpen(false), 150)}
+             placeholder={placeholder} />
+      {selected && (
+        <div style={S.pickChip}>
+          ✅ <b>{selected.homeTeam?.name} vs {selected.awayTeam?.name}</b>
+          <span style={S.desc}> · #{selected.id} · {kst(selected.matchTime)} · {selected.status}</span>
+        </div>
+      )}
+      {open && (
+        <div style={S.searchDrop}>
+          {loading && <div style={{ ...S.desc, padding: 8 }}>검색 중...</div>}
+          {!loading && results.length === 0 && <div style={{ ...S.desc, padding: 8 }}>결과 없음</div>}
+          {results.map((m) => (
+            <div key={m.id} style={S.searchItem}
+                 onMouseDown={(e) => { e.preventDefault(); pick(m); }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <b>{m.homeTeam?.name} vs {m.awayTeam?.name}</b>
+                <span style={S.desc}>#{m.id}</span>
+              </div>
+              <div style={S.noticeMeta}>
+                {kst(m.matchTime)} · {m.status}
+                {m.status === "FINISHED" ? ` · ${m.homeScore ?? "-"}:${m.awayScore ?? "-"}` : ""}
+                {m.competition?.name ? ` · ${m.competition.name}` : ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminPanel() {
   const cred = { credentials: "include" };
   const { isAdmin, checked: meChecked } = useMe(); // 공통 /me 캐시 사용
   // 공지
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [publishAt, setPublishAt] = useState("");   // 게시 시각(비우면 즉시)
+  const [expireAt, setExpireAt] = useState("");      // 내림 시각(비우면 무기한)
   const [notices, setNotices] = useState([]);
   const [nPage, setNPage] = useState({ number: 0, totalPages: 0, totalElements: 0 });
+  // 다시보기(유튜브)
+  const [replayMatch, setReplayMatch] = useState(null);    // 검색으로 고른 경기(이름 표시용)
+  const [replayMatchId, setReplayMatchId] = useState("");
+  const [replayYoutube, setReplayYoutube] = useState("");
+  const [replayPreview, setReplayPreview] = useState("");  // 등록 성공 시 videoId(미리보기 임베드용)
   // 유저
   const [users, setUsers] = useState([]);
+  const [userQuery, setUserQuery] = useState("");          // 이름 검색어
   const [uPage, setUPage] = useState({ number: 0, totalPages: 0, totalElements: 0 });
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   // 경기 즉시 동기화
+  const [syncMatch, setSyncMatch] = useState(null);        // 검색으로 고른 경기(이름 표시용)
   const [syncMatchId, setSyncMatchId] = useState("");
   const [syncDate, setSyncDate] = useState("");
   const [syncMatches, setSyncMatches] = useState([]);
   const [syncBusy, setSyncBusy] = useState(false);
 
-  useEffect(() => { loadNotices(0); }, []);
-
   function login() { window.location.href = API + "/oauth2/authorization/google"; }
 
   async function loadNotices(p = 0) {
+    // 관리자는 /api/admin/notice (SCHEDULED/EXPIRED 포함), 일반은 공개 /api/notice (게시 중만)
+    const path = isAdmin ? "/api/admin/notice" : "/api/notice";
     try {
-      const pg = asPage(await call(`/api/notice?page=${p}&size=${PAGE_SIZE}`));
+      const pg = asPage(await call(`${path}?page=${p}&size=${PAGE_SIZE}`, cred));
       setNotices(pg.content);
       setNPage({ number: pg.number, totalPages: pg.totalPages, totalElements: pg.totalElements });
     } catch (e) { setErr(e.message); }
   }
+
+  // isAdmin이 정해지면(또는 바뀌면) 목록 재로딩 — 관리자는 예약/만료 포함 전체, 일반은 게시 중만.
+  // (표준 데이터 패칭 effect — 새 react-hooks 규칙이 과하게 막아 해당 라인만 예외 처리)
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  useEffect(() => { loadNotices(0); }, [isAdmin]);
   async function createNotice() {
     setErr(""); setMsg("");
     if (!title.trim() || !content.trim()) { setErr("제목과 내용을 입력하세요."); return; }
@@ -924,10 +1034,32 @@ function AdminPanel() {
       await call("/api/admin/notice", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content }),
+        // datetime-local 값("2026-06-15T09:00")은 ISO LocalDateTime로 그대로 파싱됨. 빈 값은 null.
+        body: JSON.stringify({ title, content, publishAt: publishAt || null, expireAt: expireAt || null }),
       });
-      setTitle(""); setContent(""); setMsg("✅ 공지 등록됨"); loadNotices(0);
+      setTitle(""); setContent(""); setPublishAt(""); setExpireAt("");
+      setMsg("✅ 공지 등록됨"); loadNotices(0);
     } catch (e) { setErr("등록 실패: " + e.message); }
+  }
+
+  // ── 유튜브 다시보기 ──────────────────────────────────────────
+  async function registerReplay() {
+    setErr(""); setMsg(""); setReplayPreview("");
+    if (!replayMatchId || !replayYoutube.trim()) { setErr("경기를 검색해서 고르고 유튜브 URL/videoId를 입력하세요."); return; }
+    try {
+      const m = await call(`/api/admin/match/${replayMatchId}/replay?youtube=${encodeURIComponent(replayYoutube.trim())}`,
+        { method: "PUT", credentials: "include" });
+      setReplayPreview(m.replayYoutubeId || "");
+      setMsg(`✅ 다시보기 등록 — matchId=${replayMatchId}, videoId=${m.replayYoutubeId}`);
+    } catch (e) { setErr("등록 실패(종료 경기만 가능): " + e.message); }
+  }
+  async function removeReplay() {
+    setErr(""); setMsg(""); setReplayPreview("");
+    if (!replayMatchId) { setErr("경기를 검색해서 고르세요."); return; }
+    try {
+      await call(`/api/admin/match/${replayMatchId}/replay`, { method: "DELETE", credentials: "include" });
+      setMsg(`🗑 다시보기 해제 — matchId=${replayMatchId}`);
+    } catch (e) { setErr("해제 실패: " + e.message); }
   }
   async function deleteNotice(id) {
     setErr(""); setMsg("");
@@ -935,10 +1067,11 @@ function AdminPanel() {
     catch (e) { setErr("삭제 실패: " + e.message); }
   }
 
-  async function loadUsers(p = 0) {
+  async function loadUsers(p = 0, q = userQuery) {
     setErr("");
     try {
-      const pg = asPage(await call(`/api/admin/users?page=${p}&size=${PAGE_SIZE}`, cred));
+      const path = `/api/admin/users?page=${p}&size=${PAGE_SIZE}` + (q.trim() ? `&q=${encodeURIComponent(q.trim())}` : "");
+      const pg = asPage(await call(path, cred));
       setUsers(pg.content);
       setUPage({ number: pg.number, totalPages: pg.totalPages, totalElements: pg.totalElements });
     } catch (e) { setErr("유저 목록 실패(관리자 권한 필요): " + e.message); setUsers([]); }
@@ -963,7 +1096,7 @@ function AdminPanel() {
     } catch { setSyncMatches([]); }
   }
   async function syncNow() {
-    if (!syncMatchId) { setErr("matchId를 입력하거나 경기를 선택하세요."); return; }
+    if (!syncMatchId) { setErr("경기를 검색하거나 날짜에서 선택하세요."); return; }
     setErr(""); setMsg(""); setSyncBusy(true);
     try {
       const view = await call(`/api/match/${syncMatchId}/fotmob/sync`, { method: "POST", credentials: "include" });
@@ -995,20 +1128,24 @@ function AdminPanel() {
         <div style={S.panel}>
           <h3 style={S.h3}>🔄 경기 즉시 동기화 <span style={S.tag}>이벤트·라인업·스코어 재수집</span></h3>
           <div style={S.row}>
-            <input type="date" style={S.input} value={syncDate}
-              onChange={(e) => { setSyncDate(e.target.value); loadSyncMatches(e.target.value); }} />
-            <input style={{ ...S.input, width: 110 }} value={syncMatchId}
-              onChange={(e) => setSyncMatchId(e.target.value)} placeholder="matchId" />
+            <MatchPicker selected={syncMatch}
+              onPick={(m) => { setSyncMatch(m); setSyncMatchId(String(m.id)); }}
+              placeholder="팀 이름으로 경기 검색" />
             <button style={S.btn} disabled={syncBusy} onClick={syncNow}>
               {syncBusy ? "동기화 중..." : "지금 동기화"}
             </button>
+          </div>
+          <div style={{ ...S.row, marginTop: 8 }}>
+            <span style={S.desc}>또는 날짜로 찾기</span>
+            <input type="date" style={S.input} value={syncDate}
+              onChange={(e) => { setSyncDate(e.target.value); loadSyncMatches(e.target.value); }} />
           </div>
           {syncMatches.length > 0 && (
             <div style={{ ...S.matchList, marginTop: 8 }}>
               {syncMatches.map((m) => (
                 <div key={m.id}
                   style={{ ...S.matchRow, outline: String(m.id) === String(syncMatchId) ? "2px solid #2563eb" : "none" }}
-                  onClick={() => setSyncMatchId(String(m.id))}>
+                  onClick={() => { setSyncMatch(m); setSyncMatchId(String(m.id)); }}>
                   <span style={S.comp}>{m.competition?.name}{m.groupName ? ` · ${m.groupName}` : ""}</span>
                   <div style={S.teams}>
                     <Team t={m.homeTeam} align="right" />
@@ -1025,24 +1162,65 @@ function AdminPanel() {
 
       {isAdmin && (
         <div style={S.panel}>
-          <h3 style={S.h3}>📢 공지 작성</h3>
+          <h3 style={S.h3}>📢 공지 작성 <span style={S.tag}>게시 예약 가능</span></h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <input style={S.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목" />
             <textarea style={{ ...S.input, minHeight: 70, resize: "vertical" }} value={content} onChange={(e) => setContent(e.target.value)}
                       placeholder="예) 다가오는 12일 11시에 진행하는 한국 vs 체코 많은 응원 부탁드립니다." />
+            <div style={S.row}>
+              <label style={S.desc}>게시 시각
+                <input type="datetime-local" style={{ ...S.input, marginLeft: 6 }} value={publishAt}
+                       onChange={(e) => setPublishAt(e.target.value)} />
+              </label>
+              <label style={S.desc}>내림 시각
+                <input type="datetime-local" style={{ ...S.input, marginLeft: 6 }} value={expireAt}
+                       onChange={(e) => setExpireAt(e.target.value)} />
+              </label>
+            </div>
+            <div style={S.desc}>게시 시각 비우면 즉시 게시 · 내림 시각 비우면 무기한. 시각이 되면 자동으로 게시/내림됩니다.</div>
             <div><button style={S.btn} onClick={createNotice}>공지 등록</button></div>
           </div>
         </div>
       )}
 
+      {isAdmin && (
+        <div style={S.panel}>
+          <h3 style={S.h3}>▶️ 유튜브 다시보기 <span style={S.tag}>종료 경기만</span></h3>
+          <div style={S.row}>
+            <MatchPicker status="FINISHED" selected={replayMatch}
+              onPick={(m) => { setReplayMatch(m); setReplayMatchId(String(m.id)); }}
+              placeholder="종료 경기를 팀 이름으로 검색" />
+          </div>
+          <div style={{ ...S.row, marginTop: 8 }}>
+            <input style={{ ...S.input, flex: 1, minWidth: 220 }} value={replayYoutube}
+                   onChange={(e) => setReplayYoutube(e.target.value)} placeholder="유튜브 URL 또는 videoId(11자)" />
+            <button style={S.btn} onClick={registerReplay}>등록</button>
+            <button style={S.btnGhost} onClick={removeReplay}>해제</button>
+          </div>
+          <div style={S.desc}>watch?v= / youtu.be / shorts / live / embed URL 모두 자동 인식. 팀 이름으로 검색해 종료 경기를 고르세요.</div>
+          {replayPreview && (
+            <div style={{ marginTop: 10 }}>
+              <iframe width="100%" height="320" style={{ border: 0, borderRadius: 8 }}
+                src={`https://www.youtube.com/embed/${replayPreview}`}
+                title="replay-preview" allowFullScreen />
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={S.panel}>
-        <h3 style={S.h3}>공지 목록 <span style={S.tag}>{nPage.totalElements}건</span></h3>
+        <h3 style={S.h3}>공지 목록 <span style={S.tag}>{nPage.totalElements}건</span>
+          {isAdmin && <span style={S.desc}>  (관리자 뷰 · 예약/내려간 공지 포함)</span>}</h3>
         {notices.length === 0 ? <p style={S.desc}>공지가 없습니다.</p> : notices.map((n) => (
           <div key={n.id} style={S.noticeRow}>
             <div style={{ flex: 1 }}>
-              <b>{n.title}</b>
+              <b>{n.title}</b> {n.status && <NoticeStatus s={n.status} />}
               <div style={S.desc}>{n.content}</div>
-              <div style={S.noticeMeta}>{n.authorName} · {kst(n.createAt)}</div>
+              <div style={S.noticeMeta}>
+                {n.authorName} · {kst(n.createAt)}
+                {n.publishAt && <> · 게시 {kst(n.publishAt)}</>}
+                {n.expireAt && <> · 내림 {kst(n.expireAt)}</>}
+              </div>
             </div>
             {isAdmin && <button style={S.btnGhost} onClick={() => deleteNotice(n.id)}>삭제</button>}
           </div>
@@ -1053,7 +1231,15 @@ function AdminPanel() {
       {isAdmin && (
         <div style={S.panel}>
           <h3 style={S.h3}>👥 유저 관리</h3>
-          <button style={S.btnGhost} onClick={() => loadUsers(0)}>유저 목록 불러오기</button>
+          <div style={S.row}>
+            <input style={{ ...S.input, width: 200 }} value={userQuery}
+                   onChange={(e) => setUserQuery(e.target.value)}
+                   onKeyDown={(e) => { if (e.key === "Enter") loadUsers(0); }}
+                   placeholder="이름으로 검색 (비우면 전체)" />
+            <button style={S.btn} onClick={() => loadUsers(0)}>검색</button>
+            {userQuery && <button style={S.btnGhost} onClick={() => { setUserQuery(""); loadUsers(0, ""); }}>검색 해제</button>}
+            <button style={S.btnGhost} onClick={() => loadUsers(0)}>유저 목록 불러오기</button>
+          </div>
           {users.length > 0 && (
             <table style={{ ...S.table, marginTop: 10 }}>
               <thead><tr>
@@ -1130,6 +1316,8 @@ const S = {
   subhead: { fontSize: 12, color: "#94a3b8", margin: "8px 0 4px", fontWeight: 600 },
   player: { display: "flex", alignItems: "center", gap: 8, padding: "3px 0", fontSize: 13 },
   shirt: { minWidth: 22, textAlign: "center", color: "#94a3b8" },
+  pos: { minWidth: 30, textAlign: "center", fontSize: 11, fontWeight: 700, color: "#93c5fd",
+         background: "#1e293b", borderRadius: 4, padding: "1px 5px" },
   pname: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   subInfo: { fontSize: 11, color: "#f87171" },
   rating: { color: "#fff", fontSize: 12, fontWeight: 700, padding: "1px 6px", borderRadius: 6, minWidth: 30, textAlign: "center" },
@@ -1138,6 +1326,11 @@ const S = {
   thL: { padding: "6px 4px", borderBottom: "2px solid #475569", textAlign: "left", color: "#94a3b8", fontSize: 12 },
   td: { padding: "5px 4px", borderBottom: "1px solid #334155", textAlign: "center" },
   tdL: { padding: "5px 4px", borderBottom: "1px solid #334155", textAlign: "left" },
+  searchDrop: { position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, marginTop: 4,
+    background: "#0f172a", border: "1px solid #475569", borderRadius: 8, maxHeight: 280, overflowY: "auto",
+    boxShadow: "0 8px 24px rgba(0,0,0,.5)" },
+  searchItem: { padding: "8px 10px", cursor: "pointer", borderBottom: "1px solid #1e293b", fontSize: 13 },
+  pickChip: { marginTop: 6, fontSize: 13, color: "#86efac" },
   aiCard: { background: "#0f172a", border: "1px solid #334155", borderRadius: 10, padding: 12 },
   summaryBox: { marginTop: 8, padding: "10px 12px", background: "#172554", borderRadius: 8, fontSize: 13, lineHeight: 1.6, color: "#bfdbfe" },
   pitch: { position: "relative", height: 300, borderRadius: 8, margin: "4px 0",
@@ -1151,4 +1344,5 @@ const S = {
     display: "inline-block", flexShrink: 0 },
   pitchName: { fontSize: 9, color: "#fff", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis",
     whiteSpace: "nowrap", textShadow: "0 1px 2px rgba(0,0,0,.7)" },
+  pitchPos: { fontSize: 8, fontWeight: 700, color: "#93c5fd", textShadow: "0 1px 2px rgba(0,0,0,.7)" },
 };

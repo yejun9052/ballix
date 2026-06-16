@@ -36,6 +36,10 @@ public class LineupPlayer extends BaseTimeEntity {
     @Column(nullable = true)
     private Integer positionId;
 
+    /** 파생 세부 포지션 라벨(GK·LB·CB·RB·CM·CAM·LW·RW·ST 등). positionId+좌표에서 계산({@link PositionResolver}). */
+    @Column(nullable = true)
+    private String position;
+
     /** 피치 좌표(0~1). posX=깊이(0=GK쪽,1=공격), posY=좌우. 포메이션 배치도용. */
     @Column(name = "pos_x", nullable = true)
     private Double posX;

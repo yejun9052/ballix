@@ -50,20 +50,32 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     /** 다가오는 경기 - 특정 대회만. */
     Page<Match> findByMatchTimeAfterAndCompetitionIdOrderByMatchTimeAsc(LocalDateTime now, Long compId, Pageable pageable);
 
+    /**
+     * 팀 이름으로 경기 검색(관리자 UI에서 matchId 대신 팀명으로 찾기용).
+     * 홈/원정 팀명에 부분일치(대소문자 무시), status 주면 해당 상태만. 최신 경기 먼저.
+     */
+    @Query("SELECT m FROM Match m " +
+            "WHERE (:status IS NULL OR m.status = :status) " +
+            "AND (LOWER(m.homeTeam.name) LIKE LOWER(CONCAT('%', :q, '%')) " +
+            "  OR LOWER(m.awayTeam.name) LIKE LOWER(CONCAT('%', :q, '%'))) " +
+            "ORDER BY m.matchTime DESC")
+    Page<Match> searchByTeamName(@Param("q") String q,
+                                 @Param("status") String status,
+                                 Pageable pageable);
+
     /** FotMob matchId로 경기 조회 (일정 동기화 업서트용). */
     Optional<Match> findByFotmobMatchId(Long fotmobMatchId);
 
     /** 진행 중 경기(라이브 시계 1분 갱신용). */
     List<Match> findByStatusAndFotmobMatchIdIsNotNull(String status);
 
-    // ── FotMob 매핑/폴링용 ────────────────────────────────────────────
+    /** 실시간 AI 승률 갱신 대상: AI 예측 켜진 + 진행 중 경기. */
+    List<Match> findByStatusAndPredictionEnabledTrue(String status);
 
-    /** 아직 FotMob 매핑이 안 된 경기(킥오프가 임박했거나 지난 것). */
-    @Query("SELECT m FROM Match m " +
-            "WHERE m.fotmobMatchId IS NULL " +
-            "AND m.homeTeam IS NOT NULL AND m.awayTeam IS NOT NULL " +
-            "AND m.matchTime <= :until")
-    List<Match> findUnmappedBefore(@Param("until") LocalDateTime until);
+    /** 특정 상태 + 킥오프가 [from, to] 사이인 경기 (ntfy 시작 임박 알림용). */
+    List<Match> findByStatusAndMatchTimeBetween(String status, LocalDateTime from, LocalDateTime to);
+
+    // ── FotMob 폴링용 ─────────────────────────────────────────────────
 
     /**
      * 폴링 대상: 매핑됨 + (라인업 미저장 또는 미확정) + 킥오프가 시간창 안.

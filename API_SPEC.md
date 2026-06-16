@@ -90,6 +90,14 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
 로그인 성공하면 쿠키가 자동 설정됩니다. 별도 토큰 헤더 처리 불필요.
 
+**동시 로그인 차단** — 한 계정은 **마지막에 로그인한 기기 1곳만 유효**합니다. 다른 기기에서 새로 로그인하면 이전 기기의 세션이 무효화되어, 이전 기기의 다음 API 호출은 다음과 같이 응답합니다(쿠키도 만료됨):
+```json
+{ "success": false, "code": "SESSION_REPLACED", "msg": "다른 기기에서 로그인되어 로그아웃되었습니다.", "data": null }
+```
+> 프론트는 응답 JSON의 **`code === "SESSION_REPLACED"`** 를 보고 "다른 기기에서 로그인됨" 경고창을 띄우고 로그인 화면으로 보내면 됩니다.
+
+**정지(밴) 계정 로그인** — 정지된 계정이 OAuth 로그인하면 토큰 발급이 거부되고 `/home?error=banned` 로 리다이렉트됩니다. 관리자가 정지 시 안내 메시지를 등록했으면 **`&msg=<URL인코딩된 메시지>`** 가 붙습니다 → 프론트가 `error=banned`면 `msg` 파라미터를 디코딩해 안내창으로 표시.
+
 ---
 
 ## 2. 경기 (Match) — 인증 불필요
@@ -114,6 +122,12 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - `compId`: **선택** — 주면 그 대회만(**월드컵=6**), 없으면 전체
 - 예: `/api/match/upcoming?compId=6` → 아직 안 시작한 월드컵 경기만
 - 응답: **페이지** — `data.content` = `Match[]` (페이지 메타 포함, `?page=&size=8`)
+
+### `GET /api/match/search?q={팀이름}&status={상태}`
+**팀 이름으로 경기 검색**(관리자 UI에서 matchId 대신 팀명으로 찾기용). 홈/원정 팀명에 부분일치(대소문자 무시), 최신 경기 먼저.
+- `q`: **필수** — 팀 이름 일부(예: `한국`, `Korea`). 비면 빈 페이지
+- `status`: **선택** — 주면 그 상태만(예: `FINISHED` — 다시보기 등록용)
+- 응답: **페이지** — `data.content` = `Match[]` (`?page=&size=8`)
 
 ---
 
@@ -153,6 +167,8 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
 예측 값은 **`HOME_TEAM` / `AWAY_TEAM` / `DRAW`** 세 가지 enum 문자열.
 화면엔 팀 이름(예: "대한민국 승")으로 보여주되 **서버엔 이 enum 값을 전송**하세요. (팀이 누군지는 Match에 이미 있음)
+
+> **포인트제(역배 보너스)** — 적중 시 AI 승률 순위로 차등 점수: **본명(AI 최고확률) 1점 / 2위 2점 / 최대 역배(최저확률) 3점**, 틀리면 0점. AI 예측이 없는 경기는 적중하면 일괄 1점. 획득 점수는 `Prediction.earnedPoints`에 기록되고 유저의 누적 `score`(리더보드 기준)에 더해집니다.
 
 ### `POST /api/prediction/predict?matchId={id}&predictedWinner={WINNER}`
 예측 저장. **이미 예측했으면 수정**됩니다.
@@ -197,24 +213,31 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 내 정보 + 전적.
 - 응답: `data` = `UserView`
 ```json
-{ "id": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58, "role": "ADMIN_USER" }
+{ "id": 1, "name": "yejun Lee", "score": 18, "matchesPlayed": 12, "correctCount": 7, "accuracy": 58, "role": "ADMIN_USER" }
 ```
+- `score`: 누적 포인트(역배 가중) — 리더보드 순위 기준
 - `accuracy`: 적중률 0~100 정수 (`correctCount/matchesPlayed`), 참여 0이면 0
 - `role`: `COMMON_USER` | `ADMIN_USER` — **관리자 UI 노출 판단은 `role === "ADMIN_USER"`로 검증**(과거 `admin` 불리언 필드는 제거됨)
 
+### `PUT /api/user/me/name?name={닉네임}`  *(로그인 필요)*
+본인 닉네임 변경.
+- 응답: `data` = `UserView`(변경된 이름 반영)
+- 검증: **2~20자**, 공백 불가, **다른 유저와 중복 불가**
+- 실패: `"닉네임은 2~20자여야 합니다."` / `"이미 사용 중인 닉네임입니다."` / 비로그인 `"로그인이 필요합니다."`
+
 ### `GET /api/user/leaderboard`  *(공개)*
-적중수 내림차순 랭킹 (페이지).
+**누적 포인트(`score`) 내림차순** 랭킹 (페이지).
 - 응답: **페이지** — `data.content` = `RankView[]` (`?page=&size=8`)
 ```json
 {
   "content": [
-    { "rank": 1, "name": "yejun Lee", "matchesPlayed": 12, "correctCount": 7, "accuracy": 58 }
+    { "rank": 1, "name": "yejun Lee", "score": 18, "matchesPlayed": 12, "correctCount": 7, "accuracy": 58 }
   ],
   "number": 0, "size": 8, "totalElements": 23, "totalPages": 3, "first": true, "last": false
 }
 ```
 - `rank`는 **페이지를 넘겨도 연속**됩니다(서버가 페이지 오프셋 기준으로 매김 — 2페이지 첫 항목은 9위).
-- 동률이면 경기수 적은 쪽이 위. 예측이 채점돼야 집계됨(`correctCount`는 경기 종료 시 자동 갱신).
+- 정렬: **`score` 내림차순** → 동률이면 적중수↓ → 경기수 적은 쪽↑. 예측이 채점돼야 집계됨(`score`/`correctCount`는 경기 종료 시 자동 갱신).
 
 ---
 
@@ -224,12 +247,14 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 > **승률 예측은 관리자만 "생성"**(트리거)하고, **결과 조회는 누구나** 가능 — 값이 `Match`에 저장돼 일반 경기 조회 응답에 그대로 포함됩니다.
 
 ### `POST /api/admin/ai/predict?matchId={id}&force={bool}`  *(관리자 전용, 쿠키 동봉)*
-관리자가 고른 경기의 승률을 생성. 성공 시 `predictionEnabled=true`가 되어 목록 최상단으로 정렬.
+관리자가 고른 경기의 승률 + 예상 스코어를 생성. 성공 시 `predictionEnabled=true`가 되어 목록 최상단으로 정렬.
 - `force=true`면 재생성(기본 `false`: 이미 있으면 그대로 반환).
-- 근거: **FIFA 랭킹(보조) + 리그 순위 + 최근 폼**. 합 100으로 정규화한 **1% 단위** 확률.
-- 응답: `data` = [`Match`](#match) (`aiHomePct`/`aiDrawPct`/`aiAwayPct` 채워짐)
+- 근거: **FIFA 랭킹(보조) + 리그 순위 + 최근 폼**. 합 100으로 정규화한 **1% 단위** 확률 + **현실적 예상 스코어**(확률 최고 결과와 방향 일치).
+- 응답: `data` = [`Match`](#match) (`aiHomePct`/`aiDrawPct`/`aiAwayPct` + `aiHomeScore`/`aiAwayScore` 채워짐)
 - 관리자 판별: `GET /api/user/me`의 `role === "ADMIN_USER"`. 비관리자는 403(권한 없음) 응답.
 - 종료/취소 경기는 거절: `"종료/취소된 경기는 승률 예측 대상이 아닙니다."`
+
+> **실시간 갱신** — AI 예측이 켜진(`predictionEnabled`) **진행 중(IN_PLAY)** 경기는 백엔드 스케줄러가 **N분(기본 15분)마다** 현재 스코어·경과시간을 반영해 자동 재예측합니다(기존 값 덮어쓰기). 프론트는 별도 호출 없이 경기 조회 응답의 `aiHomePct` 등이 갱신됩니다.
 
 ### `GET /api/match/{matchId}/ai/summary`  *(공개)*
 **종료 경기**의 골 내용 AI 요약(한국어 해설 말투). **DB-first lazy** — 있으면 그대로 반환, 없으면 최초 1회 생성 후 캐시.
@@ -278,8 +303,9 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
 > **전부 관리자(`ROLE_ADMIN_USER`) 전용, 쿠키 동봉.** 관리자만 보므로 email까지 노출됨.
 
-### `GET /api/admin/users`
+### `GET /api/admin/users?q={이름}`
 유저 목록 (페이지).
+- `q`: **선택** — 이름 부분일치 검색(대소문자 무시). 비면 전체
 - 응답: **페이지** — `data.content` = `AdminUserView[]` (`?page=&size=8`)
 
 ### `PUT /api/admin/users/{id}/role?role={ROLE}`
@@ -287,21 +313,23 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - 응답: `data` = `AdminUserView`
 - **본인 권한은 변경 불가**: `"본인 권한은 변경할 수 없습니다."`
 
-### `PUT /api/admin/users/{id}/status?active={bool}`
+### `PUT /api/admin/users/{id}/status?active={bool}&message={정지 안내문}`
 계정상태 변경. `active=true`(활성) / `false`(정지 — `banType=ADMIN` 기록).
+- `message`: **선택**, 정지(`active=false`) 시 정지된 유저에게 보여줄 안내 메시지. 정지 해제(`active=true`)하면 메시지도 함께 정리됨.
 - 응답: `data` = `AdminUserView`
 - **본인 계정상태는 변경 불가**: `"본인 계정상태는 변경할 수 없습니다."`
-- **정지된 계정은 다음 로그인(OAuth) 시 토큰 발급이 차단**되어 로그인 거부됨(`/home?error=suspended`로 리다이렉트). 단, 이미 발급된 쿠키는 만료(1시간)까지 유효.
+- **정지된 계정은 다음 로그인(OAuth) 시 토큰 발급이 차단**되어 로그인 거부됨(`/home?error=banned` 로 리다이렉트, 메시지 있으면 `&msg=<URL인코딩>` 동봉). 단, 이미 발급된 쿠키는 만료(1시간)까지 유효.
 
 **AdminUserView**
 ```json
 {
   "id": 1, "name": "yejun Lee", "email": "yejun0441@hanmail.net",
-  "role": "ADMIN_USER", "active": true, "banType": null,
-  "matchesPlayed": 12, "correctCount": 7, "createAt": "2026-06-05T14:52:42"
+  "role": "ADMIN_USER", "active": true, "banType": null, "banMessage": null,
+  "score": 18, "matchesPlayed": 12, "correctCount": 7, "createAt": "2026-06-05T14:52:42"
 }
 ```
 - `role`: `COMMON_USER` | `ADMIN_USER` / `active`: 계정상태(true=활성, false=정지) / `banType`: `ADMIN`(관리자 정지) | `SELF`(자진 탈퇴) | `null`
+- `banMessage`: 정지 안내 메시지(정지 상태일 때만 값, 아니면 `null`) / `score`: 누적 포인트
 
 ---
 
@@ -357,6 +385,8 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
   "liveTime": null,
   "liveStartedAt": null,
+  "firstHalfAddedTime": null,
+  "secondHalfAddedTime": null,
   "homeFormation": null,
   "awayFormation": null,
 
@@ -364,6 +394,8 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
   "aiHomePct": null,
   "aiDrawPct": null,
   "aiAwayPct": null,
+  "aiHomeScore": null,
+  "aiAwayScore": null,
   "aiSummary": null,
   "aiPredictedAt": null,
   "aiSummaryAt": null,
@@ -379,12 +411,14 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
 **라이브 / 포메이션 (진행 중·라인업 공개 시):**
 - `liveTime`: 진행 분 라벨 예 `"67'"`, 추가시간이면 `"45+2'"`, 하프타임 `"HT"`. IN_PLAY 아니면 `null`
-- `liveStartedAt`: **진행시간 앵커**(폴링시각 − 경과초, KST). 프론트가 `지금 − liveStartedAt`을 초 단위로 계산해 시계를 흘림. 하프타임("HT")이면 시계 멈추고 라벨 표시
+- `liveStartedAt`: **진행시간 앵커**(폴링시각 − 경과초, KST). 프론트가 `지금 − liveStartedAt`을 초 단위로 계산해 시계를 흘림. **하프타임("HT") 등 정지 구간이면 `liveStartedAt=null`로 내려오니, 값이 없으면 시계를 멈추고 `liveTime` 라벨만 표시**
+- `firstHalfAddedTime`/`secondHalfAddedTime`: 전·후반 추가시간(분). 심판이 추가시간을 부여하면 채워짐, 아니면 `null`. 프론트는 `"45+4'"`/`"90+N'"` 표기에 사용
 - `homeFormation`/`awayFormation`: 포메이션 문자열 예 `"4-3-3"` (라인업 공개 후)
 
 **AI (관리자가 예측 생성한 경기만 채워짐):**
 - `predictionEnabled`: AI 승률 예측 대상으로 선택됨 → **이 경기가 목록 최상단** (`allMatch`은 이 값 내림차순 정렬)
-- `aiHomePct`/`aiDrawPct`/`aiAwayPct`: 홈승/무/원정승 확률(정수, 합 100). 미생성이면 `null`
+- `aiHomePct`/`aiDrawPct`/`aiAwayPct`: 홈승/무/원정승 확률(정수, 합 100). 미생성이면 `null`. **IN_PLAY 경기는 15분마다 라이브 상태로 자동 갱신**
+- `aiHomeScore`/`aiAwayScore`: AI 예상 스코어(정수). 미생성이면 `null`
 - `aiSummary`: 종료 경기 골 요약 텍스트(한국어). 미생성이면 `null` (`/ai/summary`로 생성)
 - `aiPredictedAt`/`aiSummaryAt`: 각 생성 시각
 
@@ -512,11 +546,13 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
   "homeTeamName": "South Korea",
   "awayTeamName": "Czechia",
   "predictedWinner": "HOME_TEAM",
-  "isCorrect": null
+  "isCorrect": null,
+  "earnedPoints": null
 }
 ```
 - `predictedWinner`: `HOME_TEAM` | `AWAY_TEAM` | `DRAW`
 - `isCorrect`: `null`(경기 안 끝남) | `true`(적중) | `false`(실패) — 경기 종료 시 자동 채점됨
+- `earnedPoints`: 이 예측으로 얻은 포인트(역배 가중 1~3, 틀리면 0). 채점 전 `null`
 - `homeTeamName`/`awayTeamName`: 화면 라벨용(예: "대한민국 승" 표시) — 전송 값은 enum
 
 ---
@@ -530,6 +566,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 | 이벤트 타입 | `GOAL` `CARD` `SUB` | `MatchEvent.type` |
 | 유저 권한 | `COMMON_USER` `ADMIN_USER` | `UserView.role`, `AdminUserView.role`, 관리자 API 권한 |
 | 밴 타입 | `ADMIN`(관리자 정지) `SELF`(자진 탈퇴) `null` | `AdminUserView.banType` |
+| 에러 코드 | `SESSION_REPLACED`(다른 기기 로그인으로 세션 무효화 시 401 응답의 `code`) | 동시 로그인 차단 |
 | 월드컵 ID | competitionId=`6`, fotmobLeagueId=`77` | 예측·순위·경기조회 |
 
 ---

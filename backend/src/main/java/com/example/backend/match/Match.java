@@ -67,6 +67,14 @@ public class Match extends BaseTimeEntity {
     @Column(name = "venue", nullable = true)
     private String venue;
 
+    /** 전반 추가시간(분). FotMob AddedTime 이벤트(time=45)에서 채워진다. */
+    @Column(name = "first_half_added_time", nullable = true)
+    private Integer firstHalfAddedTime;
+
+    /** 후반 추가시간(분). FotMob AddedTime 이벤트(time=90)에서 채워진다. */
+    @Column(name = "second_half_added_time", nullable = true)
+    private Integer secondHalfAddedTime;
+
     /** 라인업 포메이션 예: "4-3-3". 라인업 공개 후 채워진다. */
     @Column(name = "home_formation", nullable = true)
     private String homeFormation;
@@ -77,6 +85,11 @@ public class Match extends BaseTimeEntity {
     /** FotMob 경기 ID. 라인업·평점·이벤트를 가져오기 위한 매핑 키. */
     @Column(name = "fotmob_match_id", nullable = true, unique = true)
     private Long fotmobMatchId;
+
+    /** 경기 다시보기 유튜브 videoId(11자). 종료 경기에 관리자가 등록.
+     *  프론트는 https://www.youtube.com/embed/{id} 로 iframe 임베드. */
+    @Column(name = "replay_youtube_id", nullable = true)
+    private String replayYoutubeId;
 
     /** 라인업이 DB에 저장 완료되었는지(선발은 1회 저장 후 불변). */
     @Column(name = "lineup_synced", nullable = false)
@@ -104,6 +117,13 @@ public class Match extends BaseTimeEntity {
     @Column(name = "ai_away_pct", nullable = true)
     private Integer aiAwayPct;
 
+    /** AI 예상 스코어 — 가장 가능성 높은 결과의 현실적 득점(홈/원정). 승률과 함께 생성. */
+    @Column(name = "ai_home_score", nullable = true)
+    private Integer aiHomeScore;
+
+    @Column(name = "ai_away_score", nullable = true)
+    private Integer aiAwayScore;
+
     /** AI가 만든 골 내용 요약(경기 종료 후 조회 시 생성). */
     @Column(name = "ai_summary", columnDefinition = "TEXT", nullable = true)
     private String aiSummary;
@@ -113,11 +133,6 @@ public class Match extends BaseTimeEntity {
 
     @Column(name = "ai_summary_at", nullable = true)
     private LocalDateTime aiSummaryAt;
-
-    /** 팀명+날짜 검색으로 확보한 FotMob matchId를 연결한다. */
-    public void linkFotmob(Long fotmobMatchId) {
-        this.fotmobMatchId = fotmobMatchId;
-    }
 
     /** 일정 동기화 시 킥오프/단계/상태 갱신 (기존 경기 업데이트용). */
     public void updateSchedule(LocalDateTime matchTime, String stage, String groupName, String status) {
@@ -148,13 +163,20 @@ public class Match extends BaseTimeEntity {
     public void updateLive(String liveTime, Integer liveSeconds) {
         if ("IN_PLAY".equals(this.status)) {
             this.liveTime = liveTime;
-            if (liveSeconds != null) {
+            if (isClockPaused(liveTime)) {
+                this.liveStartedAt = null;   // HT 등 정지 구간: 앵커 제거 → 프론트가 라벨만 표시
+            } else if (liveSeconds != null) {
                 this.liveStartedAt = LocalDateTime.now().minusSeconds(liveSeconds);
             }
         } else {
             this.liveTime = null;
             this.liveStartedAt = null;
         }
+    }
+
+    /** "HT"·"Break"·"Pen." 처럼 숫자 없는 라벨 = 시계가 멈추는 구간(하프타임 등). */
+    private static boolean isClockPaused(String liveTime) {
+        return liveTime != null && liveTime.chars().noneMatch(Character::isDigit);
     }
 
     /**
@@ -165,6 +187,11 @@ public class Match extends BaseTimeEntity {
     public void updateLiveIfAbsent(String liveTime, Integer liveSeconds) {
         if (!"IN_PLAY".equals(this.status)) {
             this.liveTime = null;
+            this.liveStartedAt = null;
+            return;
+        }
+        if (isClockPaused(liveTime)) {
+            this.liveTime = liveTime;       // HT 라벨은 갱신하되 앵커는 비워 시계를 멈춘다
             this.liveStartedAt = null;
             return;
         }
@@ -184,6 +211,12 @@ public class Match extends BaseTimeEntity {
         if (venue != null && !venue.isBlank()) this.venue = venue;
     }
 
+    /** 전·후반 추가시간 갱신 — 값이 있을 때만(한 번 확정되면 이후 폴링에서 null로 덮이지 않게). */
+    public void updateAddedTime(Integer firstHalf, Integer secondHalf) {
+        if (firstHalf != null) this.firstHalfAddedTime = firstHalf;
+        if (secondHalf != null) this.secondHalfAddedTime = secondHalf;
+    }
+
     public void markLineupSynced() {
         this.lineupSynced = true;
     }
@@ -192,13 +225,25 @@ public class Match extends BaseTimeEntity {
         this.fotmobFinalized = true;
     }
 
-    /** 관리자 선택 + AI 승률 예측 결과 반영(선택 경기는 목록 최상단으로 올라감). */
-    public void applyPrediction(int homePct, int drawPct, int awayPct) {
+    /** 관리자 선택 + AI 승률·예상 스코어 예측 결과 반영(선택 경기는 목록 최상단으로 올라감). */
+    public void applyPrediction(int homePct, int drawPct, int awayPct, Integer homeScore, Integer awayScore) {
         this.predictionEnabled = true;
         this.aiHomePct = homePct;
         this.aiDrawPct = drawPct;
         this.aiAwayPct = awayPct;
+        this.aiHomeScore = homeScore;
+        this.aiAwayScore = awayScore;
         this.aiPredictedAt = LocalDateTime.now();
+    }
+
+    /** 다시보기 유튜브 영상 등록(교체 포함). */
+    public void applyReplay(String youtubeId) {
+        this.replayYoutubeId = youtubeId;
+    }
+
+    /** 다시보기 해제. */
+    public void clearReplay() {
+        this.replayYoutubeId = null;
     }
 
     /** AI 골 요약 반영. */
