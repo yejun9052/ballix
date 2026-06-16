@@ -1,0 +1,71 @@
+/* ── 상세·보드 공통 — 상단바/스코어보드/패널 ── */
+/* ════════════════════════════════════════════════════════════════
+   상세 / 보드 공통
+   ════════════════════════════════════════════════════════════════ */
+.detail-shell, .board-shell { min-height: 100vh; background: var(--paper); }
+.detail-screen, .board-screen { display: grid; gap: 16px; width: 100%; max-width: 1020px; margin: 0 auto; padding: 0 var(--pad) 48px; }
+
+.detail-topbar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 12px; height: 58px;
+  width: 100vw;
+  margin: 0 calc(50% - 50vw) 8px;
+  padding: 0 max(var(--pad), calc((100vw - 1020px) / 2 + var(--pad)));
+  background: var(--surface); border-bottom: var(--bd-2) solid var(--line);
+}
+.detail-topbar > button:first-child {
+  padding: 8px 14px; border: var(--bd) solid var(--line); border-radius: var(--r-pill);
+  background: var(--surface); color: var(--ink); font-weight: 800; font-size: 12px;
+  box-shadow: 2px 2px 0 var(--shadow-col); transition: transform 0.1s var(--ease), box-shadow 0.1s;
+}
+.detail-topbar > button:first-child:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 var(--shadow-col); background: var(--yellow); }
+.detail-topbar > strong { font-size: 15px; font-weight: 900; text-transform: uppercase; }
+.detail-topbar .account-actions { margin-left: auto; }
+.detail-topbar .account-actions > button { height: 36px; }
+
+.detail-hero {
+  position: relative; display: grid; gap: 16px; padding: 26px 22px;
+  border: var(--bd-2) solid var(--line); border-radius: var(--r);
+  background: var(--ink); color: var(--paper); box-shadow: 6px 6px 0 var(--shadow-col);
+}
+.detail-hero .brand-pill { justify-self: center; background: var(--yellow); color: #15130f; box-shadow: none; }
+.detail-hero > p { text-align: center; color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
+
+.matchup-board { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; }
+.matchup-board > div { display: grid; justify-items: center; gap: 10px; }
+.matchup-board > div > strong { font-size: 16px; font-weight: 800; text-align: center; }
+.matchup-board .team-crest.large { background: #fff; width: 66px; height: 66px; box-shadow: 3px 3px 0 #00000066; }
+
+.match-center { display: grid; justify-items: center; gap: 4px; }
+.match-center > b { font-size: 46px; font-weight: 900; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; line-height: 1; }
+.match-center > span { font-size: 12px; color: var(--faint); font-weight: 800; }
+.match-center > small { font-size: 11px; color: var(--faint); opacity: 0.8; }
+
+.live-clock {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px;
+  border: 2px solid #15130f; border-radius: var(--r-pill);
+  background: var(--live); color: #fff; font-weight: 900; font-size: 11px;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.detail-live-clock { display: flex; justify-content: center; }
+.detail-live-clock .live-clock { font-size: 15px; padding: 5px 14px; border-color: var(--paper); }
+.item-meta .live-clock { font-size: 10px; padding: 1px 7px; border-width: 1.5px; }
+
+.detail-panel { background: var(--surface); border: var(--bd) solid var(--line); border-radius: var(--r); box-shadow: 4px 4px 0 var(--shadow-col); overflow: hidden; }
+.detail-panel .collapsible-content { padding: 18px; }
+.collapsible-head { cursor: default; background: var(--surface-2); }
+.collapsible-head > div { display: flex; align-items: center; gap: 10px; }
+.collapsible-head h2 { font-size: 15px; font-weight: 900; text-transform: uppercase; }
+.collapsible-head > div span { padding: 3px 9px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font-size: 10px; font-weight: 900; text-transform: uppercase; }
+.collapsible-head > button {
+  padding: 6px 13px; border: var(--bd) solid var(--line); border-radius: var(--r-pill);
+  background: var(--surface); color: var(--ink); font-weight: 800; font-size: 11px;
+  box-shadow: 2px 2px 0 var(--shadow-col); transition: transform 0.1s var(--ease), box-shadow 0.1s;
+}
+.collapsible-head > button:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 var(--shadow-col); background: var(--yellow); }
+.ai-panel .collapsible-head > div span { background: var(--yellow); }
+.admin-ai-panel .collapsible-head > div span { background: var(--blue); color: #fff; }
+
+.detail-stack { display: grid; gap: 16px; }
+.match-info-grid { display: grid; gap: 16px; }
+

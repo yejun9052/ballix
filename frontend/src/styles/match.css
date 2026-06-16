@@ -1,0 +1,114 @@
+/* ── 경기 상세 — 이벤트/AI 승률/승부예측 ── */
+/* ════════════════════════════════════════════════════════════════
+   이벤트 타임라인
+   ════════════════════════════════════════════════════════════════ */
+.event-timeline { list-style: none; margin: 0; padding: 0; display: grid; }
+.event-timeline-row { display: grid; grid-template-columns: 1fr 44px 1fr; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+.event-timeline-row:last-child { border-bottom: 0; }
+.event-minute { grid-column: 2; display: grid; place-items: center; width: 40px; height: 24px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--ink); color: var(--paper); font-size: 11px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.event-icon { font-size: 15px; }
+.event-text { display: grid; gap: 1px; }
+.event-text strong { font-size: 13px; font-weight: 800; }
+.event-text em { font-size: 11px; color: var(--muted); font-style: normal; }
+.event-team { font-size: 10px; color: var(--faint); font-weight: 900; text-transform: uppercase; }
+.event-timeline-row.home { text-align: right; }
+.event-timeline-row.home .event-icon { grid-column: 1; justify-self: end; order: 2; }
+.event-timeline-row.home .event-text { grid-column: 1; order: 1; }
+.event-timeline-row.home .event-team { grid-column: 3; text-align: left; }
+.event-timeline-row.away .event-text { grid-column: 3; text-align: left; }
+.event-timeline-row.away .event-icon { grid-column: 3; justify-self: start; order: -1; }
+.event-timeline-row.away .event-team { grid-column: 1; text-align: right; }
+
+/* ════════════════════════════════════════════════════════════════
+   AI 승률
+   ════════════════════════════════════════════════════════════════ */
+.probability-table { display: grid; gap: 16px; }
+.probability-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-weight: 900; text-transform: uppercase; }
+.probability-matchup { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.probability-team { display: flex; align-items: center; gap: 10px; }
+.probability-team.away { flex-direction: row-reverse; }
+.probability-team strong { font-size: 14px; font-weight: 800; }
+.probability-matchup > b { color: var(--faint); font-weight: 900; }
+
+.probability-stack { display: flex; height: 38px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); overflow: hidden; }
+.probability-stack span { display: grid; place-items: center; font-size: 12px; font-weight: 900; font-variant-numeric: tabular-nums; min-width: 0; transition: width 0.5s var(--ease); }
+.probability-stack .home { background: var(--blue); color: #fff; }
+.probability-stack .draw { background: var(--surface-3); color: var(--ink); }
+.probability-stack .away { background: var(--yellow); color: #15130f; }
+
+.probability-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px 18px; font-size: 11px; font-weight: 800; color: var(--ink); }
+.probability-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.probability-legend i { width: 12px; height: 12px; border: 1.5px solid var(--line); border-radius: 3px; }
+.probability-legend i.home { background: var(--blue); }
+.probability-legend i.draw { background: var(--surface-3); }
+.probability-legend i.away { background: var(--yellow); }
+
+.repredict-button { justify-self: center; padding: 9px 20px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font-weight: 800; font-size: 12px; box-shadow: 2px 2px 0 var(--shadow-col); transition: transform 0.1s var(--ease), box-shadow 0.1s; }
+.repredict-button:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 var(--shadow-col); background: var(--yellow); }
+.repredict-button:disabled { opacity: 0.6; }
+
+.admin-ai-box { display: grid; gap: 11px; text-align: center; justify-items: center; }
+.admin-ai-box strong { font-size: 15px; font-weight: 900; }
+.admin-ai-box p { color: var(--muted); font-size: 12px; }
+.admin-ai-box button { padding: 11px 20px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--blue); color: #fff; font-weight: 800; font-size: 13px; box-shadow: 3px 3px 0 var(--shadow-col); }
+.admin-ai-box button:disabled { opacity: 0.55; box-shadow: none; }
+
+.summary-box { display: grid; gap: 10px; }
+.ai-detail { padding: 16px; border: var(--bd) solid var(--line); border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink-soft); font-size: 14px; line-height: 1.75; }
+.summary-empty { display: grid; gap: 11px; justify-items: center; text-align: center; }
+.summary-empty p { color: var(--muted); font-size: 12px; }
+.summary-empty button { padding: 10px 20px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--blue); color: #fff; font-weight: 800; font-size: 13px; box-shadow: 3px 3px 0 var(--shadow-col); }
+.summary-empty button:disabled { opacity: 0.6; box-shadow: none; }
+
+/* ════════════════════════════════════════════════════════════════
+   승부예측
+   ════════════════════════════════════════════════════════════════ */
+.vote-active { display: grid; gap: 14px; }
+.vote-choice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.vote-choice-grid button {
+  display: grid; gap: 4px; padding: 16px 10px;
+  border: var(--bd) solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink); font-weight: 800; font-size: 13px;
+  box-shadow: 3px 3px 0 var(--shadow-col);
+  transition: transform 0.1s var(--ease), box-shadow 0.1s var(--ease), background 0.12s;
+}
+.vote-choice-grid button:not(:disabled):hover { transform: translate(-2px,-2px); box-shadow: 5px 5px 0 var(--shadow-col); background: var(--yellow); }
+.vote-choice-grid button:not(:disabled):active { transform: translate(2px,2px); box-shadow: 0 0 0 var(--shadow-col); }
+.vote-choice-grid button.is-picked { background: var(--blue); border-color: var(--line); color: #fff; box-shadow: 3px 3px 0 var(--shadow-col); }
+.vote-choice-grid button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.pick-tag { font-size: 10px; font-weight: 900; font-style: normal; text-transform: uppercase; }
+
+.vote-hint { padding: 11px 13px; border: var(--bd) dashed var(--warn); border-radius: var(--r-sm); background: var(--warn-soft); color: var(--warn); font-size: 12px; font-weight: 700; }
+.vote-current { font-size: 13px; font-weight: 800; }
+.vote-current b { color: var(--blue-ink); }
+.result-chip { font-size: 11px; font-weight: 900; text-transform: uppercase; }
+.result-chip.correct { color: var(--win); }
+.result-chip.wrong { color: var(--live); }
+
+.vote-lock-wrap { display: grid; gap: 12px; }
+.login-overlay {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px 18px;
+  text-align: center;
+  background: #efe4cc;
+  border: var(--bd) dashed rgba(21, 19, 15, 0.72);
+  border-radius: var(--r-sm);
+}
+.login-overlay-kicker {
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: #d8c49b;
+  color: #4b3b1b;
+  font-size: 11px;
+  font-weight: 900;
+}
+.login-overlay strong { font-size: clamp(16px, 2.6vw, 21px); font-weight: 900; }
+.login-overlay p { color: #6d6654; font-size: 13px; max-width: 380px; line-height: 1.55; }
+.login-overlay button { margin-top: 2px; padding: 11px 22px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--blue); color: #fff; font-weight: 900; font-size: 13px; box-shadow: 3px 3px 0 var(--shadow-col); }
+
+.ratio-block { display: grid; gap: 9px; }
+.ratio-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; color: var(--muted); }
+.ratio-head b { color: var(--ink); }
+
