@@ -112,3 +112,13 @@
 .ratio-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 800; color: var(--muted); }
 .ratio-head b { color: var(--ink); }
 
+
+/* AI 예상 스코어 (AI 승률 카드 하단) */
+.ai-score {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 12px;
+  border: var(--bd) solid var(--line); border-radius: var(--r);
+  background: var(--surface-2);
+}
+.ai-score span { font-size: 11px; font-weight: 900; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.ai-score strong { font-size: 24px; font-weight: 900; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }

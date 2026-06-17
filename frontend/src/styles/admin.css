@@ -77,3 +77,24 @@
   .admin-tabs { flex-wrap: wrap; }
 }
 
+
+/* 공지 예약 게시/만료 입력 + 상태 배지 + 메타 */
+.notice-form-schedule { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.notice-form-schedule label { display: grid; gap: 5px; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
+.notice-form-schedule input {
+  height: 38px; padding: 0 11px;
+  border: var(--bd) solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--ink); font-weight: 700; font-size: 13px;
+}
+.notice-form-schedule input:focus { outline: none; box-shadow: 3px 3px 0 var(--shadow-col); }
+.notice-status {
+  display: inline-block; margin-right: 8px; padding: 2px 8px;
+  border: 1.5px solid var(--line); border-radius: var(--r-pill);
+  font-size: 10px; font-weight: 900; text-transform: uppercase; vertical-align: middle;
+}
+.notice-status.active { background: var(--win-soft); color: var(--win); }
+.notice-status.scheduled { background: var(--yellow-soft); color: var(--yellow-ink); }
+.notice-status.expired { background: var(--surface-3); color: var(--muted); }
+.notice-admin-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11px; font-weight: 700; color: var(--faint); }
+
+@media (max-width: 560px) { .notice-form-schedule { grid-template-columns: 1fr; } }

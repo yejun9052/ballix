@@ -37,6 +37,13 @@ export function AiProbabilityCard({ isAdmin, isLoading, match, onRegenerate }) {
         <span><i className="away" />{match.awayTeam} {awayValue}%</span>
       </div>
 
+      {Number.isFinite(match.raw?.aiHomeScore) && Number.isFinite(match.raw?.aiAwayScore) && (
+        <div className="ai-score">
+          <span>AI 예상 스코어</span>
+          <strong>{match.raw.aiHomeScore} : {match.raw.aiAwayScore}</strong>
+        </div>
+      )}
+
       {isAdmin && (
         <button
           className="repredict-button"

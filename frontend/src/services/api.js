@@ -1,4 +1,8 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+// 기본은 same-origin(빈 문자열) — 개발은 Vite 프록시(/api·/oauth2)가 :8080으로 전달하고,
+// 배포는 같은 도메인 뒤에 백엔드를 두는 표준 구성. 이렇게 하면 쿠키가 모든 메서드에 실려
+// cross-origin + SameSite=Lax 때문에 쓰기(PUT/POST/DELETE) 요청이 미인증되던 문제가 사라진다.
+// 다른 오리진의 백엔드를 써야 할 때만 VITE_API_BASE_URL로 덮어쓴다.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 // HTTP status와 원본 payload를 보존하는 에러 — 호출부가 404/401/500 등을 구분할 수 있다.
 // status 0 = 네트워크 오류(서버 꺼짐 등 fetch 자체가 실패).
@@ -24,10 +28,19 @@ export async function apiRequest(path, options = {}) {
         ...options.headers,
       },
       ...options,
+      // 백엔드는 미인증/예외 시 302로 OAuth(구글)로 리다이렉트한다. follow면 fetch가
+      // cross-origin을 따라가다 throw("서버에 연결할 수 없습니다")로 둔갑하므로,
+      // manual로 받아서 아래에서 "로그인이 필요합니다"로 명확히 처리한다.
+      redirect: "manual",
     });
   } catch {
     // fetch 자체 실패 = 네트워크 오류/서버 꺼짐. status 0으로 구분 가능하게 한다.
     throw new ApiError("서버에 연결할 수 없습니다.", 0, null);
+  }
+
+  // 302 OAuth 리다이렉트(미인증/세션만료) → manual이라 따라가지 않고 opaqueredirect로 온다.
+  if (response.type === "opaqueredirect" || (response.status === 0 && response.type !== "cors")) {
+    throw new ApiError("로그인이 필요합니다. 다시 로그인해 주세요.", 401, null);
   }
 
   // 204 No Content / HTML 에러 페이지 등 JSON이 아닌 응답도 안전하게 처리.
@@ -64,6 +77,10 @@ export const authApi = {
 export const userApi = {
   me() {
     return apiRequest("/api/user/me");
+  },
+  // 닉네임 변경 (로그인 필요)
+  changeName(name) {
+    return apiRequest(`/api/user/me/name?name=${encodeURIComponent(name)}`, { method: "PUT" });
   },
   leaderboard({ page = 0, size = 100 } = {}) {
     return apiRequest(`/api/user/leaderboard?page=${page}&size=${size}`);
@@ -155,20 +172,33 @@ export const adminApi = {
   changeUserStatus(userId, active) {
     return apiRequest(`/api/admin/users/${userId}/status?active=${active}`, { method: "PUT" });
   },
-  createNotice(title, content) {
+  // 공지 작성/수정 — publishAt/expireAt는 ISO 문자열(예약 게시/만료), null이면 즉시·무기한
+  createNotice({ title, content, publishAt = null, expireAt = null }) {
     return apiRequest("/api/admin/notice", {
       method: "POST",
-      body: JSON.stringify({ title, content }),
+      body: JSON.stringify({ title, content, publishAt, expireAt }),
     });
   },
-  updateNotice(id, title, content) {
+  updateNotice(id, { title, content, publishAt = null, expireAt = null }) {
     return apiRequest(`/api/admin/notice/${id}`, {
       method: "PUT",
-      body: JSON.stringify({ title, content }),
+      body: JSON.stringify({ title, content, publishAt, expireAt }),
     });
   },
   deleteNotice(id) {
     return apiRequest(`/api/admin/notice/${id}`, { method: "DELETE" });
+  },
+};
+
+// 경기 관리자 — 다시보기(유튜브) 등록/해제
+export const matchAdminApi = {
+  setReplay(matchId, youtube) {
+    return apiRequest(`/api/admin/match/${matchId}/replay?youtube=${encodeURIComponent(youtube)}`, {
+      method: "PUT",
+    });
+  },
+  clearReplay(matchId) {
+    return apiRequest(`/api/admin/match/${matchId}/replay`, { method: "DELETE" });
   },
 };
 

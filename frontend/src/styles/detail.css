@@ -26,7 +26,7 @@
 .detail-hero {
   position: relative; display: grid; gap: 16px; padding: 26px 22px;
   border: var(--bd-2) solid var(--line); border-radius: var(--r);
-  background: var(--ink); color: var(--paper); box-shadow: 6px 6px 0 var(--shadow-col);
+  background: var(--paper); color: var(--ink); box-shadow: 6px 6px 0 var(--shadow-col);
 }
 .detail-hero .brand-pill { justify-self: center; background: var(--yellow); color: #15130f; box-shadow: none; }
 .detail-hero > p { text-align: center; color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }

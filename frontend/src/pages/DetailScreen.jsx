@@ -10,8 +10,9 @@ import { BenchSection } from "../components/lineup/BenchSection.jsx";
 import { EventTimeline } from "../components/lineup/EventTimeline.jsx";
 import { PredictionPanel } from "../components/match/PredictionPanel.jsx";
 import { AiProbabilityCard } from "../components/match/AiProbabilityCard.jsx";
+import { ReplayPanel } from "../components/match/ReplayPanel.jsx";
 
-export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi, onLogin, onLogout, user }) {
+export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi, onLogin, onOpenMyPage, user }) {
   const [collapsedPanels, setCollapsedPanels] = useState({});
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [aiActionError, setAiActionError] = useState("");
@@ -153,9 +154,10 @@ export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi,
             </div>
           ) : (
             <div className="account-actions">
-              <span className="account-chip">{user?.name || "사용자"}</span>
               {isAdmin && <span className="admin-badge">관리자</span>}
-              <button type="button" onClick={onLogout}>로그아웃</button>
+              <button type="button" className="account-chip account-chip-btn" onClick={onOpenMyPage}>
+                {user?.name || "사용자"}
+              </button>
             </div>
           )}
         </header>
@@ -309,6 +311,20 @@ export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi,
             </CollapsiblePanel>
           )}
 
+          {/* 다시보기 — 영상이 있거나 관리자면 노출(컴포넌트가 내부에서 판단) */}
+          {(match.raw?.replayYoutubeId || isAdmin) && (
+            <CollapsiblePanel
+              badge="REPLAY"
+              className="detail-panel"
+              collapsed={collapsedPanels.replay}
+              id="replay"
+              onToggle={togglePanel}
+              title="다시보기"
+            >
+              <ReplayPanel match={match} isAdmin={isAdmin} />
+            </CollapsiblePanel>
+          )}
+
           <CollapsiblePanel
             className="detail-panel vote-panel"
             collapsed={collapsedPanels.vote}
@@ -327,4 +343,3 @@ export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi,
     </main>
   );
 }
-

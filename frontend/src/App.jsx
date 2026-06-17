@@ -5,6 +5,7 @@ import { normalizeMatch } from "./utils/match.js";
 import { getPageContent } from "./utils/format.js";
 import { MATCH_LIST_FETCH_SIZE } from "./utils/constants.js";
 import { MainScreen } from "./pages/MainScreen.jsx";
+import { NameSetupModal } from "./components/common/NameSetupModal.jsx";
 
 // 화면별 코드 스플리팅 — 메인 외 화면은 필요할 때만 청크를 로드해 초기 번들을 줄인다.
 const LoginScreen = lazy(() => import("./pages/LoginScreen.jsx").then((m) => ({ default: m.LoginScreen })));
@@ -13,7 +14,11 @@ const LeaderboardScreen = lazy(() => import("./pages/LeaderboardScreen.jsx").the
 const MyPredictionsScreen = lazy(() => import("./pages/MyPredictionsScreen.jsx").then((m) => ({ default: m.MyPredictionsScreen })));
 const StandingsScreen = lazy(() => import("./pages/StandingsScreen.jsx").then((m) => ({ default: m.StandingsScreen })));
 const AdminScreen = lazy(() => import("./pages/AdminScreen.jsx").then((m) => ({ default: m.AdminScreen })));
+const MyPageScreen = lazy(() => import("./pages/MyPageScreen.jsx").then((m) => ({ default: m.MyPageScreen })));
 const WorldCupScreen = lazy(() => import("./components/worldcup/WorldCupScreen.jsx").then((m) => ({ default: m.WorldCupScreen })));
+
+// 온보딩(첫 로그인 닉네임 설정) 완료 플래그 키 — 유저별 1회
+const onboardKey = (userId) => `ballix-onboarded-${userId}`;
 
 // 청크 로딩 중 표시할 폴백
 function ScreenFallback() {
@@ -32,8 +37,32 @@ export default function App() {
   const [matchesError, setMatchesError] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [showNameSetup, setShowNameSetup] = useState(false);
   const isLoggedIn = Boolean(currentUser);
   const isAdmin = currentUser?.role === "ADMIN_USER";
+
+  // 첫 로그인(이 기기에서 온보딩 미완료)이면 닉네임 설정 모달을 띄운다.
+  useEffect(() => {
+    if (currentUser && !localStorage.getItem(onboardKey(currentUser.id))) {
+      setShowNameSetup(true);
+    } else {
+      setShowNameSetup(false);
+    }
+  }, [currentUser]);
+
+  // 닉네임 변경을 currentUser에 반영(마이페이지·모달 공용)
+  function applyNameChange(newName) {
+    setCurrentUser((prev) => (prev ? { ...prev, name: newName } : prev));
+  }
+
+  // 온보딩(첫 로그인 닉네임 설정) 완료
+  function finishOnboarding(newName) {
+    if (currentUser) {
+      localStorage.setItem(onboardKey(currentUser.id), "1");
+    }
+    applyNameChange(newName);
+    setShowNameSetup(false);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -163,6 +192,15 @@ export default function App() {
     );
   } else if (screen === "admin" && isAdmin) {
     view = <AdminScreen user={currentUser} onBack={() => setScreen("main")} />;
+  } else if (screen === "mypage" && isLoggedIn) {
+    view = (
+      <MyPageScreen
+        user={currentUser}
+        onBack={() => setScreen("main")}
+        onLogout={handleLogout}
+        onUserUpdate={applyNameChange}
+      />
+    );
   } else if (screen === "detail") {
     view = (
       <DetailScreen
@@ -174,6 +212,7 @@ export default function App() {
         onGenerateAi={handleGenerateAi}
         onLogin={() => setScreen("login")}
         onLogout={handleLogout}
+        onOpenMyPage={() => setScreen("mypage")}
       />
     );
   } else {
@@ -195,6 +234,7 @@ export default function App() {
         onOpenStandings={() => setScreen("standings")}
         onOpenWorldCup={() => setScreen("worldcup")}
         onOpenAdmin={() => (isAdmin ? setScreen("admin") : null)}
+        onOpenMyPage={() => setScreen("mypage")}
         onSelectMatch={(match) => {
           setSelectedMatch(match);
           setScreen("detail");
@@ -203,6 +243,13 @@ export default function App() {
     );
   }
 
-  return <Suspense fallback={<ScreenFallback />}>{view}</Suspense>;
+  return (
+    <Suspense fallback={<ScreenFallback />}>
+      {view}
+      {showNameSetup && currentUser && (
+        <NameSetupModal user={currentUser} onComplete={finishOnboarding} />
+      )}
+    </Suspense>
+  );
 }
 

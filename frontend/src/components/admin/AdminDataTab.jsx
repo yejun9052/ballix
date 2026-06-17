@@ -1,6 +1,6 @@
 // 관리자 - 데이터 관리 탭 (일정/경기/순위 동기화, AI 생성, FotMob 검색, 폴링 주기)
 import { useEffect, useState } from "react";
-import { fotmobAdminApi, adminApi } from "../../services/api.js";
+import { fotmobAdminApi, adminApi, matchAdminApi } from "../../services/api.js";
 import { formatDateInputValue } from "../../utils/format.js";
 
 export function AdminDataTab() {
@@ -17,6 +17,8 @@ export function AdminDataTab() {
   const [searchTeam2, setSearchTeam2] = useState("");
   const [searchComp, setSearchComp] = useState("");
   const [searchResult, setSearchResult] = useState(null);
+  const [replayMatchId, setReplayMatchId] = useState("");
+  const [replayYoutube, setReplayYoutube] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState("");
 
@@ -256,6 +258,47 @@ export function AdminDataTab() {
             <pre>{JSON.stringify(searchResult, null, 2)}</pre>
           </div>
         )}
+      </div>
+
+      {/* 다시보기(유튜브) 등록/해제 */}
+      <div className="data-card">
+        <h3 className="data-card-title">🎬 다시보기 등록</h3>
+        <p className="data-hint">종료된 경기에 유튜브 다시보기 영상을 등록합니다. (링크 또는 영상 ID)</p>
+        <div className="data-row">
+          <label>경기 ID</label>
+          <input
+            type="number" min="1" value={replayMatchId}
+            onChange={(e) => setReplayMatchId(e.target.value)}
+            placeholder="Match DB ID"
+            className="data-input short"
+          />
+          <input
+            type="text" value={replayYoutube}
+            onChange={(e) => setReplayYoutube(e.target.value)}
+            placeholder="유튜브 링크 또는 영상 ID"
+            className="data-input"
+          />
+          <button
+            type="button"
+            className="data-btn"
+            disabled={Boolean(loading) || !replayMatchId || !replayYoutube}
+            onClick={() => run(`다시보기 등록(${replayMatchId})`, () =>
+              matchAdminApi.setReplay(Number(replayMatchId), replayYoutube.trim())
+            )}
+          >
+            {loading === `다시보기 등록(${replayMatchId})` ? "등록 중…" : "등록"}
+          </button>
+          <button
+            type="button"
+            className="data-btn secondary"
+            disabled={Boolean(loading) || !replayMatchId}
+            onClick={() => run(`다시보기 해제(${replayMatchId})`, () =>
+              matchAdminApi.clearReplay(Number(replayMatchId))
+            )}
+          >
+            해제
+          </button>
+        </div>
       </div>
 
       {/* 폴링 주기 */}

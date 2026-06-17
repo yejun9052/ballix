@@ -19,12 +19,12 @@ export function MainScreen({
   matchesError,
   onGenerateAi,
   onLogin,
-  onLogout,
   onOpenLeaderboard,
   onOpenMyPredictions,
   onOpenStandings,
   onOpenWorldCup,
   onOpenAdmin,
+  onOpenMyPage,
   onRetryMatches,
   onSelectMatch,
   user,
@@ -130,10 +130,9 @@ export function MainScreen({
             </div>
           ) : (
             <div className="account-actions">
-              <span className="account-chip">{user?.name || "사용자"}</span>
               {isAdmin && <span className="admin-badge">관리자</span>}
-              <button type="button" onClick={onLogout}>
-                로그아웃
+              <button type="button" className="account-chip account-chip-btn" onClick={onOpenMyPage}>
+                {user?.name || "사용자"}
               </button>
             </div>
           )}

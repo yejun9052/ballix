@@ -11,3 +11,5 @@
 @import "./styles/admin.css";      /* 관리자 */
 @import "./styles/worldcup.css";   /* 월드컵 */
 @import "./styles/login.css";      /* 로그인 */
+@import "./styles/account.css";    /* 마이페이지·닉네임 모달 */
+@import "./styles/replay.css";     /* 다시보기 */
