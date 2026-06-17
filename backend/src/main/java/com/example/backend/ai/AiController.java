@@ -1,9 +1,12 @@
 package com.example.backend.ai;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.exceptopn.UnauthorizedException;
 import com.example.backend.match.Match;
+import com.example.backend.user.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,9 +25,13 @@ public class AiController {
     private final AiSummaryService summaryService;
 
     /** 종료된 경기의 골 내용 요약 — DB에 있으면 가져오고, 없으면 1회 생성·저장 후 반환.
-     *  (공개 엔드포인트라 강제 재생성은 제공하지 않는다 — Gemini 쿼터 남용 방지) */
+     *  로그인한 유저만 조회 가능(강제 재생성은 제공하지 않는다 — Gemini 쿼터 남용 방지). */
     @GetMapping("/summary")
-    public ResponseEntity<CommonResponse<?>> summary(@PathVariable Long matchId) {
+    public ResponseEntity<CommonResponse<?>> summary(@PathVariable Long matchId,
+                                                     @AuthenticationPrincipal Long userId) {
+        if (userId == null) {
+            throw new UnauthorizedException("로그인이 필요합니다.");
+        }
         Match m = summaryService.getOrGenerate(matchId);
         return ResponseEntity.ok(CommonResponse.success(
                 "조회 성공", new SummaryView(m.getId(), m.getAiSummary(), m.getAiSummaryAt())));

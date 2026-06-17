@@ -1,5 +1,6 @@
 package com.example.backend.fotmob;
 
+import com.example.backend.ai.TranslationService;
 import com.example.backend.competition.Competition;
 import com.example.backend.competition.CompetitionRepository;
 import com.example.backend.competition.enums.CompType;
@@ -41,6 +42,7 @@ public class FotmobScheduleService {
     private final TeamRepository teamRepository;
     private final CompetitionRepository competitionRepository;
     private final PredictionService predictionService;
+    private final TranslationService translationService;
 
     /** 자기 자신의 프록시. 날짜별 저장(persistSchedule)을 독립 트랜잭션으로 커밋하기 위해
      *  내부호출이 아닌 프록시 경유로 부른다(같은 빈 self-invocation은 @Transactional이 무시됨). */
@@ -53,6 +55,12 @@ public class FotmobScheduleService {
     private static final Pattern GROUP_PAT = Pattern.compile("\\s*(Grp\\.?\\s*\\w+|Group\\s*\\w+)\\s*$", Pattern.CASE_INSENSITIVE);
     /** 구장 보강은 향후 N일 이내 예정 경기만 — 먼 미래(결승 등)까지 미리 크롤하는 폭주 방지(가까워지면 채워짐). */
     private static final int VENUE_ENRICH_AHEAD_DAYS = 14;
+    /** 한 번에 번역할 팀 수 상한(Gemini 호출당) — 토큰/지연 보호. 나머지는 다음 동기화에서 처리. */
+    private static final int TRANSLATE_BATCH_MAX = 80;
+
+    /** 팀명 번역 동시 실행 방지(P5) — 스케줄 동기화와 관리자 수동 재번역이 같은 팀을 중복 번역하지 않게.
+     *  재진입 가능(ReentrantLock): 수동 경로가 잡은 락 안에서 배치 enrich를 반복 호출해도 막히지 않음. */
+    private final java.util.concurrent.locks.ReentrantLock translateLock = new java.util.concurrent.locks.ReentrantLock();
 
     @Value("${fotmob.schedule.leagues:World Cup,Friendlies}")
     private String leaguesFilter;
@@ -93,6 +101,7 @@ public class FotmobScheduleService {
         }
         int count = self.persistSchedule(date, resp);
         enrichScheduledVenues(resp);   // 저장 커밋 후(트랜잭션 밖) 예정 경기 구장 보강
+        enrichTeamTranslations();      // 새로 들어온 팀(나라) 이름을 한국어로 번역(번역 전=name / 번역 후=nameKo)
         return count;
     }
 
@@ -130,6 +139,81 @@ public class FotmobScheduleService {
     }
 
     /**
+     * 관리자 수동 트리거: 번역 안 된(nameKo 비어있는) 팀을 **전부** 한국어로 번역한다.
+     * 한 번에 TRANSLATE_BATCH_MAX씩 끊어 반복하고, 더 이상 새로 번역되는 게 없으면 멈춘다
+     * (번역 실패로 계속 nameKo가 안 채워지는 이름이 있어도 무한루프에 빠지지 않게). 번역된 총 팀 수를 반환.
+     */
+    public int translateMissingTeamNames() {
+        if (!translateLock.tryLock()) {   // 이미 다른 번역이 진행 중이면 중복 실행 안 함(중복 Gemini 호출 방지, P5)
+            log.info("[fotmob-schedule] 번역이 이미 진행 중이라 수동 재번역 요청 무시");
+            return 0;
+        }
+        try {
+            int total = 0;
+            while (true) {
+                int saved = enrichTeamTranslations();
+                total += saved;
+                if (saved == 0) break;   // 이번 배치에서 새로 번역된 게 없으면(대상 없음/전부 실패) 종료
+            }
+            log.info("[fotmob-schedule] 수동 전체 재번역 완료: 총 {}건", total);
+            return total;
+        } finally {
+            translateLock.unlock();
+        }
+    }
+
+    /**
+     * 아직 번역 안 된 팀(나라) 이름을 한국어로 일괄 번역해 nameKo에 채운다(번역 전=name / 번역 후=nameKo 둘 다 보관).
+     * Gemini 호출(네트워크 I/O)은 트랜잭션 밖에서 한 번에 묶어 수행하고, 저장만 self.applyTeamTranslation으로
+     * 짧은 독립 트랜잭션에서 커밋한다(HTTP-in-transaction 방지). 번역 대상이 없으면 Gemini를 호출하지 않는다(멱등).
+     * 한 번 호출당 최대 TRANSLATE_BATCH_MAX팀만 처리하고 실제로 저장된 건수를 반환한다.
+     */
+    private int enrichTeamTranslations() {
+        // 동시 번역 방지(P5) — 다른 경로(스케줄 동기화 ↔ 관리자 수동)가 번역 중이면 스킵.
+        // ReentrantLock이라 translateMissingTeamNames가 이미 잡은 경우(같은 스레드)엔 재진입 허용.
+        if (!translateLock.tryLock()) return 0;
+        try {
+            return doEnrichTeamTranslations();
+        } finally {
+            translateLock.unlock();
+        }
+    }
+
+    private int doEnrichTeamTranslations() {
+        java.util.List<Team> targets = teamRepository.findUntranslated();
+        if (targets.isEmpty()) return 0;
+        if (targets.size() > TRANSLATE_BATCH_MAX) {
+            targets = targets.subList(0, TRANSLATE_BATCH_MAX);
+        }
+        java.util.List<String> names = targets.stream()
+                .map(Team::getName)
+                .filter(n -> n != null && !n.isBlank())
+                .distinct()
+                .toList();
+        if (names.isEmpty()) return 0;
+
+        java.util.Map<String, String> ko = translationService.translateTeamNames(names);
+        if (ko.isEmpty()) return 0;
+
+        int saved = 0;
+        for (Team t : targets) {
+            String k = ko.get(TranslationService.normalizeKey(t.getName()));   // 정규화 키로 매칭(P3)
+            if (k != null && !k.isBlank()) {
+                self.applyTeamTranslation(t.getId(), k);
+                saved++;
+            }
+        }
+        log.info("[fotmob-schedule] 팀명 한국어 번역 {}건 저장", saved);
+        return saved;
+    }
+
+    /** 팀 한국어 이름만 짧게 반영(단독 트랜잭션). */
+    @Transactional
+    public void applyTeamTranslation(Long teamId, String nameKo) {
+        teamRepository.findById(teamId).ifPresent(t -> t.updateKoName(nameKo));
+    }
+
+    /**
      * 시즌 전체 일정 리그(월드컵 등)를 동기화 — 결승까지 모든 경기를 한 번에 받는다.
      * 날짜 ±N일 방식(syncRange)으로는 못 닿는 먼 미래 경기를 커버한다.
      */
@@ -153,6 +237,7 @@ public class FotmobScheduleService {
         }
         int count = self.persistSchedule("league-" + leagueId, resp);
         enrichScheduledVenues(resp);   // 저장 커밋 후(트랜잭션 밖) 가까운 예정 경기 구장 보강
+        enrichTeamTranslations();      // 새로 들어온 팀(나라) 이름을 한국어로 번역(번역 전=name / 번역 후=nameKo)
         log.info("[fotmob-schedule] 리그 {} 전체 일정 {}경기 동기화", leagueId, count);
         return count;
     }

@@ -2,7 +2,9 @@ package com.example.backend.global.exceptopn;
 
 import com.example.backend.global.common.CommonResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -29,6 +31,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(e.getStatus())
                 .body(CommonResponse.fail(e.getMessage()));
+    }
+
+    // 권한 부족 — @PreAuthorize 거부(AuthorizationDeniedException 포함). 명시 핸들러가 없으면 아래
+    // 광범위 RuntimeException 핸들러가 403을 400으로 둔갑시킨다. 가장 구체적 타입이라 우선 적용됨.
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<CommonResponse<?>> handleAccessDenied(AccessDeniedException e) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(CommonResponse.fail("접근 권한이 없습니다."));
     }
 
     // 그 외 예기치 못한 RuntimeException (500 → /error 포워드 방지용 안전망)

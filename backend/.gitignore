@@ -39,4 +39,8 @@ out/
 ### Secrets ###
 src/main/resources/application.yml
 
+### Logs ###
 _boot*
+*.log
+*.out
+*.err

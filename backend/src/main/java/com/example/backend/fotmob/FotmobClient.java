@@ -2,6 +2,7 @@ package com.example.backend.fotmob;
 
 import com.example.backend.fotmob.dto.FotmobCommentaryResponse;
 import com.example.backend.fotmob.dto.FotmobMatchResponse;
+import com.example.backend.fotmob.dto.FotmobPlayerResponse;
 import com.example.backend.fotmob.dto.FotmobScheduleResponse;
 import com.example.backend.fotmob.dto.FotmobSearchResponse;
 import com.example.backend.fotmob.dto.FotmobTableResponse;
@@ -42,6 +43,14 @@ public class FotmobClient {
                 .uri("/match/{id}", fotmobMatchId)
                 .retrieve()
                 .body(FotmobMatchResponse.class);
+    }
+
+    /** 선수 상세 정보(프로필 + 시즌 스탯). DB 미저장 프록시. */
+    public FotmobPlayerResponse getPlayer(Long playerId) {
+        return restClient.get()
+                .uri("/player/{id}", playerId)
+                .retrieve()
+                .body(FotmobPlayerResponse.class);
     }
 
     /** 날짜별 경기 목록 (date=YYYYMMDD, leagues=쉼표구분 leagueName 부분매칭). */

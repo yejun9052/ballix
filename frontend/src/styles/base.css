@@ -1,0 +1,146 @@
+/* ── 기본 — 디자인 토큰·다크모드·리셋·공통 유틸 ── */
+/* ════════════════════════════════════════════════════════════════
+   BALLIX — Neubrutalist
+   두꺼운 잉크 보더 · 하드 오프셋 그림자 · 대담한 원색 블록 · 청키 타이포.
+   소프트 그라데이션/글래스 전무. 전 구조 반응형.
+   ════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  --ui-saturation: 1.34;
+  --media-saturation: 1.16;
+
+  --paper: #f4efe3;
+  --paper-2: #ece5d4;
+  --surface: #fffdf6;
+  --surface-2: #f0ead9;
+  --surface-3: #e7e0cd;
+
+  --ink: #15130f;
+  --ink-soft: #4a443b;
+  --muted: #756d5e;
+  --faint: #a89f8b;
+
+  --line: #15130f;
+  --line-soft: #ddd5c0;
+
+  --blue: #2f4bff;
+  --blue-ink: #1a2cb0;
+  --blue-soft: #dfe2ff;
+  --yellow: #ffd23e;
+  --yellow-soft: #fff1bf;
+  --yellow-ink: #6b5200;
+  --live: #ff2e2e;
+  --live-soft: #ffdedd;
+  --win: #11a049;
+  --win-soft: #d3f2de;
+  --warn: #e08a00;
+  --warn-soft: #fbe9c6;
+
+  --pitch-pixel-a: #35b85b;
+  --pitch-pixel-b: #258b46;
+  --pitch-pixel-c: #4fd36d;
+  --pitch-pixel-d: #176b36;
+  --pitch-line: rgba(245, 255, 220, 0.78);
+  --pitch-shadow: rgba(4, 50, 25, 0.34);
+
+  --shadow-col: #15130f;
+  --r: 13px;
+  --r-sm: 8px;
+  --r-xs: 5px;
+  --r-pill: 999px;
+  --bd: 2px;
+  --bd-2: 3px;
+
+  --pad: 18px;
+  --maxw: 1660px;
+  --ease: cubic-bezier(0.3, 0.8, 0.3, 1);
+
+  --green: var(--win);
+  --green-soft: var(--win-soft);
+  --red: var(--live);
+  --red-soft: var(--live-soft);
+  --border: var(--line);
+  --text: var(--ink);
+  --violet: var(--blue-ink);
+
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+    "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 리셋 ──────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  overflow-x: hidden;
+}
+#root {
+  min-height: 100vh;
+  filter: saturate(var(--ui-saturation));
+  isolation: isolate;
+}
+h1, h2, h3, h4, p { margin: 0; }
+h1, h2, h3 { letter-spacing: -0.03em; line-height: 1.02; }
+a { color: inherit; text-decoration: none; }
+button { border: 0; margin: 0; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; background: none; }
+input, select, textarea { font: inherit; color: var(--ink); accent-color: var(--blue); }
+img { max-width: 100%; }
+img, .team-crest, .player-photo, .standings-crest { filter: saturate(var(--media-saturation)) contrast(1.04); }
+::selection { background: var(--yellow); color: #15130f; }
+
+* { scrollbar-width: thin; scrollbar-color: var(--line-soft) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: var(--line-soft); border-radius: 999px; }
+
+/* ── 브루탈리즘 공통 ───────────────────────────────────────────── */
+.brand-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--yellow);
+  color: #15130f;
+  font-size: 10px; font-weight: 900;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+.state-message {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 40px 18px; text-align: center;
+  color: var(--muted); font-size: 13px;
+}
+.state-message strong { color: var(--ink-soft); font-weight: 800; }
+.state-message button {
+  padding: 9px 18px;
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--blue); color: #fff;
+  font-weight: 800; font-size: 12px;
+  box-shadow: 3px 3px 0 var(--shadow-col);
+}
+
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; color: var(--muted); font-weight: 800; font-size: 13px; }
+.pager button {
+  width: 36px; height: 36px;
+  border: var(--bd) solid var(--line); border-radius: 50%;
+  background: var(--surface); color: var(--ink); font-size: 12px;
+  box-shadow: 2px 2px 0 var(--shadow-col);
+  transition: transform 0.1s var(--ease), box-shadow 0.1s var(--ease);
+}
+.pager button:not(:disabled):hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 var(--shadow-col); }
+.pager button:not(:disabled):active { transform: translate(2px,2px); box-shadow: 0 0 0 var(--shadow-col); }
+.pager button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+.action-error { color: var(--live); font-weight: 800; font-size: 12px; }
+
+/* 클릭형 블록 공통 인터랙션 */
+.brut { border: var(--bd) solid var(--line); border-radius: var(--r); box-shadow: 4px 4px 0 var(--shadow-col); }
+

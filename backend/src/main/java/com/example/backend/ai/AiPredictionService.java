@@ -1,7 +1,11 @@
 package com.example.backend.ai;
 
 import com.example.backend.fotmob.FotmobStandingService;
+import com.example.backend.fotmob.dto.FotmobPlayerResponse;
 import com.example.backend.fotmob.league.LeagueStanding;
+import com.example.backend.fotmob.lineup.LineupPlayer;
+import com.example.backend.fotmob.lineup.LineupPlayerRepository;
+import com.example.backend.fotmob.player.PlayerService;
 import com.example.backend.global.exceptopn.BadRequestException;
 import com.example.backend.global.exceptopn.NotFoundException;
 import com.example.backend.match.Match;
@@ -16,8 +20,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -31,11 +39,15 @@ import java.util.stream.Collectors;
 public class AiPredictionService {
 
     private static final int FORM_COUNT = 5;
+    /** 핵심 선수 라인에 노출할 팀당 상위 선수 수(시장가치 순). */
+    private static final int KEY_PLAYER_COUNT = 4;
 
     private final MatchRepository matchRepository;
     private final FotmobStandingService standingService;
     private final FifaRankingService fifaRanking;
     private final GeminiClient geminiClient;
+    private final LineupPlayerRepository lineupPlayerRepository;
+    private final PlayerService playerService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -86,6 +98,9 @@ public class AiPredictionService {
         appendStanding(sb, m, m.getAwayTeam(), "원정");
         sb.append("최근폼 ").append(home).append(": ").append(formLine(m.getHomeTeam(), m.getMatchTime())).append("\n");
         sb.append("최근폼 ").append(away).append(": ").append(formLine(m.getAwayTeam(), m.getMatchTime())).append("\n");
+        // 선발 라인업이 발표돼 있으면(킥오프 ~60분 전부터) 선발 22명의 상세(시장가치·시즌폼)를 반영.
+        // 없으면(대부분의 예측 시점) 이 블록을 건너뛰고 위 순위/폼/FIFA만으로 예측(폴백).
+        appendLineupAnalysis(sb, m, home, away);
         // 진행 중이면 라이브 상태(현재 스코어·경과시간) 주입 → 남은 결과 확률을 실시간으로 갱신
         if ("IN_PLAY".equals(m.getStatus())) {
             sb.append("[라이브] 현재 스코어 ").append(home).append(" ").append(nz(m.getHomeScore()))
@@ -115,6 +130,150 @@ public class AiPredictionService {
                         .append(safe(r.getGoalDiff())).append("\n"));
     }
 
+    // ── 선발 라인업 분석(시장가치·시즌폼) ───────────────────────────────
+    /**
+     * 발표된 선발 명단 기반으로 팀 가치 합계·평균 연령·선발 평균 시즌폼·핵심 선수 라인을 다이제스트에 추가.
+     * 선발 22명의 상세(시장가치·스탯)는 PlayerService DB-first lazy-cache로 채운다(없으면 1회 크롤,
+     * TTL 내 재예측·라이브 재예측은 캐시 재사용이라 추가 크롤 없음). 한쪽이라도 선발이 비면 건너뛴다.
+     */
+    private void appendLineupAnalysis(StringBuilder sb, Match m, String home, String away) {
+        List<LineupPlayer> all = lineupPlayerRepository.findByMatchId(m.getId());
+        if (all.isEmpty()) return;
+        List<LineupPlayer> homeStarters = all.stream().filter(p -> p.isHome() && p.isStarter()).toList();
+        List<LineupPlayer> awayStarters = all.stream().filter(p -> !p.isHome() && p.isStarter()).toList();
+        if (homeStarters.isEmpty() || awayStarters.isEmpty()) return;
+
+        sb.append("[선발 라인업 분석] (실제 발표된 선발 명단 기반 — 가장 신뢰도 높은 근거)\n");
+        appendSquad(sb, home, homeStarters);
+        appendSquad(sb, away, awayStarters);
+    }
+
+    /** 한 팀 선발의 가치 합계·평균연령·평균 시즌평점/득점 + 가치 상위 핵심 선수 라인. */
+    private void appendSquad(StringBuilder sb, String teamLabel, List<LineupPlayer> starters) {
+        List<PlayerAgg> aggs = new ArrayList<>();
+        double valueSum = 0;
+        double ageSum = 0;
+        int ageCount = 0;
+        double ratingSum = 0;
+        int ratingCount = 0;
+        double goalSum = 0;
+        int goalCount = 0;
+
+        for (LineupPlayer lp : starters) {
+            Long pid = lp.getFotmobPlayerId();
+            if (pid == null) continue;
+            FotmobPlayerResponse r = playerService.getOrFetch(pid);   // DB-first lazy(캐시 신선하면 크롤 안 함)
+            if (r == null) continue;
+
+            Double value = parseMoneyMillions(infoValue(r, "시장가치", "market value", "market", "value"));
+            Double age = parseNum(infoValue(r, "나이", "age"));
+            Double rating = parseNum(statValue(r, "평점", "rating"));
+            Double goals = parseNum(statValue(r, "골", "goal"));
+            Double assists = parseNum(statValue(r, "도움", "assist"));
+
+            if (value != null) valueSum += value;
+            if (age != null) { ageSum += age; ageCount++; }
+            if (rating != null) { ratingSum += rating; ratingCount++; }
+            if (goals != null) { goalSum += goals; goalCount++; }
+
+            aggs.add(new PlayerAgg(displayName(r, lp), value, rating, goals, assists));
+        }
+        if (aggs.isEmpty()) return;
+
+        sb.append("· ").append(teamLabel).append(" 선발: 팀가치 합계 ").append(formatMillions(valueSum));
+        if (ageCount > 0) sb.append(", 평균연령 ").append(round1(ageSum / ageCount));
+        if (ratingCount > 0) sb.append(", 선발 평균 시즌평점 ").append(round1(ratingSum / ratingCount));
+        if (goalCount > 0) sb.append(", 선발 평균 시즌득점 ").append(round1(goalSum / goalCount));
+        sb.append("\n");
+
+        // 핵심 선수: 시장가치 상위 N명(가치 없으면 뒤로)
+        aggs.sort(Comparator.comparingDouble((PlayerAgg a) -> a.value == null ? -1 : a.value).reversed());
+        sb.append("  핵심선수(").append(teamLabel).append("): ");
+        sb.append(aggs.stream().limit(KEY_PLAYER_COUNT).map(this::keyPlayerLine)
+                .collect(Collectors.joining(", ")));
+        sb.append("\n");
+    }
+
+    private String keyPlayerLine(PlayerAgg a) {
+        StringBuilder b = new StringBuilder(a.name);
+        List<String> parts = new ArrayList<>();
+        if (a.value != null) parts.add(formatMillions(a.value));
+        if (a.goals != null) parts.add("시즌 " + intStr(a.goals) + "골" + (a.assists != null ? " " + intStr(a.assists) + "도움" : ""));
+        if (a.rating != null) parts.add("평점 " + round1(a.rating));
+        if (!parts.isEmpty()) b.append("(").append(String.join(", ", parts)).append(")");
+        return b.toString();
+    }
+
+    private record PlayerAgg(String name, Double value, Double rating, Double goals, Double assists) {}
+
+    private String displayName(FotmobPlayerResponse r, LineupPlayer lp) {
+        if (r.name() != null && !r.name().isBlank()) return r.name();
+        return lp.getName() != null ? lp.getName() : "선수";
+    }
+
+    /** info 항목에서 label이 keys 중 하나를 포함(부분·대소문자 무시)하는 첫 값. */
+    private String infoValue(FotmobPlayerResponse r, String... keys) {
+        if (r.info() == null) return null;
+        for (FotmobPlayerResponse.Info it : r.info()) {
+            if (it.label() == null || it.value() == null) continue;
+            String label = it.label().toLowerCase();
+            for (String k : keys) if (label.contains(k.toLowerCase())) return it.value();
+        }
+        return null;
+    }
+
+    /** stats 항목에서 title이 keys 중 하나를 포함하는 첫 값. */
+    private Object statValue(FotmobPlayerResponse r, String... keys) {
+        if (r.stats() == null) return null;
+        for (FotmobPlayerResponse.Stat st : r.stats()) {
+            if (st.title() == null || st.value() == null) continue;
+            String title = st.title().toLowerCase();
+            for (String k : keys) if (title.contains(k.toLowerCase())) return st.value();
+        }
+        return null;
+    }
+
+    private static final Pattern NUM = Pattern.compile("-?[0-9]+(?:\\.[0-9]+)?");
+
+    /** 임의 값에서 첫 숫자를 추출(스탯은 "12", "7.4", "12 골" 등 혼재). */
+    private Double parseNum(Object o) {
+        if (o == null) return null;
+        if (o instanceof Number n) return n.doubleValue();
+        Matcher mt = NUM.matcher(o.toString());
+        return mt.find() ? Double.parseDouble(mt.group()) : null;
+    }
+
+    /** "€50.0M"/"$900K"/"50000000" 같은 시장가치를 백만(€M) 단위 숫자로 변환. */
+    private Double parseMoneyMillions(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim().toUpperCase().replace(",", "");
+        Matcher mt = Pattern.compile("([0-9]+(?:\\.[0-9]+)?)\\s*([KMB]?)").matcher(s);
+        if (!mt.find()) return null;
+        double v = Double.parseDouble(mt.group(1));
+        switch (mt.group(2)) {
+            case "B" -> v *= 1000;       // 십억 → 백만
+            case "K" -> v /= 1000;       // 천 → 백만
+            case "M" -> { /* 이미 백만 */ }
+            default -> { if (v > 10000) v /= 1_000_000; }  // 접미사 없는 원시 통화값
+        }
+        return v;
+    }
+
+    /** 백만(€M) 단위 합계를 €450M / €1.2B로 표기. */
+    private String formatMillions(double m) {
+        if (m <= 0) return "정보없음";
+        if (m >= 1000) return "€" + round1(m / 1000) + "B";
+        return "€" + Math.round(m) + "M";
+    }
+
+    private String round1(double v) {
+        return String.valueOf(Math.round(v * 10) / 10.0);
+    }
+
+    private String intStr(double v) {
+        return String.valueOf((long) v);
+    }
+
     private String formLine(Team team, LocalDateTime before) {
         if (team == null) return "정보 없음";
         List<Match> recent = matchRepository.findRecentForm(team.getId(), before, PageRequest.of(0, FORM_COUNT));
@@ -139,8 +298,9 @@ public class AiPredictionService {
                 추가로 가장 가능성 높은 최종 스코어를 홈팀 득점(homeScore)·원정팀 득점(awayScore) 정수로 주세요.
 
                 가중치 우선순위:
-                1) 최근 폼·최근 전적과 순위표를 가장 크게 반영하세요(주요 근거).
-                2) FIFA랭킹은 보조 참고 지표로만 약하게 반영하세요(숫자 작을수록 강팀).
+                1) [선발 라인업 분석]이 주어지면(실제 발표된 선발 명단·팀 가치 합계·핵심 선수·선발 평균 시즌폼·평균 연령) 이를 가장 중요한 근거로 삼으세요. 양 팀 팀가치 차이가 크면 가치 높은 팀에 유리하게, 핵심 선수의 시즌 득점·평점이 높으면 그 팀 공격력을 더 인정하세요. (라인업 분석이 없으면 이 항목은 무시)
+                2) 최근 폼·최근 전적과 순위표를 크게 반영하세요(주요 근거).
+                3) FIFA랭킹은 보조 참고 지표로만 약하게 반영하세요(숫자 작을수록 강팀).
                 최근 폼/전적이 FIFA랭킹과 상충하면 최근 폼/전적을 더 신뢰하고, FIFA랭킹 차이만으로 한쪽을 과도하게 몰지 마세요.
                 홈 어드밴티지도 고려하고, 과도한 확신 없이 합리적으로 배분하세요.
                 확률은 5나 10 단위로 반올림하지 말고 1퍼센트 단위로 세밀하게 추정하세요(예: 47, 28, 25). 끝자리가 0이나 5에 치우치지 않게 하세요.

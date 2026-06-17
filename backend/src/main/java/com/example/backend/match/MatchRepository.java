@@ -52,12 +52,15 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
 
     /**
      * 팀 이름으로 경기 검색(관리자 UI에서 matchId 대신 팀명으로 찾기용).
-     * 홈/원정 팀명에 부분일치(대소문자 무시), status 주면 해당 상태만. 최신 경기 먼저.
+     * 홈/원정 팀의 영문명(name)·한국어명(nameKo) 모두에 부분일치(대소문자 무시) — 한글/영어 둘 다 검색 가능.
+     * status 주면 해당 상태만. 최신 경기 먼저.
      */
     @Query("SELECT m FROM Match m " +
             "WHERE (:status IS NULL OR m.status = :status) " +
             "AND (LOWER(m.homeTeam.name) LIKE LOWER(CONCAT('%', :q, '%')) " +
-            "  OR LOWER(m.awayTeam.name) LIKE LOWER(CONCAT('%', :q, '%'))) " +
+            "  OR LOWER(m.awayTeam.name) LIKE LOWER(CONCAT('%', :q, '%')) " +
+            "  OR LOWER(m.homeTeam.nameKo) LIKE LOWER(CONCAT('%', :q, '%')) " +
+            "  OR LOWER(m.awayTeam.nameKo) LIKE LOWER(CONCAT('%', :q, '%'))) " +
             "ORDER BY m.matchTime DESC")
     Page<Match> searchByTeamName(@Param("q") String q,
                                  @Param("status") String status,

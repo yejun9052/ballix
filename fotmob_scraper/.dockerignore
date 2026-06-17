@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+output/
+*.log
+*.err
+*.out
+_*.json

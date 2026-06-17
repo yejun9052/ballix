@@ -109,7 +109,7 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 1. MySQL (3306, DB `backend`)
 2. Python: `fotmob_scraper/.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8800`
 3. 백엔드: `backend/.\gradlew.bat bootRun`
-4. 프론트: `test-api/npm run dev`
+4. 프론트: `frontend/npm run dev`
 
 > 설정 시크릿은 `backend/src/main/resources/application.yml`(gitignore). 템플릿은 `application.yml.example` 복사 후 채우기.
 > AI 쓰려면 `ai.gemini.api-key`(Google AI Studio 키) 필요. 폴링 주기: `fotmob.poll.interval-minutes`(3분), 라이브시계 `fotmob.poll.clock-ms`(11분).

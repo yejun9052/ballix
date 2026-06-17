@@ -1,16 +1,27 @@
 package com.example.backend.fotmob.lineup;
 
+import com.example.backend.fotmob.player.Player;
 import com.example.backend.global.common.BaseTimeEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+import java.util.Map;
+
 /**
- * FotMob 라인업의 선수 1명. 선발/후보 + 평점 + 교체 시각을 담는다.
+ * FotMob 라인업의 선수 1명. 선발/후보 + 평점 + 교체 시각 등 <b>경기별</b> 정보를 담는다.
  * 폴링 시 matchId 기준으로 일괄 삭제 후 재삽입하므로 Match와 연관관계를 두지 않고
  * 외래키 컬럼(matchId)만 보관한다.
+ * <p>
+ * 선수 식별·소속·상세는 {@link Player} 테이블이 정본이며, 여기서는 player_id FK로만 참조한다.
+ * 이름/선수ID는 응답 호환을 위해 getter가 Player에서 위임해 평탄 필드로 내려준다.
  */
 @Entity
 @Getter
@@ -24,11 +35,11 @@ public class LineupPlayer extends BaseTimeEntity {
     @Column(name = "match_id", nullable = false)
     private Long matchId;
 
-    @Column(name = "fotmob_player_id", nullable = true)
-    private Long fotmobPlayerId;
-
-    @Column(nullable = false)
-    private String name;
+    /** 선수(식별·소속·상세의 정본). 직렬화는 평탄 getter로 대체하므로 중첩 노출은 막는다. */
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "player_id")
+    private Player player;
 
     @Column(nullable = true)
     private Integer shirtNumber;
@@ -66,4 +77,34 @@ public class LineupPlayer extends BaseTimeEntity {
     /** 교체 아웃 시각(분). 끝까지 뛰면 null. */
     @Column(nullable = true)
     private Integer subOutMinute;
+
+    /** 경기별 상세 스탯(슈팅·기회 창출·터치 등) JSON — [{title,value}]. 매 폴링 갱신. 진행/종료 시에만 채워짐. */
+    @JsonIgnore
+    @Column(name = "match_stats_json", columnDefinition = "TEXT")
+    private String matchStatsJson;
+
+    /** 응답 호환: 선수 이름을 Player에서 위임해 평탄 필드로 내려준다(기존 스키마 유지). */
+    @JsonProperty("name")
+    public String getName() {
+        return player != null ? player.getName() : null;
+    }
+
+    /** 응답 호환: 선수 FotMob ID(프론트 사진/모달·이벤트 매칭에 사용). */
+    @JsonProperty("fotmobPlayerId")
+    public Long getFotmobPlayerId() {
+        return player != null ? player.getFotmobPlayerId() : null;
+    }
+
+    private static final ObjectMapper MS_MAPPER = new ObjectMapper();
+
+    /** 경기별 상세 스탯을 [{title,value}] 리스트로 내려준다(없으면 빈 리스트). */
+    @JsonProperty("matchStats")
+    public List<Map<String, Object>> getMatchStats() {
+        if (matchStatsJson == null || matchStatsJson.isBlank()) return List.of();
+        try {
+            return MS_MAPPER.readValue(matchStatsJson, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
 }

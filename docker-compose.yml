@@ -1,0 +1,69 @@
+# Ballix 풀스택 한 방 실행 — DB + Python 스크래퍼 + 백엔드를 한 번에 올리고 내린다.
+#   올리기:  docker compose up -d --build
+#   내리기:  docker compose down          (컨테이너 제거, DB 볼륨은 유지)
+#   전부 삭제: docker compose down -v      (DB 볼륨까지 삭제)
+#   로그:    docker compose logs -f backend
+#
+# 프론트(frontend)는 개발용 Vite 서버라 컨테이너에 넣지 않았다 — 평소처럼 `npm run dev`로 띄우면
+# http://localhost:8080 의 백엔드에 그대로 붙는다.
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ballix-mysql
+    restart: unless-stopped
+    ports:
+      # 호스트 포트는 3307로 노출(컨테이너 내부는 3306 그대로) — 호스트 3306이 Docker/WSL stale 바인딩이나
+      # 로컬 MySQL에 점유되면 컨테이너 네트워크 연결까지 깨져 backend가 'mysql' 호스트를 못 찾는 문제가 있었다.
+      # backend는 컨테이너 네트워크의 mysql:3306으로 붙으므로 영향 없음. DB 툴로 직접 볼 땐 127.0.0.1:3307.
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: backend
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p1234"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  fotmob:
+    build: ./fotmob_scraper
+    container_name: ballix-fotmob
+    restart: unless-stopped
+    ports:
+      - "8800:8800"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8800/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  backend:
+    build: ./backend
+    container_name: ballix-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # 컨테이너 타임존을 KST로 — 앱은 모든 시각을 KST로 저장/비교(matchTime·공지예약·ntfy·폴링윈도우·createAt)하는데
+      # 도커 기본 UTC면 LocalDateTime.now()가 9시간 어긋나 라이브 시계·공지·알림이 전부 틀어진다. JVM 기본 TZ도 이 값을 따른다.
+      TZ: Asia/Seoul
+      # 환경변수는 application.yml 값을 덮어쓴다(컨테이너 네트워크의 서비스 이름으로 접속).
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/backend?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: 1234
+      FOTMOB_API_BASE_URL: http://fotmob:8800
+      NTFY_ENABLED: "false"          # 셀프호스트 ntfy를 안 띄우므로 기본 끔(쓰려면 true + NTFY_BASE_URL 지정)
+    depends_on:
+      mysql:
+        condition: service_healthy
+      fotmob:
+        condition: service_healthy
+
+volumes:
+  mysql-data:

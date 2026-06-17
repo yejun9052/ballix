@@ -3,3 +3,7 @@ output/
 __pycache__/
 *.pyc
 _server.*
+_*.json
+*.log
+*.out
+*.err

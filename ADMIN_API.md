@@ -11,6 +11,7 @@
 | `POST /api/fotmob/schedule/sync?pastDays=&futureDays=` | 날짜 범위 일정 동기화 + 시즌 전체 일정(월드컵 결승 대진 포함), 각 최대 30일 |
 | `POST /api/fotmob/schedule/sync/{YYYYMMDD}` | 특정 날짜 일정만 동기화 |
 | `POST /api/fotmob/standings/{competitionId}/sync` | 리그 순위 강제 갱신 (competitionId = 내부 Competition PK) |
+| `POST /api/fotmob/teams/translate` | 팀(나라) 이름 전체 재번역. `nameKo`가 비어있는 팀만 골라 Gemini로 한국어 번역. 응답 `data`=번역된 팀 수. '전체 재번역' 버튼용. |
 
 ## AI
 
@@ -53,4 +54,4 @@
 공개 목록(`GET /api/notice`)은 게시창(publishAt~expireAt) 안의 공지만 노출 — 배치 없이 조회 시점에 자동 게시/내림.
 | `GET /api/admin/users?q=&page=&size=` | 전체 유저 목록 (기본 8건). `q`=이름 부분일치 검색(선택, 비면 전체). email·권한·계정상태 포함. |
 | `PUT /api/admin/users/{id}/role?role=` | 유저 권한 변경. `role=ADMIN_USER` 또는 `COMMON_USER`. 본인 변경 불가. |
-| `PUT /api/admin/users/{id}/status?active=` | 유저 계정 활성(`true`) / 정지(`false`). 본인 변경 불가. |
+| `PUT /api/admin/users/{id}/status?active=&message=` | 유저 계정 활성(`true`) / 정지(`false`). 본인 변경 불가. `message`=정지 안내문(정지 시 선택) → 정지된 유저가 로그인하면 `/home?error=banned&msg=`로 전달, 정지 해제 시 함께 정리됨. |

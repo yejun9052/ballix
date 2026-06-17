@@ -3,7 +3,10 @@ package com.example.backend.fotmob;
 import com.example.backend.fotmob.dto.FotmobMatchResponse;
 import com.example.backend.fotmob.dto.FotmobSearchResponse;
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.team.Team;
+import com.example.backend.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +26,7 @@ public class FotmobDebugController {
     private final FotmobScheduleService scheduleService;
     private final FotmobStandingService standingService;
     private final FotmobPollScheduler pollScheduler;
+    private final TeamRepository teamRepository;
 
     /** 리그 순위 조회 (competitionId = 내부 Competition PK, 페이지당 8). */
     @GetMapping("/standings/{competitionId}")
@@ -73,6 +77,17 @@ public class FotmobDebugController {
         return ResponseEntity.ok(CommonResponse.success("일정 " + n + "경기 동기화", n));
     }
 
+    /**
+     * 팀(나라) 이름 전체 재번역 (수동 트리거) — 아직 한국어 이름(nameKo)이 없는 팀만 골라 Gemini로 번역해 채운다.
+     * '전체 재번역' 버튼용. 이미 번역된 팀은 건드리지 않는다(다시 번역하려면 해당 nameKo를 비워야 함).
+     */
+    @PreAuthorize("hasRole('ADMIN_USER')")
+    @PostMapping("/teams/translate")
+    public ResponseEntity<CommonResponse<?>> translateTeams() {
+        int n = scheduleService.translateMissingTeamNames();
+        return ResponseEntity.ok(CommonResponse.success("팀 이름 " + n + "건 한국어 번역", n));
+    }
+
     /** 특정 날짜(YYYYMMDD) 일정 동기화. */
     @PreAuthorize("hasRole('ADMIN_USER')")
     @PostMapping("/schedule/sync/{date}")
@@ -89,14 +104,27 @@ public class FotmobDebugController {
         return ResponseEntity.ok(CommonResponse.success("미리보기 성공", data));
     }
 
-    /** 팀명/대회로 FotMob 경기 검색 (matchId 후보 확인, 크롤 유발 → 관리자). */
+    /**
+     * 팀명/대회로 FotMob 경기 검색 (matchId 후보 확인, 크롤 유발 → 관리자).
+     * 한글 팀명으로 검색하면 DB의 한국어 이름(nameKo)으로 영문명을 찾아 FotMob에 질의한다 — 한글/영어 둘 다 가능.
+     */
     @PreAuthorize("hasRole('ADMIN_USER')")
     @GetMapping("/search")
     public ResponseEntity<CommonResponse<?>> search(
             @RequestParam String team1,
             @RequestParam(required = false, defaultValue = "") String team2,
             @RequestParam(required = false, defaultValue = "") String competition) {
-        FotmobSearchResponse data = fotmobClient.search(team1, team2, competition);
+        FotmobSearchResponse data = fotmobClient.search(
+                resolveTeamQuery(team1), resolveTeamQuery(team2), competition);
         return ResponseEntity.ok(CommonResponse.success("검색 성공", data));
+    }
+
+    /** 한글 검색어면 DB에서 nameKo 부분일치 팀을 찾아 영문명으로 치환(FotMob 검색은 영문). 못 찾으면 원문 유지. */
+    private String resolveTeamQuery(String token) {
+        if (token == null || token.isBlank()) return token;
+        boolean hasHangul = token.codePoints().anyMatch(c -> c >= 0xAC00 && c <= 0xD7A3);
+        if (!hasHangul) return token;
+        return teamRepository.findByNameKoLike(token.trim(), PageRequest.of(0, 1)).stream()
+                .findFirst().map(Team::getName).orElse(token);
     }
 }

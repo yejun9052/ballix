@@ -124,7 +124,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - 응답: **페이지** — `data.content` = `Match[]` (페이지 메타 포함, `?page=&size=8`)
 
 ### `GET /api/match/search?q={팀이름}&status={상태}`
-**팀 이름으로 경기 검색**(관리자 UI에서 matchId 대신 팀명으로 찾기용). 홈/원정 팀명에 부분일치(대소문자 무시), 최신 경기 먼저.
+**팀 이름으로 경기 검색**(관리자 UI에서 matchId 대신 팀명으로 찾기용). 홈/원정 팀의 **영문명(name)·한국어명(nameKo) 모두**에 부분일치(대소문자 무시) — 한글("대한민국")·영어("Korea") 둘 다 검색 가능. 최신 경기 먼저.
 - `q`: **필수** — 팀 이름 일부(예: `한국`, `Korea`). 비면 빈 페이지
 - `status`: **선택** — 주면 그 상태만(예: `FINISHED` — 다시보기 등록용)
 - 응답: **페이지** — `data.content` = `Match[]` (`?page=&size=8`)
@@ -263,6 +263,15 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - 응답: `data` = `{ "matchId": 103, "summary": "...", "generatedAt": "2026-06-09T12:07:20" }`
 - 진행 전 경기는 거절: `"아직 종료되지 않은 경기는 요약할 수 없습니다."`
 
+### `GET /api/match/{matchId}/highlight`  *(공개)*
+**종료 경기**의 유튜브 하이라이트 영상. **DB-first lazy** — 등록된 영상이 있으면 그대로 반환, 없으면 최초 1회 유튜브에서 자동 검색해 가장 적합한 영상을 골라 저장 후 반환.
+- **선택 기준**: 한국 방송사(KBS/SBS/MBC/JTBC 등)를 우선하고 **FIFA 공식 영상은 제외**(외부 사이트 임베드가 막혀 있음). 후보를 실제 임베드 가능 여부까지 확인해 재생 가능한 영상만 고른다.
+- 관리자가 수동 등록(`PUT /api/admin/match/{id}/replay`)한 영상이 있으면 그게 우선(자동 검색은 비어있을 때만).
+- 응답: `data` = `{ "matchId": 103, "youtubeId": "abcdEFG1234" }` — 영상을 못 찾으면 `youtubeId: null`(잠시 후 재시도). 프론트는 `https://www.youtube.com/embed/{youtubeId}` 로 임베드.
+- 진행 전 경기는 거절: `"아직 종료되지 않은 경기는 하이라이트를 가져올 수 없습니다."`
+
+> 검색 실패/후보 없음이면 **30분 쿨다운** 동안 재검색하지 않고 `youtubeId: null`을 반환합니다(유튜브 크롤 폭주 방지). 종료 직후엔 하이라이트가 아직 안 올라왔을 수 있어 시간이 지나 다시 조회하면 채워집니다.
+
 ---
 
 ## 5-4. 공지사항 (Notice)
@@ -356,6 +365,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
     "id": 29,
     "fotmobTeamId": 6710,
     "name": "Mexico",
+    "nameKo": "멕시코",
     "shortName": "Mexico",
     "tla": "",
     "crest": "https://images.fotmob.com/image_resources/logo/teamlogo/6710.png",
@@ -365,6 +375,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
     "id": 13,
     "fotmobTeamId": 6316,
     "name": "South Africa",
+    "nameKo": "남아프리카 공화국",
     "shortName": "South Africa",
     "tla": "",
     "crest": "https://images.fotmob.com/image_resources/logo/teamlogo/6316.png",
@@ -385,6 +396,8 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
   "liveTime": null,
   "liveStartedAt": null,
+  "liveStartedAtMs": null,
+  "clockRunning": false,
   "firstHalfAddedTime": null,
   "secondHalfAddedTime": null,
   "homeFormation": null,
@@ -408,10 +421,13 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 - `homeScore`/`awayScore`: **경기 전엔 `0`** 으로 옴 (null 아님). 진행/종료 시 실제 스코어로 갱신
 - `venue`: 구장 이름 예 `"Estadio Akron"`. **경기 상세 동기화(폴링/lazy-crawl) 후 채워짐** — 그 전엔 `null`. 일부 소규모 경기는 FotMob에 구장 정보가 없어 계속 `null`일 수 있음
 - `tla`, `emblem`, `shortName` 은 비어있거나 name과 같을 수 있음 — UI엔 `name` + `crest` 사용 권장
+- `nameKo`: **나라/팀명 한국어 번역**(Gemini 자동, 번역 전 원본은 `name`). 크롤 직후엔 잠깐 `null`일 수 있으니 **`nameKo ?? name`** 으로 표시 권장. 한국어 UI는 `nameKo` 우선 사용
 
 **라이브 / 포메이션 (진행 중·라인업 공개 시):**
 - `liveTime`: 진행 분 라벨 예 `"67'"`, 추가시간이면 `"45+2'"`, 하프타임 `"HT"`. IN_PLAY 아니면 `null`
-- `liveStartedAt`: **진행시간 앵커**(폴링시각 − 경과초, KST). 프론트가 `지금 − liveStartedAt`을 초 단위로 계산해 시계를 흘림. **하프타임("HT") 등 정지 구간이면 `liveStartedAt=null`로 내려오니, 값이 없으면 시계를 멈추고 `liveTime` 라벨만 표시**
+- `liveStartedAtMs`: **진행시간 앵커(절대 시각, epoch milliseconds)** — ⭐ **시계 계산엔 이 값을 쓰세요.** `경과초 = (Date.now() − liveStartedAtMs) / 1000`. UTC 절대시각이라 **브라우저/서버 타임존과 무관하게 정확**합니다. 하프타임 등 정지 구간이면 `null`(시계 멈추고 `liveTime` 라벨만 표시).
+- `clockRunning`: **시계가 실제로 흐르는 중인지** (`true`=흐름 / `false`=정지). ⭐ **시계 흘릴지/멈출지 판단은 이 값 한 줄로:** `if (!clockRunning) { 라벨만 표시 }`. **하프타임·종료·예정은 `false`** → 흐르던 시계를 즉시 멈추세요(데이터 갱신 폴링 필요 — 진행 중이면 20초 주기 권장). `liveTime`/앵커 null 추론 없이 이 불리언만 보면 됨. 추가시간 표시는 절대 `45+추가시간`/`90+추가시간`을 넘지 않게 클램프 권장(앵커 stale 폭주 방지).
+- `liveStartedAt`: 같은 앵커의 LocalDateTime(KST) 문자열 — **호환용(deprecated).** 타임존이 없어 `new Date(liveStartedAt)`로 파싱하면 KST 아닌 환경에서 9시간 어긋날 수 있으니, **반드시 `liveStartedAtMs`를 사용**하세요.
 - `firstHalfAddedTime`/`secondHalfAddedTime`: 전·후반 추가시간(분). 심판이 추가시간을 부여하면 채워짐, 아니면 `null`. 프론트는 `"45+4'"`/`"90+N'"` 표기에 사용
 - `homeFormation`/`awayFormation`: 포메이션 문자열 예 `"4-3-3"` (라인업 공개 후)
 
@@ -578,3 +594,72 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 3. **예측** — 로그인 후 `POST /api/prediction/predict` (홈/무/원정 버튼, 라벨은 팀 이름)
 4. **내 예측/결과** — `GET /api/prediction/myPrediction` → 적중 여부 표시
 5. **순위** — `GET /api/fotmob/standings/6`
+
+---
+
+## 9. 기능 점검 현황 (런타임 검증)
+
+> 2026-06-16 점검. MySQL(3306)·Python 스크래퍼(8800)·백엔드(8080)·프론트(5173) **4개 프로세스 전부 가동** 상태에서 실제 엔드포인트를 호출해 확인. ✅ = 정상 응답+실데이터 확인, 🔒 = 미로그인 시 의도대로 차단됨.
+
+### 경기 조회 (공개)
+| 엔드포인트 | 결과 | 비고 |
+|---|---|---|
+| `GET /api/match/allMatch` | ✅ 200 | 페이지(`data.content`), `predictionEnabled` 경기 최상단 정렬 확인 |
+| `GET /api/match/findByCompId?id=77` | ✅ 200 | |
+| `GET /api/match/upcoming` · `?compId=77` | ✅ 200 | 미래 경기만 |
+| `GET /api/match/MatchDay?date=2026-06-16` | ✅ 200 | DB-first lazy-crawl |
+| `GET /api/match/search?q=Korea` · `?q=대한민국` | ✅ 200 | 팀명 검색(한글·영어 모두, 관리자 UI) |
+| `POST /api/fotmob/teams/translate` | ✅ 200 | 팀 이름 전체 재번역(관리자) — `nameKo` 없는 팀만. 응답 data=번역 건수 |
+
+### 경기 상세 — 라인업/이벤트/라이브 (공개)
+| 엔드포인트 | 결과 | 비고 |
+|---|---|---|
+| `GET /api/match/{id}/fotmob` | ✅ 200 | 통합 뷰(스코어·포메이션·라인업·이벤트). base가 `/fotmob`라 lineup/events는 그 하위 경로 |
+| `GET /api/match/{id}/fotmob/lineup` | ✅ 200 | |
+| `GET /api/match/{id}/fotmob/events` | ✅ 200 | |
+| 라이브 시계 (`allMatch`의 IN_PLAY 경기) | ✅ | `liveTime`("34’"), `liveStartedAt` 앵커, 스코어·`venue` 채워짐 확인 |
+
+### 리그 순위 (공개)
+| 엔드포인트 | 결과 | 비고 |
+|---|---|---|
+| `GET /api/fotmob/standings/2` | ✅ 200 | 그룹별 행 반환. **경로변수는 DB Competition PK**(=`allMatch`의 `competition.id`, 월드컵=2) — `fotmobLeagueId`(77) 아님에 주의 |
+| `GET\|POST /api/fotmob/poll-interval` | ✅ 200 | 폴링 주기 조회 |
+
+### AI 기능
+| 엔드포인트 | 결과 | 비고 |
+|---|---|---|
+| `GET /api/match/{id}/ai/summary` | ✅ 200 | 종료 경기 한국어 골 요약 실데이터 확인(캐시) |
+| AI 승률(`aiHomePct/Draw/Away`, 예상 스코어) | ✅ | 매치 응답에 포함, `predictionEnabled` 경기 노출 확인 |
+| `POST /api/admin/ai/predict` (생성) | 🔒 | 관리자 전용 — 미로그인 차단 |
+
+### 예측 / 유저 / 공지
+| 엔드포인트 | 결과 | 비고 |
+|---|---|---|
+| `GET /api/user/leaderboard` | ✅ 200 | `score` 내림차순 랭킹 |
+| `GET /api/notice` · `/notice/{id}` | ✅ 200 | 게시 중 공지 반환 |
+| `GET /api/user/me` | 🔒 401 | 로그인 필요 |
+| `GET /api/prediction/{myPrediction,ratio}` | 🔒 401 | 로그인 필요 |
+
+### 관리자 (전부 `ROLE_ADMIN_USER` 보호)
+| 엔드포인트 | 미로그인 결과 | 비고 |
+|---|---|---|
+| `GET /api/admin/users` | 🔒 400 | 접근 차단됨 |
+| `GET /api/admin/notice` | 🔒 400 | 접근 차단됨 |
+| `GET /api/fotmob/preview/{id}` | 🔒 400 | 관리자 미리보기 |
+
+> 참고: 관리자/보호 엔드포인트는 미로그인 시 **400**(GlobalExceptionHandler 안전망)으로 떨어진다 — 접근은 정상 차단되지만 REST상 401/403이 더 명확. 개선 여지.
+
+### Python 스크래퍼 (8800)
+| 엔드포인트 | 결과 | 비고 |
+|---|---|---|
+| `GET /match/{id}` | ✅ 200 | |
+| `GET /schedule?date=YYYYMMDD` | ✅ 200 | `date` 필수(없으면 422) |
+| `GET /league/{id}/table` | ✅ 200 | 그룹별 순위 |
+| `GET /league/{id}/fixtures` | ✅ 200 | 시즌 전체 일정 |
+| `GET /commentary/{id}` | ✅ 200 | 골 요약 원천(ltc) |
+
+### 런타임 미검증 (코드 배포 확인만)
+- **ntfy 푸시 알림**(`notify` 패키지) — 경기 시작/종료·예측 채점·공지 게시 이벤트 발생 시 전송이라 호출만으론 확인 불가. 코드/빈 등록은 정상.
+- **실시간 AI 승률 갱신**(`AiLivePredictionScheduler`) — `@Scheduled`라 주기 도래 시 동작. 컴포넌트 로드 확인.
+
+**결론: 조회·상세·라이브·AI 요약·순위·리더보드·공지·인증가드·Python 스크래퍼 전 경로 정상 동작 확인.** 위 '미검증' 2건은 이벤트/스케줄 기반이라 정적 확인까지만.

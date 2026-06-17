@@ -1,0 +1,16 @@
+/* ════════════════════════════════════════════════════════════════
+   BALLIX 스타일 — 부분별 파일로 분리(아래 순서대로 로드)
+   수정 시 각 부분 파일을 열어 작업하세요.
+   ════════════════════════════════════════════════════════════════ */
+@import "./styles/base.css";       /* 토큰·리셋·공통 */
+@import "./styles/main.css";       /* 메인 화면 */
+@import "./styles/detail.css";     /* 상세·보드 공통 */
+@import "./styles/lineup.css";     /* 라인업 피치 */
+@import "./styles/match.css";      /* 이벤트·AI·예측 */
+@import "./styles/board.css";      /* 랭킹·순위 */
+@import "./styles/admin.css";      /* 관리자 */
+@import "./styles/worldcup.css";   /* 월드컵 */
+@import "./styles/login.css";      /* 로그인 */
+@import "./styles/account.css";    /* 마이페이지·닉네임 모달 */
+@import "./styles/replay.css";     /* 다시보기 */
+@import "./styles/player.css";     /* 선수 상세 모달 */

@@ -1,0 +1,9 @@
+build/
+.gradle/
+.idea/
+*.log
+*.err
+*.out
+*.err.log
+*.out.log
+HELP.md

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.vite/
+*.local
+
+# 디자인 시안 백업본(커밋 제외)
+*.bak
+*.original

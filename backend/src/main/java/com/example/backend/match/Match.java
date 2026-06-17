@@ -9,7 +9,9 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Getter
@@ -74,6 +76,14 @@ public class Match extends BaseTimeEntity {
     /** 후반 추가시간(분). FotMob AddedTime 이벤트(time=90)에서 채워진다. */
     @Column(name = "second_half_added_time", nullable = true)
     private Integer secondHalfAddedTime;
+
+    /** 현재 하프 정규시간 끝(전반 45 / 후반 90) — FotMob liveTime.basePeriod. 프론트 추가시간 표기 base(라이브만). */
+    @Column(name = "live_base_period", nullable = true)
+    private Integer liveBasePeriod;
+
+    /** 현재 하프에 부여된 추가시간(분) — FotMob liveTime.addedTime. "+N" 표시 상한(라이브만). */
+    @Column(name = "live_added_time", nullable = true)
+    private Integer liveAddedTime;
 
     /** 라인업 포메이션 예: "4-3-3". 라인업 공개 후 채워진다. */
     @Column(name = "home_formation", nullable = true)
@@ -157,8 +167,19 @@ public class Match extends BaseTimeEntity {
     }
 
     /**
+     * 라이브 시계 앵커는 KST 벽시계 기준으로 저장한다 — matchTime(UTC+9 변환 저장)과 동일 기준이라야
+     * 프론트(KST 브라우저)가 `지금 - liveStartedAt`을 올바로 계산한다. 서버 JVM이 UTC(도커)여도 안전.
+     * (이전 `LocalDateTime.now()`는 서버 타임존을 따라 UTC 서버에선 9시간 어긋나 "45+501"처럼 표시됨)
+     */
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+    /** 기존 앵커가 FotMob 경과초와 이 값(30분)보다 크게 어긋나면 재설정 — 9시간(타임존 오류) 같은 큰 오차만 즉시 교정.
+     *  SSR 지연(~10분)은 임계값 아래라 무시 → 잦은 재앵커로 시계가 뒤로 튀는 것을 막는다. */
+    private static final long ANCHOR_RESYNC_THRESHOLD_SEC = 1800;
+
+    /**
      * 폴링 시 진행 시간 갱신. IN_PLAY일 때만 값 유지.
-     * liveStartedAt = 지금 - 경과초 → 이후 어느 시점이든 (현재시각 - liveStartedAt)이 경과시간.
+     * liveStartedAt = 지금(KST) - 경과초 → 이후 어느 시점이든 (현재시각 - liveStartedAt)이 경과시간.
      */
     public void updateLive(String liveTime, Integer liveSeconds) {
         if ("IN_PLAY".equals(this.status)) {
@@ -166,7 +187,7 @@ public class Match extends BaseTimeEntity {
             if (isClockPaused(liveTime)) {
                 this.liveStartedAt = null;   // HT 등 정지 구간: 앵커 제거 → 프론트가 라벨만 표시
             } else if (liveSeconds != null) {
-                this.liveStartedAt = LocalDateTime.now().minusSeconds(liveSeconds);
+                this.liveStartedAt = LocalDateTime.now(KST).minusSeconds(liveSeconds);
             }
         } else {
             this.liveTime = null;
@@ -195,10 +216,42 @@ public class Match extends BaseTimeEntity {
             this.liveStartedAt = null;
             return;
         }
-        if (this.liveStartedAt == null && liveSeconds != null) {
-            this.liveTime = liveTime;
-            this.liveStartedAt = LocalDateTime.now().minusSeconds(liveSeconds);
+        if (liveSeconds == null) {
+            return;
         }
+        this.liveTime = liveTime;
+        // 앵커가 없거나, 기존 앵커가 FotMob 경과초와 크게(>30분) 어긋날 때만 (재)설정.
+        // 작은 차이(SSR 지연)는 무시해 시계가 뒤로 튀지 않게 하고, 9시간(타임존 오류) 같은 큰 오차는 즉시 교정.
+        if (this.liveStartedAt == null
+                || Math.abs(impliedElapsedSeconds() - liveSeconds) > ANCHOR_RESYNC_THRESHOLD_SEC) {
+            this.liveStartedAt = LocalDateTime.now(KST).minusSeconds(liveSeconds);
+        }
+    }
+
+    /** 현재 앵커가 함의하는 경과초 = 지금(KST) - liveStartedAt. (앵커 비정상 여부 판단용) */
+    private long impliedElapsedSeconds() {
+        return Duration.between(this.liveStartedAt, LocalDateTime.now(KST)).getSeconds();
+    }
+
+    /**
+     * 라이브 시계 앵커를 **절대 시각(epoch millis, UTC 기준)** 으로도 함께 내려준다.
+     * liveStartedAt(KST 벽시계)을 KST로 해석해 변환 → 프론트는 타임존 추측 없이 `Date.now() - liveStartedAtMs`로
+     * 경과시간을 계산하면 된다. (LocalDateTime 문자열을 브라우저 로컬로 파싱하던 방식은 KST 아닌 환경에서 9시간 어긋남)
+     * 프론트는 이 값을 우선 쓰고, 없으면 기존 `liveStartedAt`로 폴백.
+     */
+    @Transient
+    public Long getLiveStartedAtMs() {
+        return liveStartedAt == null ? null : liveStartedAt.atZone(KST).toInstant().toEpochMilli();
+    }
+
+    /**
+     * **시계가 실제로 흐르는 중인지** — 프론트는 이 값만 보고 시계를 흘릴지(true)/멈출지(false) 결정하면 된다.
+     * IN_PLAY이고 앵커가 살아있을 때만 true. **하프타임 등 정지 구간은 앵커가 null이라 false**(`liveTime` 라벨만 표시),
+     * 예정/종료도 false. 프론트가 라벨 파싱·null 체크로 추론할 필요 없이 `if (!clockRunning) 멈춤` 한 줄이면 된다.
+     */
+    @Transient
+    public boolean isClockRunning() {
+        return "IN_PLAY".equals(this.status) && this.liveStartedAt != null;
     }
 
     public void updateFormation(String homeFormation, String awayFormation) {
@@ -215,6 +268,17 @@ public class Match extends BaseTimeEntity {
     public void updateAddedTime(Integer firstHalf, Integer secondHalf) {
         if (firstHalf != null) this.firstHalfAddedTime = firstHalf;
         if (secondHalf != null) this.secondHalfAddedTime = secondHalf;
+    }
+
+    /** 현재 하프 base(45/90)·부여 추가시간 갱신 — 프론트 "+N" 표기 기준/상한. IN_PLAY 아니면 정리. */
+    public void updateLiveMeta(Integer basePeriod, Integer addedTime) {
+        if ("IN_PLAY".equals(this.status)) {
+            this.liveBasePeriod = basePeriod;
+            this.liveAddedTime = addedTime;
+        } else {
+            this.liveBasePeriod = null;
+            this.liveAddedTime = null;
+        }
     }
 
     public void markLineupSynced() {

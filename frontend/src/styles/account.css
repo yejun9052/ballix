@@ -1,0 +1,67 @@
+/* ── 계정 — 마이페이지 · 닉네임 설정 모달 · 계정 칩 버튼 ── */
+
+/* 헤더의 이름 칩(클릭 → 마이페이지) */
+.account-chip-btn { cursor: pointer; transition: transform 0.1s var(--ease), box-shadow 0.1s var(--ease); }
+.account-chip-btn:hover { transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--shadow-col); background: var(--yellow); }
+.account-chip-btn:active { transform: translate(1px, 1px); box-shadow: none; }
+
+/* 마이페이지 */
+.mypage-panel { display: grid; gap: 20px; padding: 20px; }
+.mypage-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+}
+.mypage-stats > div {
+  display: grid; gap: 4px; padding: 16px;
+  border: var(--bd) solid var(--line); border-radius: var(--r);
+  background: var(--surface-2); box-shadow: 3px 3px 0 var(--shadow-col);
+}
+.mypage-stats span { font-size: 11px; font-weight: 900; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.mypage-stats strong { font-size: 26px; font-weight: 900; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+
+.mypage-section { display: grid; gap: 10px; padding-top: 18px; border-top: var(--bd) dashed var(--line-soft); }
+.mypage-section h3 { font-size: 14px; font-weight: 900; text-transform: uppercase; }
+.mypage-name-row { display: flex; gap: 8px; }
+.mypage-name-row .data-input { flex: 1; }
+.mypage-msg { color: var(--win); font-weight: 800; font-size: 12px; }
+
+.mypage-logout {
+  width: 100%; padding: 13px;
+  border: var(--bd) solid var(--line); border-radius: var(--r-pill);
+  background: var(--live); color: #fff; font-weight: 900; font-size: 14px;
+  box-shadow: 4px 4px 0 var(--shadow-col);
+  transition: transform 0.1s var(--ease), box-shadow 0.1s var(--ease);
+}
+.mypage-logout:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--shadow-col); }
+.mypage-logout:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow-col); }
+
+@media (max-width: 560px) {
+  .mypage-stats { grid-template-columns: 1fr 1fr; }
+}
+
+/* 닉네임 설정 모달(첫 로그인) */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center; padding: 20px;
+  background: rgba(8, 7, 5, 0.62);
+  backdrop-filter: blur(2px);
+}
+.modal-card {
+  display: grid; gap: 12px;
+  width: min(420px, 100%); padding: 28px;
+  border: var(--bd-2) solid var(--line); border-radius: var(--r);
+  background: var(--surface); box-shadow: 8px 8px 0 var(--shadow-col);
+}
+.modal-card .brand-pill { width: max-content; }
+.modal-card h2 { font-size: 24px; font-weight: 900; }
+.modal-card > p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.modal-card .data-input { height: 46px; font-size: 15px; }
+.modal-submit {
+  margin-top: 4px; padding: 14px;
+  border: var(--bd) solid var(--line); border-radius: var(--r-pill);
+  background: var(--blue); color: #fff; font-weight: 900; font-size: 15px;
+  box-shadow: 4px 4px 0 var(--shadow-col);
+  transition: transform 0.1s var(--ease), box-shadow 0.1s var(--ease);
+}
+.modal-submit:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--shadow-col); }
+.modal-submit:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow-col); }
+.modal-submit:disabled { opacity: 0.6; }

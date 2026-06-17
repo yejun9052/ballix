@@ -1,0 +1,100 @@
+/* ── 선수 상세 모달 + 라인업 클릭 ── */
+
+/* 클릭 가능한 선수(피치/포메이션/벤치) */
+.pitch-player.is-clickable,
+.formation-row.is-clickable,
+.bench-row.is-clickable {
+  cursor: pointer;
+}
+.formation-row.is-clickable:hover,
+.bench-row.is-clickable:hover {
+  background: var(--surface-2);
+}
+.pitch-player.is-clickable:hover .player-photo-wrap {
+  transform: translateY(-2px);
+}
+.pitch-player.is-clickable:focus-visible,
+.formation-row.is-clickable:focus-visible,
+.bench-row.is-clickable:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* 모달 카드(닉네임 모달 스타일 재사용 + 선수용 확장) */
+.player-modal {
+  position: relative;
+  width: min(460px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+}
+.player-modal-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border: var(--bd) solid var(--line); border-radius: var(--r-pill);
+  background: var(--surface); font-weight: 900; cursor: pointer;
+  box-shadow: 3px 3px 0 var(--shadow-col);
+}
+.player-modal-close:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--shadow-col); }
+.player-modal-close:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow-col); }
+
+.player-modal-head {
+  display: flex; align-items: center; gap: 14px;
+  padding-right: 40px;
+}
+.player-modal-head .player-photo { width: 64px; height: 64px; font-size: 24px; }
+.player-modal-id h2 { font-size: 20px; font-weight: 900; line-height: 1.2; }
+.player-modal-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.player-modal-meta span {
+  font-size: 12px; font-weight: 800; color: var(--ink-soft);
+  padding: 2px 8px; border: var(--bd) solid var(--line); border-radius: var(--r-pill);
+  background: var(--surface-2);
+}
+.player-modal-meta .player-modal-loan { background: var(--warn-soft); color: var(--warn); }
+
+.player-modal-body { display: grid; gap: 16px; }
+.player-modal-block { display: grid; gap: 8px; }
+.player-modal-label {
+  font-size: 12px; font-weight: 900; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* 프로필 항목 — label/value 행 */
+.player-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.player-info-item {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 8px 10px;
+  border: var(--bd) solid var(--line); border-radius: var(--r);
+  background: var(--surface-2);
+}
+.player-info-item .pi-label { font-size: 12px; font-weight: 700; color: var(--muted); }
+.player-info-item .pi-value { font-size: 13px; font-weight: 900; text-align: right; }
+
+/* 시즌 스탯 — 큰 숫자 + 라벨 */
+.player-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.player-stat-item {
+  display: grid; gap: 2px; place-items: center; text-align: center;
+  padding: 10px 6px;
+  border: var(--bd) solid var(--line); border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: 3px 3px 0 var(--shadow-col);
+}
+.player-stat-item .ps-value { font-size: 18px; font-weight: 900; }
+.player-stat-item .ps-title { font-size: 11px; font-weight: 700; color: var(--muted); }
+
+/* 경기 모달의 "시즌 기록 보기" 버튼 */
+.player-season-btn {
+  width: 100%;
+  padding: 12px;
+  border: var(--bd) solid var(--line); border-radius: var(--r-pill);
+  background: var(--yellow); color: var(--ink); font-weight: 800;
+  cursor: pointer; box-shadow: 3px 3px 0 var(--shadow-col);
+  transition: transform 0.1s var(--ease), box-shadow 0.1s var(--ease);
+}
+.player-season-btn:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--shadow-col); }
+.player-season-btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--shadow-col); }
+
+@media (max-width: 480px) {
+  .player-info-grid { grid-template-columns: 1fr; }
+  .player-stat-grid { grid-template-columns: repeat(2, 1fr); }
+}

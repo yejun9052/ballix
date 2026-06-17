@@ -30,25 +30,57 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
 
+  task:
+    scheduling:
+      pool:
+        size: 4                     # @Scheduled 작업 동시 실행(라이브 빠른 폴링이 다른 폴링/일정 동기화를 막지 않게)
+
 jwt:
   secret: YOUR_JWT_SECRET_AT_LEAST_32_CHARS   # HS256 서명 키, 32자 이상
 
 fotmob:
   api:
-    base-url: http://127.0.0.1:8800   # Python FotMob 스크래퍼(FastAPI) 주소
+    base-url: http://127.0.0.1:8800   # Python FotMob 스크래퍼(FastAPI) 주소. 도커 실행 시 compose가 http://fotmob:8800 으로 덮어씀
   schedule:
     enabled: true                     # 일정 자동 동기화 on/off
-    leagues: 77,114                   # 수집 리그 leagueId: 77=World Cup(남), 114=Friendlies(남 A매치). 숫자=ID정확매칭, 문자=이름부분매칭
+    leagues: 114                      # 날짜 ±N일 방식 수집 리그 leagueId: 114=Friendlies(남 A매치). 숫자=ID정확매칭, 문자=이름부분매칭
+    full-season-leagues: 77           # 시즌 전체 일정(결승까지) 한 번에 받을 리그: 77=World Cup(남). 토너먼트용
     past-days: 10                     # 부팅 시 과거 N일치까지 일정 동기화
     future-days: 10                   # 미래 N일치까지
     refresh-past-days: 2              # 주기 재동기화 때의 과거 범위(과거는 거의 안 변해 축소 → 크롤 부하↓)
   poll:
     enabled: true                     # 라인업/평점/이벤트 폴링 on/off
     lineup-window-minutes: 60         # 킥오프 N분 전부터 라인업 폴링 시작
-    interval-minutes: 5               # 진행 중 갱신 주기(분) - 관리자 조정 가능
+    interval-minutes: 3               # 진행 중 갱신 주기(분) - 관리자 조정 가능
+    clock-ms: 660000                  # 라이브 진행시간 앵커 갱신 주기(ms). FotMob SSR이 ~10분 갱신이라 11분.
+    live:                             # 라이브 빠른 폴링: IN_PLAY 경기의 이벤트·스코어·하프타임·종료를 초 단위로 즉시 반영
+      enabled: true                   # on/off
+      interval-seconds: 20            # IN_PLAY 경기 1건당 재조회 기준 간격(초). 낮추면 더 빠르게(크롤 부하↑)
+      tick-ms: 2000                   # 스케줄러 깨어나는 주기(due 체크 해상도, ms)
+      jitter-min-ms: 300              # 매 주기에 더하는 랜덤 지터 하한(ms) — 고정 주기 회피
+      jitter-max-ms: 500              # 〃 상한 (예: 20s + 300~500ms)
 
 prediction:
   allowed-leagues: 77                 # 예측 허용 리그 fotmobLeagueId (쉼표구분, 77=월드컵)
+
+ai:
+  gemini:
+    api-key: YOUR_GEMINI_API_KEY      # Google AI Studio 키 (승률예측·골요약용)
+    model: gemini-3.1-flash-lite
+    base-url: https://generativelanguage.googleapis.com/v1beta
+  live-prediction:
+    enabled: true                     # 실시간 AI 승률 갱신 on/off
+    interval-minutes: 15              # 킥오프 기준 재예측 간격(분) — 경과 15·30·45·60·75·90분에 재예측(전·후반만, HT 제외)
+    tick-ms: 60000                    # 경계 확인 주기(ms). 1분마다 깨어나 경과분이 간격을 넘었는지 검사
+  translation:
+    enabled: true                     # 나라/팀명 한국어 번역(Gemini) on/off — 크롤 시 nameKo 자동 채움
+
+ntfy:
+  enabled: false                      # 푸시 알림 on/off (셀프호스트 ntfy 서버 없으면 false)
+  base-url: http://127.0.0.1:8090     # ntfy 주소(ntfy.sh 쓰려면 https://ntfy.sh)
+  topic: ballix-dev                   # 구독 토픽
+  start-window-minutes: 10            # 킥오프 N분 전 '곧 시작' 알림(0이면 끔)
+  start-tick-ms: 60000                # 시작 임박 체크 주기(ms)
 
 server:
   port: 8080
