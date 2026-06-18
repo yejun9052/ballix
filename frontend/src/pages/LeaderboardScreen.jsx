@@ -48,8 +48,8 @@ export function LeaderboardScreen({ onBack, user }) {
 
         <section className="detail-hero compact-hero">
           <span className="brand-pill">LEADERBOARD</span>
-          <h1>적중 랭킹</h1>
-          <p>{LEADERBOARD_MIN_MATCHES}경기 이상 참여하면 공식 순위에 집계됩니다.</p>
+          <h1>포인트 랭킹</h1>
+          <p>역배 가중 누적 포인트 순위입니다. {LEADERBOARD_MIN_MATCHES}경기 이상 참여하면 공식 순위에 집계됩니다.</p>
         </section>
 
         <section className="detail-panel board-panel">
@@ -63,6 +63,7 @@ export function LeaderboardScreen({ onBack, user }) {
               <li className="rank-row rank-head">
                 <span className="rank-no">순위</span>
                 <span className="rank-name">이름</span>
+                <span className="rank-stat rank-points">포인트</span>
                 <span className="rank-stat">경기</span>
                 <span className="rank-stat">적중</span>
                 <span className="rank-stat">적중률</span>
@@ -80,9 +81,10 @@ export function LeaderboardScreen({ onBack, user }) {
                       {row.name}
                       {isMe && <em className="me-tag">나</em>}
                     </span>
+                    <span className="rank-stat rank-points">{row.score ?? 0}</span>
                     <span className="rank-stat">{row.matchesPlayed}</span>
                     <span className="rank-stat">{row.correctCount}</span>
-                    <span className="rank-stat">{row.winRate ?? row.accuracy ?? "—"}%</span>
+                    <span className="rank-stat">{row.accuracy ?? row.winRate ?? "—"}%</span>
                   </li>
                 );
               })}

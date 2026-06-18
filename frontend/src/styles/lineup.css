@@ -122,9 +122,17 @@
 .player-photo.has-img img { width: 100%; height: 100%; object-fit: cover; }
 .player-photo.small { width: 32px; height: 32px; font-size: 12px; border-width: 2px; }
 
-.pitch-player.abs .player-photo-wrap .pitch-rating { position: absolute; top: -6px; right: -8px; left: auto; bottom: auto; z-index: 4; }
+.pitch-player.abs .player-photo-wrap .pitch-rating { position: absolute; top: -8px; right: -10px; left: auto; bottom: auto; z-index: 4; min-width: 24px; height: 18px; font-size: 10px; padding: 0 5px; }
 .player-photo-wrap .player-marks.cards { position: absolute; top: -6px; left: -8px; z-index: 4; display: flex; flex-direction: column; gap: 2px; align-items: center; }
 .player-photo-wrap .player-marks.goals { position: absolute; bottom: -6px; right: -8px; z-index: 4; display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.player-photo-wrap .pitch-sub {
+  position: absolute; bottom: -5px; left: -9px; z-index: 4;
+  display: inline-grid; place-items: center;
+  height: 16px; padding: 0 5px;
+  border: 1.5px solid #15130f; border-radius: var(--r-pill);
+  background: var(--live); color: #fff;
+  font-size: 9px; font-weight: 900; white-space: nowrap;
+}
 
 .pitch-info { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 5px; pointer-events: none; }
 .pitch-name { display: flex; justify-content: center; gap: 4px; white-space: nowrap; font-size: 11px; line-height: 1.1; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.85); }
@@ -136,8 +144,9 @@
 .sub-badge.pitch-sub { position: static; transform: none; }
 .sub-badge.legend-sub { position: static; transform: none; }
 
-.mark { display: inline-grid; place-items: center; font-size: 11px; line-height: 1; }
+.mark { display: inline-flex; align-items: center; gap: 1px; font-size: 11px; line-height: 1; }
 .mark.goal, .mark.assist { font-size: 12px; }
+.mark-count { font-size: 9px; font-weight: 900; line-height: 1; font-style: normal; }
 .mark.card { width: 11px; height: 15px; border: 1.5px solid #15130f; border-radius: 2px; }
 .mark.card.yellow { background: var(--yellow); }
 .mark.card.red { background: var(--live); }
@@ -257,6 +266,13 @@
       linear-gradient(var(--pitch-line) 0 0) 0 0 / 224px 10px no-repeat;
   }
   .lineup-fallback, .bench-grid { grid-template-columns: 1fr; }
+
+  /* 세로 피치: 선수 카드·사진 축소로 같은 라인 다인 선수 겹침 방지 */
+  .pitch-board.pitch-abs.is-vertical .pitch-player.abs { width: 52px; }
+  .pitch-board.pitch-abs.is-vertical .player-photo { width: 36px; height: 36px; }
+  .pitch-board.pitch-abs.is-vertical .pitch-info { margin-top: 2px; gap: 1px; }
+  .pitch-board.pitch-abs.is-vertical .pitch-name { font-size: 9px; }
+  .pitch-board.pitch-abs.is-vertical .pos-tag { font-size: 8px; padding: 0 4px; }
 }
 
 

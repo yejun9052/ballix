@@ -1,5 +1,5 @@
 // 메인 화면 — 경기 일정 목록(필터/라이브/사이드 레일)
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart3, Trophy } from "lucide-react";
 import { competitionFilters, aiFilters, WORLD_CUP_LEAGUE_ID } from "../utils/constants.js";
 import { getCompetitionFilterValue, compareMatches } from "../utils/match.js";
@@ -33,6 +33,11 @@ export function MainScreen({
   const [groupFilter, setGroupFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState(() => formatDateInputValue(new Date()));
   const [aiFilter, setAiFilter] = useState("all");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 6;
+
+  // 필터 바뀔 때 첫 페이지로
+  useEffect(() => { setPage(0); }, [competitionFilter, groupFilter, dateFilter, aiFilter]);
   // 월드컵 조 목록 — 경기 목록이 바뀔 때만 재계산
   const worldCupGroups = useMemo(
     () =>
@@ -138,18 +143,24 @@ export function MainScreen({
           )}
         </header>
 
-        {!isLoggedIn && (
-          <section className="main-hero">
-            <div>
-              <span className="brand-pill">MATCH DAY NOTE</span>
-              <h1>오늘 열리는 경기를 먼저 천천히 둘러보세요</h1>
-              <p>로그인 전에는 일정과 경기 흐름을 가볍게 확인하고, 로그인 후에는 AI 승률과 나의 승부예측 기록을 이어서 볼 수 있습니다.</p>
-              <button type="button" onClick={onLogin}>
-                로그인하고 예측하기
-              </button>
-            </div>
-          </section>
-        )}
+        <section className="main-hero">
+          <div>
+            <span className="brand-pill">MATCH DAY NOTE</span>
+            {isLoggedIn ? (
+              <>
+                <h1>안녕하세요, {user?.name || "사용자"}님!</h1>
+                <p>오늘도 경기를 즐겨보세요. AI 승률 확인과 승부예측 기록을 이어서 볼 수 있습니다.</p>
+                <button type="button" onClick={onOpenMyPredictions}>내 예측 보기</button>
+              </>
+            ) : (
+              <>
+                <h1>오늘 열리는 경기를 먼저 천천히 둘러보세요</h1>
+                <p>로그인 전에는 일정과 경기 흐름을 가볍게 확인하고, 로그인 후에는 AI 승률과 나의 승부예측 기록을 이어서 볼 수 있습니다.</p>
+                <button type="button" onClick={onLogin}>로그인하고 예측하기</button>
+              </>
+            )}
+          </div>
+        </section>
 
         <section className="feed-panel" id="predictions">
           <NoticeBanner />
@@ -254,26 +265,41 @@ export function MainScreen({
           {!isMatchesLoading && !matchesError && matches.length > 0 && filteredCount === 0 && (
             <StateMessage text="필터에 맞는 경기 일정이 없습니다" />
           )}
-          {!isMatchesLoading && !matchesError && restMatches.length > 0 && (
-            <div className="prediction-feed">
-              {restMatches.map((item) => (
-                <ScheduleItem
-                  item={item}
-                  key={item.id}
-                  isAdmin={isAdmin}
-                  onSelect={onSelectMatch}
-                  onGenerateAi={onGenerateAi}
-                />
-              ))}
-            </div>
-          )}
+          {!isMatchesLoading && !matchesError && restMatches.length > 0 && (() => {
+            const totalPages = Math.ceil(restMatches.length / PAGE_SIZE);
+            const safePage = Math.min(page, totalPages - 1);
+            const pageMatches = restMatches.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+            return (
+              <>
+                <div className="prediction-feed">
+                  {pageMatches.map((item) => (
+                    <ScheduleItem
+                      item={item}
+                      key={item.id}
+                      isAdmin={isAdmin}
+                      onSelect={onSelectMatch}
+                      onGenerateAi={onGenerateAi}
+                    />
+                  ))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="schedule-pager">
+                    <div className="pager">
+                      <button disabled={safePage === 0} onClick={() => setPage((p) => p - 1)}>‹</button>
+                      <span>{safePage + 1} / {totalPages}</span>
+                      <button disabled={safePage >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>›</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </section>
 
         <aside className="side-feed">
           <section className="feed-panel" id="matches">
             <div className="panel-head compact">
               <h2>Live</h2>
-              <span>BETA</span>
             </div>
             <div className="match-list">
               {liveMatches.length === 0 ? (

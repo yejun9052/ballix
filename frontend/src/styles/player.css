@@ -1,5 +1,61 @@
 /* ── 선수 상세 모달 + 라인업 클릭 ── */
 
+/* 헤더 사진 래퍼 — 평점 오버레이용 */
+.pm-photo-wrap { position: relative; flex-shrink: 0; }
+.pm-photo-wrap .player-photo { width: 64px; height: 64px; font-size: 24px; }
+.pm-rating {
+  position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+  font-size: 10px !important; height: 18px !important;
+  padding: 0 6px !important; min-width: 0 !important;
+  white-space: nowrap;
+}
+
+/* 카테고리 그룹 — 이 경기 스탯 */
+.stat-groups { display: grid; gap: 8px; }
+
+.stat-group {
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  box-shadow: 2px 2px 0 var(--shadow-col);
+}
+
+.stat-group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-soft);
+  border-left: 4px solid var(--cat-color, var(--blue));
+  font-size: 11px; font-weight: 900;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.stat-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  background: var(--surface);
+}
+
+.stat-item {
+  display: grid; gap: 3px; place-items: center; text-align: center;
+  padding: 10px 6px;
+  border-right: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.stat-item:last-child { border-right: 0; border-bottom: 0; }
+.stat-item:nth-last-child(-n+3):first-child ~ .stat-item { border-bottom: 0; }
+
+.si-val {
+  font-size: 15px; font-weight: 900; color: var(--ink);
+  font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.si-lbl {
+  font-size: 10px; font-weight: 700; color: var(--muted);
+  line-height: 1.3; text-align: center; max-width: 80px;
+}
+
+
 /* 클릭 가능한 선수(피치/포메이션/벤치) */
 .pitch-player.is-clickable,
 .formation-row.is-clickable,
@@ -42,7 +98,6 @@
   display: flex; align-items: center; gap: 14px;
   padding-right: 40px;
 }
-.player-modal-head .player-photo { width: 64px; height: 64px; font-size: 24px; }
 .player-modal-id h2 { font-size: 20px; font-weight: 900; line-height: 1.2; }
 .player-modal-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .player-modal-meta span {

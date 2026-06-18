@@ -15,12 +15,16 @@ export const PlayerMarks = memo(function PlayerMarks({ marks }) {
       )}
       {hasGoals && (
         <span className="player-marks goals">
-          {Array.from({ length: marks.goals }).map((_, i) => (
-            <span className="mark goal" key={`g${i}`} title="골">⚽</span>
-          ))}
-          {Array.from({ length: marks.assists }).map((_, i) => (
-            <span className="mark assist" key={`a${i}`} title="어시스트">🅰️</span>
-          ))}
+          {marks.goals > 0 && (
+            <span className="mark goal" title={`골 ${marks.goals}`}>
+              ⚽{marks.goals > 1 && <b className="mark-count">×{marks.goals}</b>}
+            </span>
+          )}
+          {marks.assists > 0 && (
+            <span className="mark assist" title={`어시스트 ${marks.assists}`}>
+              🅰️{marks.assists > 1 && <b className="mark-count">×{marks.assists}</b>}
+            </span>
+          )}
         </span>
       )}
     </>

@@ -40,17 +40,15 @@ export function PitchPlayer({ events, player, side, vertical = false, onSelect }
         {Number.isFinite(player.rating) && (
           <span className={`rating-chip pitch-rating ${getRatingClass(player.rating)}`}>{player.rating}</span>
         )}
+        {subOut !== null && (
+          <span className="pitch-sub" title={`${subOut}분 교체 아웃`}>↓{subOut}'</span>
+        )}
       </div>
       <div className="pitch-info" title={player.name || ""}>
         <div className="pitch-name">
           {Number.isFinite(player.shirtNumber) && <span>{player.shirtNumber}</span>}
           <strong>{(player.name || "").split(" ").pop()}</strong>
         </div>
-        {subOut !== null && (
-          <span className="sub-badge out pitch-sub" title={`${subOut}분 교체 아웃`}>
-            ↓{subOut}'
-          </span>
-        )}
         {position && <span className="pos-tag">{position}</span>}
       </div>
     </div>

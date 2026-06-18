@@ -65,9 +65,9 @@
   font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em;
 }
 
-/* 히어로 — 로그인 전 안내 */
+/* 히어로 — 로그인 전/후 안내 */
 .main-hero {
-  position: relative; display: flex; align-items: center; gap: 22px;
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 22px;
   padding: 28px;
   border: var(--bd-2) solid var(--line); border-radius: var(--r);
   background: #f6ead2; color: #21352a;
@@ -87,13 +87,13 @@
     linear-gradient(90deg, #416f58 0 33%, #d7a936 33% 66%, #c76d43 66%);
   opacity: 0.85;
 }
-.main-hero > div { display: grid; gap: 11px; max-width: 720px; }
+.main-hero > div { display: grid; gap: 11px; max-width: 720px; justify-items: center; text-align: center; }
 .main-hero .brand-pill { width: max-content; background: #416f58; color: #fffaf0; box-shadow: none; }
 .main-hero h1 { font-size: clamp(23px, 3.6vw, 40px); font-weight: 900; }
 .main-hero h1 em { font-style: normal; color: #c76d43; }
 .main-hero p { color: #665b48; font-size: 14px; max-width: 58ch; font-weight: 750; }
 .main-hero button {
-  margin-left: auto; flex-shrink: 0;
+  flex-shrink: 0;
   padding: 14px 26px;
   border: var(--bd) solid #21352a; border-radius: var(--r-pill);
   background: #d7a936; color: #15130f; font-weight: 900; font-size: 14px;
@@ -143,7 +143,7 @@
   width: 100vw;
   margin: 8px calc(50% - 50vw) -48px;
   padding: 36px max(var(--pad), calc((100vw - var(--maxw)) / 2 + var(--pad)));
-  background: #e2d7c1;
+  background: var(--paper);
   color: #2d3328;
 }
 
@@ -293,9 +293,10 @@
 
 .item-body { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
 .status-pill { display: none; }
-.match-team { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.match-team strong { font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.match-team.away { flex-direction: row-reverse; text-align: right; }
+.match-team { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; }
+.match-team strong { flex: 1; min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.match-team.away { text-align: right; }
+.match-team.away strong { text-align: right; }
 
 .match-centerline { display: grid; justify-items: center; gap: 3px; }
 .match-centerline h3 { font-size: 13px; font-weight: 900; color: var(--faint); }
@@ -340,6 +341,7 @@
 .match-card > div:last-child { text-align: right; justify-items: end; }
 .match-card strong { font-size: 13px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .match-card span { font-size: 10px; color: var(--muted); }
+.match-card span .live-clock { color: #fff; }
 .match-card b { font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
 
 /* 바로가기 / AI 노트 */
@@ -357,6 +359,8 @@
 .ai-note { padding: 15px 18px; border-top: var(--bd) solid var(--line); background: var(--surface-2); }
 .ai-note strong { display: block; color: var(--ink); font-size: 12px; font-weight: 900; margin-bottom: 3px; }
 .ai-note p { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+
+.schedule-pager { padding: 4px 16px 16px; }
 
 @media (max-width: 560px) {
   .item-body { grid-template-columns: 1fr auto 1fr; }

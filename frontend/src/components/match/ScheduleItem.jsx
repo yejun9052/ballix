@@ -14,7 +14,7 @@ export function ScheduleItem({ isAdmin, item, live = false, onGenerateAi, onSele
     try {
       await onGenerateAi(item.id, { force: false });
     } catch (generateError) {
-      setError(generateError.message || "생성 실패");
+      setError(generateError.response?.data?.msg || "생성 실패");
     } finally {
       setIsGenerating(false);
     }

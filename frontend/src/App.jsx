@@ -67,6 +67,16 @@ export default function App() {
     setShowNameSetup(false);
   }
 
+  // 다른 기기 로그인으로 세션이 무효화되면(SESSION_REPLACED) 로그아웃 처리하고 로그인 화면으로 보낸다.
+  useEffect(() => {
+    function handleSessionReplaced() {
+      setCurrentUser(null);
+      setScreen("login");
+    }
+    window.addEventListener("ballix:session-replaced", handleSessionReplaced);
+    return () => window.removeEventListener("ballix:session-replaced", handleSessionReplaced);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 

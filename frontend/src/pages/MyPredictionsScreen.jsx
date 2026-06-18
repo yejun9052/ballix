@@ -38,7 +38,7 @@ export function MyPredictionsScreen({ onBack }) {
     };
   }, []);
 
-  const gradedCount = rows.filter((row) => row.isCorrect !== null).length;
+  const gradedCount = rows.filter((row) => row.isCorrect != null).length;
   const correctCount = rows.filter((row) => row.isCorrect === true).length;
 
   return (
