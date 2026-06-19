@@ -25,6 +25,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
+    private final CustomOidcUserService customOidcUserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
     private final JwtFiller jwtFiller;
     private final HttpCookieOAuth2AuthorizationRequestRepository cookieAuthRequestRepository;
@@ -47,8 +48,10 @@ public class SecurityConfig {
                         // 인가요청(state)을 세션 대신 쿠키에 저장 → STATELESS·클라우드에서 콜백까지 보존
                         .authorizationEndpoint(a -> a.authorizationRequestRepository(cookieAuthRequestRepository))
                         // 구글 정보 받아서 처리할 서비스 = 우리가 만든 거
+                        // Google은 OIDC라 oidcUserService가 실제로 호출된다(userService는 비OIDC 대비).
                         .userInfoEndpoint(userInfo -> userInfo
-                                .userService(customOAuth2UserService))
+                                .userService(customOAuth2UserService)
+                                .oidcUserService(customOidcUserService))
                         // 로그인 성공하면 부를 핸들러 = 우리가 만든 거
                         .successHandler(oAuth2SuccessHandler))
                 .formLogin(form -> form.disable())
