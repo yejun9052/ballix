@@ -7,6 +7,7 @@ import com.example.backend.user.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
@@ -22,7 +23,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
-    private static final String FRONTEND_BASE = "http://localhost:5173";
+    // 운영에선 app.frontend-base-url(예: https://ballix.vercel.app)을 주입, 로컬은 기본값.
+    @Value("${app.frontend-base-url:http://localhost:5173}")
+    private String frontendBase;
 
     private final JwtProvider jwtProvider;
     private final CookieUtil cookieUtil;
@@ -44,7 +47,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         // 정지(비활성) 계정은 토큰 발급 차단 → 로그인 거부.
         // 관리자가 등록한 안내 메시지를 ?error=banned&msg=... 로 실어보내 프론트가 그대로 표시.
         if (!user.isActive()) {
-            String url = FRONTEND_BASE + "/home?error=banned";
+            String url = frontendBase + "/home?error=banned";
             String msg = user.getBanMessage();
             if (msg != null && !msg.isBlank()) {
                 url += "&msg=" + URLEncoder.encode(msg, StandardCharsets.UTF_8);
@@ -60,7 +63,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         String accessToken = jwtProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole(), sessionId);
         cookieUtil.addCookie(response, "access_token", accessToken);
-        response.sendRedirect(FRONTEND_BASE + "/home");
+        response.sendRedirect(frontendBase + "/home");
     }
 
 

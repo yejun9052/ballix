@@ -66,11 +66,15 @@ public class SecurityConfig {
 
     }
 
+    // 운영에선 app.cors.allowed-origins로 Vercel 도메인을 주입(쉼표구분),
+    // 로컬은 기본값(localhost 모든 포트). 패턴이라 https://*.vercel.app 같은 와일드카드도 가능.
+    @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins:http://localhost:*}")
+    private String allowedOrigins;
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        // 개발 편의: localhost 모든 포트 허용 (Vite가 5173 점유 시 5174 등으로 떠도 동작)
-        config.setAllowedOriginPatterns(List.of("http://localhost:*"));
+        config.setAllowedOriginPatterns(List.of(allowedOrigins.split(",")));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);   // ← 쿠키 주고받으려면 필수!
