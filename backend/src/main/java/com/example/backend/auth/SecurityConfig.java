@@ -27,6 +27,7 @@ public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
     private final JwtFiller jwtFiller;
+    private final HttpCookieOAuth2AuthorizationRequestRepository cookieAuthRequestRepository;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -37,11 +38,14 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // 2. 어떤 요청에 인증이 필요한지 설정
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/**").permitAll()
-//                        .anyRequest().authenticated() // 로그인된 사용자 전부 ( 1차 잠금 )
+                        // OAuth 로그인 경로/에러도 명시적으로 허용(미허용 시 콜백이 fall-through 403됨)
+                        .requestMatchers("/api/**", "/oauth2/**", "/login/**", "/error").permitAll()
+                        .anyRequest().permitAll()  // URL 단계는 개방, 실제 인가는 JwtFiller+@PreAuthorize가 담당
                 )
                 // 3. OAuth2 로그인 설정 ← 핵심 연결
                 .oauth2Login(oauth -> oauth
+                        // 인가요청(state)을 세션 대신 쿠키에 저장 → STATELESS·클라우드에서 콜백까지 보존
+                        .authorizationEndpoint(a -> a.authorizationRequestRepository(cookieAuthRequestRepository))
                         // 구글 정보 받아서 처리할 서비스 = 우리가 만든 거
                         .userInfoEndpoint(userInfo -> userInfo
                                 .userService(customOAuth2UserService))
