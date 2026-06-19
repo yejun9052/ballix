@@ -99,6 +99,8 @@ async def extract_from_page(page: Page, page_url: str, match_id: Optional[str], 
                     if isinstance(body, dict) and "general" in body:
                         captured.update(body)
                         capture_done.set()
+                        # FotMob 페이지가 스스로 쏜 /api/data/matchDetails XHR을 가로챔 = 신선값.
+                        print(f"[fotmob] source=XHR-CAPTURE (fresh) matchId={match_id}", flush=True)
             except Exception:
                 pass
 
@@ -120,7 +122,9 @@ async def extract_from_page(page: Page, page_url: str, match_id: Optional[str], 
             if data:
                 captured.update(data)
                 capture_done.set()
-                log("[fotmob] 페이지 내 fetch 성공")
+                # verbose와 무관하게 항상 찍어 운영(Render) 로그에서 신선/지연 경로를 확인 가능하게 한다.
+                # LIVE-FETCH = /api/data/matchDetails 신선값. 라이브 HT·스코어가 즉시 반영되는 경로.
+                print(f"[fotmob] source=LIVE-FETCH (fresh) matchId={match_id}", flush=True)
 
         # 방법 2: Next.js SSR 데이터 추출
         if not capture_done.is_set():
@@ -130,13 +134,14 @@ async def extract_from_page(page: Page, page_url: str, match_id: Optional[str], 
                 if "general" in props:
                     captured.update(props)
                     capture_done.set()
-                    log("[fotmob] Next.js SSR 데이터 추출 성공")
+                    # SSR-FALLBACK = __NEXT_DATA__(~10분 캐시). 라이브면 HT/스코어가 최대 10분 늦는 원인.
+                    print(f"[fotmob] source=SSR-FALLBACK (stale ~10min) matchId={match_id}", flush=True)
                 else:
                     match_data = props.get("matchDetails") or props.get("data") or props.get("match")
                     if match_data and isinstance(match_data, dict) and "general" in match_data:
                         captured.update(match_data)
                         capture_done.set()
-                        log("[fotmob] Next.js 중첩 데이터 추출 성공")
+                        print(f"[fotmob] source=SSR-FALLBACK(nested) (stale ~10min) matchId={match_id}", flush=True)
                     else:
                         log(f"[fotmob] Next.js 데이터 키: {list(props.keys())}")
 
