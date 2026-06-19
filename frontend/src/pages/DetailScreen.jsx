@@ -1,6 +1,7 @@
 // 경기 상세 화면 — 라인업·이벤트·AI승률·골요약·승부예측
 import { useEffect, useState } from "react";
 import { getFotmobView, getAiSummary, getHighlight } from "../api/match.js";
+import { SidebarAds } from "../components/common/AdBanner.jsx";
 import { TeamCrest } from "../components/common/TeamCrest.jsx";
 import { StateMessage } from "../components/common/StateMessage.jsx";
 import { LiveClock } from "../components/common/LiveClock.jsx";
@@ -166,6 +167,7 @@ export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi,
 
   return (
     <main className="detail-shell">
+      <SidebarAds />
       <section className="detail-screen">
         <header className="detail-topbar">
           <button type="button" onClick={onBack}>← 일정으로</button>

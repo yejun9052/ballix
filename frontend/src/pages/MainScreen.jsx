@@ -9,6 +9,7 @@ import { StateMessage } from "../components/common/StateMessage.jsx";
 import { NoticeBanner } from "../components/common/NoticeBanner.jsx";
 import { SiteFooter } from "../components/common/SiteFooter.jsx";
 import { ScheduleItem } from "../components/match/ScheduleItem.jsx";
+import { HorizontalAd } from "../components/common/AdBanner.jsx";
 
 export function MainScreen({
   isAuthLoading,
@@ -34,10 +35,20 @@ export function MainScreen({
   const [dateFilter, setDateFilter] = useState(() => formatDateInputValue(new Date()));
   const [aiFilter, setAiFilter] = useState("all");
   const [page, setPage] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const PAGE_SIZE = 6;
 
   // 필터 바뀔 때 첫 페이지로
   useEffect(() => { setPage(0); }, [competitionFilter, groupFilter, dateFilter, aiFilter]);
+
+  // 모바일 메뉴 열릴 때 스크롤 잠금
+  useEffect(() => {
+    document.body.style.overflow = mobileMenuOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileMenuOpen]);
+
+  function closeMobileMenu() { setMobileMenuOpen(false); }
+  function handleMobileNav(fn) { closeMobileMenu(); fn?.(); }
   // 월드컵 조 목록 — 경기 목록이 바뀔 때만 재계산
   const worldCupGroups = useMemo(
     () =>
@@ -107,7 +118,7 @@ export function MainScreen({
             <span className="brand-pill">BALLIX</span>
             <strong>AI 승부예측</strong>
           </div>
-          <nav aria-label="주요 메뉴">
+          <nav aria-label="주요 메뉴" className="topbar-nav">
             <a href="#matches">경기 일정</a>
             <button type="button" className="nav-link wc-nav-btn" onClick={onOpenWorldCup}>
               월드컵
@@ -129,19 +140,69 @@ export function MainScreen({
           </nav>
           {!isLoggedIn ? (
             <div className="account-actions">
-              <button type="button" onClick={onLogin}>
+              <button type="button" className="topbar-desktop-only" onClick={onLogin}>
                 {isAuthLoading ? "확인 중" : "로그인"}
               </button>
             </div>
           ) : (
-            <div className="account-actions">
+            <div className="account-actions topbar-desktop-only">
               {isAdmin && <span className="admin-badge">관리자</span>}
               <button type="button" className="account-chip account-chip-btn" onClick={onOpenMyPage}>
                 {user?.name || "사용자"}
               </button>
             </div>
           )}
+          {/* 모바일 햄버거 */}
+          <button
+            type="button"
+            className="topbar-hamburger"
+            aria-label="메뉴 열기"
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            <span /><span /><span />
+          </button>
         </header>
+
+        {/* 모바일 전체화면 메뉴 */}
+        {mobileMenuOpen && (
+          <div className="mobile-menu-overlay" role="dialog" aria-modal="true" aria-label="메뉴">
+            <div className="mobile-menu-head">
+              <div className="main-logo">
+                <span className="brand-pill">BALLIX</span>
+                <strong>AI 승부예측</strong>
+              </div>
+              <button type="button" className="mobile-menu-close" aria-label="메뉴 닫기" onClick={closeMobileMenu}>
+                ✕
+              </button>
+            </div>
+            {isLoggedIn && (
+              <div className="mobile-menu-user">
+                {isAdmin && <span className="admin-badge">관리자</span>}
+                <span className="mobile-menu-username">{user?.name || "사용자"}</span>
+              </div>
+            )}
+            <nav className="mobile-menu-nav" aria-label="모바일 메뉴">
+              <button type="button" onClick={() => handleMobileNav(null)} data-scroll="#matches">경기 일정</button>
+              <button type="button" onClick={() => handleMobileNav(onOpenStandings)}>순위</button>
+              <button type="button" onClick={() => handleMobileNav(onOpenMyPredictions)}>내 예측</button>
+              <button type="button" onClick={() => handleMobileNav(onOpenLeaderboard)}>랭킹</button>
+              {isAdmin && (
+                <button type="button" className="mobile-menu-admin" onClick={() => handleMobileNav(onOpenAdmin)}>관리자</button>
+              )}
+            </nav>
+            <div className="mobile-menu-footer">
+              {!isLoggedIn ? (
+                <button type="button" className="mobile-menu-login" onClick={() => handleMobileNav(onLogin)}>
+                  {isAuthLoading ? "확인 중…" : "로그인"}
+                </button>
+              ) : (
+                <button type="button" className="mobile-menu-mypage" onClick={() => handleMobileNav(onOpenMyPage)}>
+                  내 정보 / 설정
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         <section className="main-hero">
           <div>
@@ -161,6 +222,9 @@ export function MainScreen({
             )}
           </div>
         </section>
+
+        {/* 히어로 ↔ 경기일정 사이 가로 광고 */}
+        <HorizontalAd slot={0} />
 
         <section className="feed-panel" id="predictions">
           <NoticeBanner />
@@ -342,6 +406,9 @@ export function MainScreen({
             </div>
           </section>
         </aside>
+
+        {/* 경기일정 ↔ 푸터 사이 가로 광고 */}
+        <HorizontalAd slot={1} />
 
         <SiteFooter />
       </section>
