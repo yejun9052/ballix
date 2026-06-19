@@ -4,6 +4,7 @@ import com.example.backend.auth.jwt.CookieUtil;
 import com.example.backend.auth.jwt.JwtProvider;
 import com.example.backend.user.User;
 import com.example.backend.user.UserRepository;
+import com.example.backend.user.dto.CreateUserRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -42,7 +43,10 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         String email = oAuth2User.getAttribute("email");
         String name = oAuth2User.getAttribute("name");
 
-        User user = userRepository.findByEmail(email).orElseThrow();
+        // 없으면 그 자리에서 생성(find-or-create) — OIDC/OAuth2 어느 경로로 와도 유저 보장.
+        // (빈 DB 배포 환경에서 유저 미생성으로 NoSuchElementException 500이 나던 것 방어)
+        User user = userRepository.findByEmail(email)
+                .orElseGet(() -> userRepository.save(User.create(new CreateUserRequest(name, email))));
 
         // 정지(비활성) 계정은 토큰 발급 차단 → 로그인 거부.
         // 관리자가 등록한 안내 메시지를 ?error=banned&msg=... 로 실어보내 프론트가 그대로 표시.
