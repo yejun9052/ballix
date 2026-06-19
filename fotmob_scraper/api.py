@@ -345,6 +345,14 @@ def build_match_response(raw: dict) -> dict:
     # 지연 없는 값으로 교체한다(없거나 비정상이면 SSR 값으로 폴백). → 앵커가 정확해져 프론트 보정 불필요.
     if is_live:
         live_seconds = _live_seconds_from_halfs(status, live_seconds)
+        # 하프타임 즉시 반영: SSR liveTime.short("HT")는 0~수 분 지연되지만, 같은 스냅샷의
+        # status.halfs(하프 종료시각)는 신뢰·선반영된다. firstHalfEnded가 찍혔는데 후반이 아직
+        # 시작 안 됐으면(=하프타임) 라벨을 기다리지 않고 바로 "HT"로 emit → Java isClockPaused가
+        # 앵커를 비워 시계를 멈추고 HT를 표시한다(라벨 지연만큼 빨라짐).
+        _halfs = status.get("halfs") or {}
+        if (_halfs.get("firstHalfEnded") or "").strip() and not (_halfs.get("secondHalfStarted") or "").strip():
+            live_short = "HT"
+            live_seconds = None
     # 현재 하프의 정규시간 끝(전반 45 / 후반 90) — FotMob 권위값. 프론트가 추가시간("45+N'"/"90+N'")
     # 표기 기준(base)을 라벨 숫자로 추측하지 않고 이 값으로 정확히 쓰게 한다(1차 스토피지 오판 방지).
     live_base = _to_int(live.get("basePeriod"))

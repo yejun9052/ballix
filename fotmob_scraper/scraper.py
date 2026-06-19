@@ -37,11 +37,16 @@ async def _try_extract_next_data(page: Page) -> Optional[dict]:
 
 
 async def _try_fetch_via_page(page: Page, match_id: str) -> Optional[dict]:
-    """페이지 컨텍스트에서 FotMob API를 직접 호출."""
+    """페이지 컨텍스트에서 FotMob 라이브 API를 직접 호출 — SSR(__NEXT_DATA__)보다 신선하다.
+
+    경로는 `/api/data/matchDetails`(현행). 과거 `/api/matchDetails`는 404 HTML을 반환해 항상 SSR로
+    폴백됐고, SSR 스냅샷은 ~10분마다만 갱신돼 HT·스코어가 최대 10분 늦게 반영되는 원인이었다.
+    이 엔드포인트는 같은 오리진의 페이지 컨텍스트에서 호출하면 200 JSON(신선한 status.halfs 포함)을 준다.
+    """
     try:
         result = await page.evaluate(f"""async () => {{
             try {{
-                const r = await fetch('/api/matchDetails?matchId={match_id}', {{
+                const r = await fetch('/api/data/matchDetails?matchId={match_id}', {{
                     headers: {{
                         'Accept': 'application/json',
                         'x-requested-with': 'XMLHttpRequest'
@@ -86,7 +91,7 @@ async def extract_from_page(page: Page, page_url: str, match_id: Optional[str], 
     async def handle_response(response):
         if capture_done.is_set():
             return
-        if "/api/matchDetails" in response.url:
+        if "/api/data/matchDetails" in response.url:
             try:
                 ct = response.headers.get("content-type", "")
                 if "json" in ct:
@@ -105,11 +110,10 @@ async def extract_from_page(page: Page, page_url: str, match_id: Optional[str], 
         except Exception as e:
             log(f"[fotmob] 초기 로딩 경고: {e}")
 
-        # FotMob은 데이터를 SSR(__NEXT_DATA__)로 내려주고 보통 별도 /api/matchDetails XHR를
-        # 쏘지 않는다. 따라서 '오지 않는 XHR'를 길게 기다리지 말고, 즉시 반환되는 방법
-        # (페이지 내 직접 fetch → SSR 추출)을 먼저 시도한다. goto 도중 XHR가 잡혔으면 그대로 사용.
+        # FotMob 라이브 페이지는 `/api/data/matchDetails` XHR로 신선한 데이터를 받는다(goto 중 잡히면 그대로 사용).
+        # 단 SSR(__NEXT_DATA__)도 함께 내려오지만 ~10분 캐시라 라이브엔 부적합 → 직접 fetch를 우선한다.
 
-        # 방법 1: 페이지 내 직접 fetch (라이브 경기에도 가장 신선한 데이터)
+        # 방법 1: 페이지 내 직접 fetch (/api/data/matchDetails — 라이브 경기에도 가장 신선한 데이터)
         if not capture_done.is_set() and match_id:
             log("[fotmob] 페이지 내 직접 fetch 시도...")
             data = await _try_fetch_via_page(page, match_id)
@@ -160,7 +164,13 @@ async def extract_from_page(page: Page, page_url: str, match_id: Optional[str], 
 
 
 # 공유 컨텍스트 생성에 쓰이는 설정 (api.py 등에서 재사용)
-BROWSER_LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"]
+# --no-sandbox: 컨테이너(root 실행)에서 Chromium이 안 켜지는 문제 방지(Render/도커 필수)
+# --disable-dev-shm-usage: 컨테이너 기본 /dev/shm(64MB)가 작아 발생하는 크래시 방지(공유메모리 대신 /tmp 사용)
+BROWSER_LAUNCH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+]
 CONTEXT_OPTIONS = {
     "user_agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
