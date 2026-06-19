@@ -23,6 +23,18 @@ const WorldCupScreen = lazy(() => import("./components/worldcup/WorldCupScreen.j
 // 온보딩(첫 로그인 닉네임 설정) 완료 플래그 키 — 유저별 1회
 const onboardKey = (userId) => `ballix-onboarded-${userId}`;
 
+// 라이브 경기가 하프 경계(스토피지 진입/정지) 근처인지 — true면 폴링을 10초로 좁혀
+// HT·추가시간·종료가 바로 반영되게 한다(평상시는 20초).
+function isLiveNearBoundary(match) {
+  const raw = match.raw || match;
+  if (raw.status !== "IN_PLAY") return false;
+  // 정지(HT 등)면 앵커가 비어있음(clockRunning=false) → 재개를 빨리 잡게 fast
+  if (raw.liveStartedAtMs == null || raw.clockRunning === false) return true;
+  const base = raw.liveBasePeriod === 90 ? 90 : 45;          // 현재 하프 정규시간 끝(45/90)
+  const minute = Math.floor((Date.now() - raw.liveStartedAtMs) / 60000);
+  return minute >= base - 1;                                  // 44'+ 또는 89'+ = 스토피지 임박/진입
+}
+
 // 청크 로딩 중 표시할 폴백
 function ScreenFallback() {
   return (
@@ -142,13 +154,17 @@ export default function App() {
   // 백엔드가 갱신한 스코어·이벤트·하프타임/종료·clockRunning 을 재반영한다.
   // 백엔드 라이브 빠른 폴링이 20초 주기라 프론트도 20초로 맞춰 HT/골/종료가 빨리 뜨게 한다.
   const hasLiveMatch = matches.some((match) => match.statusRaw === "IN_PLAY");
+  // 하프 경계(스토피지 진입/정지) 근처면 true — 그때만 폴링을 촘촘히 해 HT·추가시간·종료를 바로 반영한다.
+  const pollFast = matches.some(isLiveNearBoundary);
   useEffect(() => {
     if (!hasLiveMatch) {
       return undefined;
     }
-    const id = setInterval(() => loadMatches({ silent: true }), 20000);
+    // 경계 근처 10초 / 평상시 20초 — "바로바로" 반영하되 평소엔 과한 폴링 방지.
+    const interval = pollFast ? 10000 : 20000;
+    const id = setInterval(() => loadMatches({ silent: true }), interval);
     return () => clearInterval(id);
-  }, [hasLiveMatch]);
+  }, [hasLiveMatch, pollFast]);
 
   function handleGoogleLogin() {
     loginWithGoogle();
