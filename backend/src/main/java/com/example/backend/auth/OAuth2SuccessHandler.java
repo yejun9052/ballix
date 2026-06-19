@@ -51,7 +51,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         // 정지(비활성) 계정은 토큰 발급 차단 → 로그인 거부.
         // 관리자가 등록한 안내 메시지를 ?error=banned&msg=... 로 실어보내 프론트가 그대로 표시.
         if (!user.isActive()) {
-            String url = frontendBase + "/home?error=banned";
+            String url = frontendBase + "/?error=banned";
             String msg = user.getBanMessage();
             if (msg != null && !msg.isBlank()) {
                 url += "&msg=" + URLEncoder.encode(msg, StandardCharsets.UTF_8);
@@ -67,7 +67,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         String accessToken = jwtProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole(), sessionId);
         cookieUtil.addCookie(response, "access_token", accessToken);
-        response.sendRedirect(frontendBase + "/home");
+        response.sendRedirect(frontendBase);
     }
 
 
