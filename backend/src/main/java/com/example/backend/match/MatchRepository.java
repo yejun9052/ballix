@@ -2,6 +2,7 @@ package com.example.backend.match;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +19,7 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             "CASE WHEN m.status = 'IN_PLAY' THEN 0 ELSE 1 END ASC, " +
             "m.predictionEnabled DESC, " +
             "m.matchTime ASC")
+    @EntityGraph(attributePaths = {"homeTeam", "awayTeam", "competition"})
     Page<Match> findAllSorted(Pageable pageable);
 
     /** 특정 팀의 최근 종료 경기(폼) — 킥오프 이전, 최신순. Pageable로 N건 제한. */
@@ -33,6 +35,7 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     @Query("SELECT m FROM Match m " +
             "WHERE FUNCTION('DATE', m.matchTime) = :date " +
             "ORDER BY CASE WHEN m.status = 'IN_PLAY' THEN 0 ELSE 1 END ASC, m.matchTime ASC")
+    @EntityGraph(attributePaths = {"homeTeam", "awayTeam", "competition"})
     Page<Match> findByMatchDate(@Param("date") LocalDate date, Pageable pageable);
 
     /** 해당 날짜에 경기가 있는지(lazy-crawl 게이트용 — 페이징과 무관). */
@@ -42,12 +45,15 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     /** 특정 대회 경기: IN_PLAY 먼저, 그 뒤 matchTime ASC. */
     @Query("SELECT m FROM Match m WHERE m.competition.id = :compId " +
             "ORDER BY CASE WHEN m.status = 'IN_PLAY' THEN 0 ELSE 1 END ASC, m.matchTime ASC")
+    @EntityGraph(attributePaths = {"homeTeam", "awayTeam", "competition"})
     Page<Match> findByCompetitionId(@Param("compId") Long compId, Pageable pageable);
 
     /** 다가오는 경기(킥오프 미래), 가까운 순. */
+    @EntityGraph(attributePaths = {"homeTeam", "awayTeam", "competition"})
     Page<Match> findByMatchTimeAfterOrderByMatchTimeAsc(LocalDateTime now, Pageable pageable);
 
     /** 다가오는 경기 - 특정 대회만. */
+    @EntityGraph(attributePaths = {"homeTeam", "awayTeam", "competition"})
     Page<Match> findByMatchTimeAfterAndCompetitionIdOrderByMatchTimeAsc(LocalDateTime now, Long compId, Pageable pageable);
 
     /**
@@ -62,6 +68,7 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             "  OR LOWER(m.homeTeam.nameKo) LIKE LOWER(CONCAT('%', :q, '%')) " +
             "  OR LOWER(m.awayTeam.nameKo) LIKE LOWER(CONCAT('%', :q, '%'))) " +
             "ORDER BY m.matchTime DESC")
+    @EntityGraph(attributePaths = {"homeTeam", "awayTeam", "competition"})
     Page<Match> searchByTeamName(@Param("q") String q,
                                  @Param("status") String status,
                                  Pageable pageable);
