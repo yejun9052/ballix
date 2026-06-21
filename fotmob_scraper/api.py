@@ -56,6 +56,10 @@ CRAWL_DELAY_MAX_MS = 500
 _throttle_lock = asyncio.Lock()
 _last_crawl_ts = 0.0
 
+# 동시에 떠 있는 Chromium 페이지 수 제한(메모리 보호). 무료 인스턴스(512MB)에서 크롤이 겹치면
+# 페이지가 여러 개 떠 OOM으로 프로세스가 죽고(502), 그 뒤 크롤이 전부 실패한다. 1로 직렬화해 피크 메모리를 묶는다.
+_browser_sem = asyncio.Semaphore(1)
+
 
 async def crawl_throttle():
     """직전 크롤로부터 랜덤 간격(300~500ms)이 지나도록 대기한 뒤 진행."""
@@ -482,14 +486,16 @@ async def get_match(match_id: str):
     await crawl_throttle()
     print(f"[crawl] 경기 수집 시작 matchId={mid} url={page_url}", flush=True)
     t0 = time.perf_counter()
-    page = await _state["context"].new_page()
-    try:
-        raw = await extract_from_page(page, page_url, mid, verbose=False)
-    except Exception as e:
-        print(f"[crawl] 경기 수집 실패 matchId={mid} ({time.perf_counter() - t0:.1f}s): {e}", flush=True)
-        raise HTTPException(status_code=502, detail=f"FotMob 수집 실패: {e}")
-    finally:
-        await page.close()
+    # 폴링 핫패스 — 동시 크롤을 1개로 직렬화해 Chromium 페이지가 겹쳐 뜨는 OOM(502)을 막는다.
+    async with _browser_sem:
+        page = await _state["context"].new_page()
+        try:
+            raw = await extract_from_page(page, page_url, mid, verbose=False)
+        except Exception as e:
+            print(f"[crawl] 경기 수집 실패 matchId={mid} ({time.perf_counter() - t0:.1f}s): {e}", flush=True)
+            raise HTTPException(status_code=502, detail=f"FotMob 수집 실패: {e}")
+        finally:
+            await page.close()
 
     resp = build_match_response(raw)
     print(f"[crawl] 경기 수집 완료 matchId={mid} status={resp['statusType']} "

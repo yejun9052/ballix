@@ -175,6 +175,15 @@ BROWSER_LAUNCH_ARGS = [
     "--disable-blink-features=AutomationControlled",
     "--no-sandbox",
     "--disable-dev-shm-usage",
+    # 무료 인스턴스(512MB) OOM 방지용 메모리 절감 — GPU/확장/백그라운드 작업 등 불필요 기능 끔.
+    "--disable-gpu",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-default-apps",
+    "--mute-audio",
+    "--no-first-run",
 ]
 CONTEXT_OPTIONS = {
     "user_agent": (
