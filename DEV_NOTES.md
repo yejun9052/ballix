@@ -186,7 +186,7 @@ public void applySyncResult(Long matchId, FotmobMatchResponse resp) { ... }
 
 ### JWT 쿠키 설정
 - `HttpOnly`: JS 접근 불가 (XSS 방어)
-- `SameSite=Lax`: 외부 사이트 폼 POST 차단 (CSRF 방어)
+- `SameSite`: `app.cookie.same-site` 설정값(로컬 기본 `Lax`, 운영은 `None`+`Secure` — 프론트(Vercel)·백엔드(Render) 크로스도메인 쿠키용). `app.cookie.secure`도 함께 주입.
 - `MaxAge=3600`: JWT 만료(1h)와 일치
 
 ### Spring Security 7 CSRF 비활성화 주의

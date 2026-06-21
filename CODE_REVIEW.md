@@ -6,6 +6,8 @@
 
 > 요약: **치명적 버그는 없으나, 비용·자원을 소모하는 트리거 엔드포인트들이 권한 없이 공개되어 있는 것이 가장 큰 위험**이다. 학습/단기 프로젝트 기준으로는 동작하지만, 외부에 노출하면 FotMob 차단·Gemini 쿼터 소진·DB 커넥션 고갈로 쉽게 마비될 수 있다.
 
+> ✅ **업데이트(2026-06-21): H1~H3(권한 없는 트리거) 해결됨.** 크롤·AI 트리거가 전부 `@PreAuthorize("hasRole('ADMIN_USER')")`로 보호됨 — `FotmobController#sync`, `AiAdminController#predict`, AI 골요약은 로그인 필수·강제재생성 미제공(`AiController#summary`), `@EnableMethodSecurity` 활성(`SecurityConfig`). 아래 H1~H3 항목은 이력으로만 남김.
+
 ---
 
 ## 심각도 한눈에

@@ -605,8 +605,8 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 | 엔드포인트 | 결과 | 비고 |
 |---|---|---|
 | `GET /api/match/allMatch` | ✅ 200 | 페이지(`data.content`), `predictionEnabled` 경기 최상단 정렬 확인 |
-| `GET /api/match/findByCompId?id=77` | ✅ 200 | |
-| `GET /api/match/upcoming` · `?compId=77` | ✅ 200 | 미래 경기만 |
+| `GET /api/match/findByCompId?id=6` | ✅ 200 | |
+| `GET /api/match/upcoming` · `?compId=6` | ✅ 200 | 미래 경기만 |
 | `GET /api/match/MatchDay?date=2026-06-16` | ✅ 200 | DB-first lazy-crawl |
 | `GET /api/match/search?q=Korea` · `?q=대한민국` | ✅ 200 | 팀명 검색(한글·영어 모두, 관리자 UI) |
 | `POST /api/fotmob/teams/translate` | ✅ 200 | 팀 이름 전체 재번역(관리자) — `nameKo` 없는 팀만. 응답 data=번역 건수 |
@@ -622,7 +622,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 ### 리그 순위 (공개)
 | 엔드포인트 | 결과 | 비고 |
 |---|---|---|
-| `GET /api/fotmob/standings/2` | ✅ 200 | 그룹별 행 반환. **경로변수는 DB Competition PK**(=`allMatch`의 `competition.id`, 월드컵=2) — `fotmobLeagueId`(77) 아님에 주의 |
+| `GET /api/fotmob/standings/6` | ✅ 200 | 그룹별 행 반환. **경로변수는 DB Competition PK**(=`allMatch`의 `competition.id`, 월드컵=6) — `fotmobLeagueId`(77) 아님에 주의 |
 | `GET\|POST /api/fotmob/poll-interval` | ✅ 200 | 폴링 주기 조회 |
 
 ### AI 기능
