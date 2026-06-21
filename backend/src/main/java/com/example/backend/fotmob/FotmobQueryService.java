@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -34,6 +35,9 @@ public class FotmobQueryService {
 
     /** matchId → 마지막 lazy 크롤 시각 (쿨다운용, 폴링 스케줄러 lastPolled 패턴과 동일). */
     private final Map<Long, LocalDateTime> lastLazyCrawled = new ConcurrentHashMap<>();
+
+    /** 현재 lazy 크롤이 진행 중인 matchId 집합 (single-flight: 동시 첫 조회 중복 크롤 방지). */
+    private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
 
     public Page<LineupPlayer> getLineup(Long matchId, Pageable pageable) {
         matchRepository.findById(matchId).ifPresent(this::lazySync);
@@ -94,11 +98,17 @@ public class FotmobQueryService {
         if (lastCrawl != null && ChronoUnit.MINUTES.between(lastCrawl, LocalDateTime.now()) < LAZY_CRAWL_COOLDOWN_MINUTES) {
             return;
         }
+        // single-flight: 같은 경기가 이미 크롤 중이면 스킵(여러 명이 동시에 첫 조회해도 크롤은 1회).
+        if (!inFlight.add(match.getId())) {
+            return;
+        }
         try {
             syncService.syncMatch(match);
             lastLazyCrawled.put(match.getId(), LocalDateTime.now());
         } catch (Exception e) {
             // 조회는 계속 — 현재 DB 상태를 반환
+        } finally {
+            inFlight.remove(match.getId());
         }
     }
 

@@ -282,18 +282,37 @@ def _live_seconds_from_halfs(status: dict, fallback: Optional[int]) -> Optional[
             s = (halfs.get(key) or "").strip()
             return (naive_utc(s) - offset) if s else None
 
+        def half_utc_any(*keys: str) -> Optional[float]:    # 연장 필드명이 버전마다 달라 후보 키를 모두 시도
+            for k in keys:
+                v = half_utc(k)
+                if v is not None:
+                    return v
+            return None
+
+        def ended_any(*keys: str) -> bool:
+            return any((halfs.get(k) or "").strip() for k in keys)
+
         first_start = half_utc("firstHalfStarted")
         second_start = half_utc("secondHalfStarted")
-        first_ended = bool((halfs.get("firstHalfEnded") or "").strip())
-        second_ended = bool((halfs.get("secondHalfEnded") or "").strip())
+        first_ended = ended_any("firstHalfEnded")
+        second_ended = ended_any("secondHalfEnded")
+        # 연장(토너먼트): 1차 연장=90:00~, 2차 연장=105:00~. 후보 키로 방어적으로 읽고 없으면 None(=폴백, 무회귀).
+        et1_start = half_utc_any("firstExtraHalfStarted", "extraFirstHalfStarted")
+        et2_start = half_utc_any("secondExtraHalfStarted", "extraSecondHalfStarted")
+        et1_ended = ended_any("firstExtraHalfEnded", "extraFirstHalfEnded")
+        et2_ended = ended_any("secondExtraHalfEnded", "extraSecondHalfEnded")
         now = time.time()
 
-        if second_start is not None and not second_ended:
+        if et2_start is not None and not et2_ended:
+            computed = 6300 + (now - et2_start)             # 2차 연장: 105:00 + (지금 − 2차 연장시작)
+        elif et1_start is not None and not et1_ended:
+            computed = 5400 + (now - et1_start)             # 1차 연장: 90:00 + (지금 − 1차 연장시작)
+        elif second_start is not None and not second_ended:
             computed = 2700 + (now - second_start)          # 후반: 45:00 + (지금 − 후반시작)
         elif first_start is not None and not first_ended:
             computed = now - first_start                    # 전반: 지금 − 전반시작
         else:
-            return fallback                                 # HT/연장/종료 등은 폴백
+            return fallback                                 # 휴식/승부차기/종료 등은 폴백
 
         computed = int(round(computed))
         if computed < 0 or computed > 9000:                 # 음수/2.5시간 초과 = 비정상
@@ -303,6 +322,43 @@ def _live_seconds_from_halfs(status: dict, fallback: Optional[int]) -> Optional[
         return computed
     except (ValueError, TypeError, KeyError):
         return fallback
+
+
+def _break_override(status: dict, label: Optional[str], seconds: Optional[int],
+                    live_added: Optional[int], first_added: Optional[int],
+                    second_added: Optional[int]) -> tuple:
+    """라이브 '정지(휴식)' 구간을 status.halfs로 선반영해 시계를 멈춘다(SSR 라벨 지연 보완).
+    숫자 없는 라벨을 내리면 Java isClockPaused가 앵커를 비워 시계를 멈추고 라벨만 표시한다.
+
+    - HT: 전반 종료 + 후반 미시작.
+    - (A) 전반 진행 중인데 경과가 (45분 + 부여 추가시간 + 30초)를 넘김 → 종료로 보고 HT.
+          firstHalfEnded 신호가 지연돼 '55분'처럼 계속 흐르는 것을 막는다.
+    - (B) 연장 하프타임: 1차 연장 종료 + 2차 연장 미시작 → HT. 승부차기 진행 중(종료 전) → "Pen.".
+    연장/승부차기 필드명은 FotMob 버전마다 달라 후보 키를 모두 본다(없으면 발동 안 함 = 무회귀).
+    반환: (라벨, 경과초) — 정지 구간이면 (라벨, None), 아니면 입력 그대로.
+    """
+    halfs = status.get("halfs") or {}
+
+    def has(*keys: str) -> bool:
+        return any((halfs.get(k) or "").strip() for k in keys)
+
+    # 정규 하프타임: 전반 종료 + 후반 미시작
+    if has("firstHalfEnded") and not has("secondHalfStarted"):
+        return "HT", None
+    # (A) 전반 진행 중인데 부여 추가시간 + 30초를 넘김 → HT 강제
+    if (has("firstHalfStarted") and not has("firstHalfEnded")
+            and not has("secondHalfStarted") and seconds is not None):
+        added = live_added if (live_added and live_added > 0) else first_added
+        if added and added > 0 and seconds > 45 * 60 + added * 60 + 30:
+            return "HT", None
+    # (B) 연장 하프타임: 1차 연장 종료 + 2차 연장 미시작
+    if has("firstExtraHalfEnded", "extraFirstHalfEnded") and not has(
+            "secondExtraHalfStarted", "extraSecondHalfStarted"):
+        return "HT", None
+    # (B) 승부차기 진행 중(아직 경기 종료 아님) → 시계 정지
+    if has("penaltyShootoutStarted", "penaltiesStarted", "shootoutStarted") and not has("gameEnded"):
+        return "Pen.", None
+    return label, seconds
 
 
 def build_match_response(raw: dict) -> dict:
@@ -341,18 +397,6 @@ def build_match_response(raw: dict) -> dict:
         except (ValueError, TypeError):
             live_seconds = None
     is_live = _normalize_status(status) == "IN_PLAY"
-    # liveTime.long(SSR)은 실제보다 0~몇 분 지연된다. 하프 시작 실제 시각(halfs)으로 경과초를 다시 계산해
-    # 지연 없는 값으로 교체한다(없거나 비정상이면 SSR 값으로 폴백). → 앵커가 정확해져 프론트 보정 불필요.
-    if is_live:
-        live_seconds = _live_seconds_from_halfs(status, live_seconds)
-        # 하프타임 즉시 반영: SSR liveTime.short("HT")는 0~수 분 지연되지만, 같은 스냅샷의
-        # status.halfs(하프 종료시각)는 신뢰·선반영된다. firstHalfEnded가 찍혔는데 후반이 아직
-        # 시작 안 됐으면(=하프타임) 라벨을 기다리지 않고 바로 "HT"로 emit → Java isClockPaused가
-        # 앵커를 비워 시계를 멈추고 HT를 표시한다(라벨 지연만큼 빨라짐).
-        _halfs = status.get("halfs") or {}
-        if (_halfs.get("firstHalfEnded") or "").strip() and not (_halfs.get("secondHalfStarted") or "").strip():
-            live_short = "HT"
-            live_seconds = None
     # 현재 하프의 정규시간 끝(전반 45 / 후반 90) — FotMob 권위값. 프론트가 추가시간("45+N'"/"90+N'")
     # 표기 기준(base)을 라벨 숫자로 추측하지 않고 이 값으로 정확히 쓰게 한다(1차 스토피지 오판 방지).
     live_base = _to_int(live.get("basePeriod"))
@@ -360,6 +404,14 @@ def build_match_response(raw: dict) -> dict:
     # 표시가 부여시간을 넘어 계속 늘어나지 않게 한다(예: +4면 "45+4'"에서 멈춤).
     live_added = _to_int(live.get("addedTime"))
     first_added, second_added = _added_times(raw)
+    # liveTime.long(SSR)은 실제보다 0~몇 분 지연된다. 하프 시작 실제 시각(halfs)으로 경과초를 다시 계산해
+    # 지연 없는 값으로 교체한다(없거나 비정상이면 SSR 값으로 폴백). → 앵커가 정확해져 프론트 보정 불필요.
+    if is_live:
+        live_seconds = _live_seconds_from_halfs(status, live_seconds)
+        # 휴식(HT/연장 HT/승부차기 + 전반 추가시간 초과) 구간을 halfs로 선반영해 시계를 멈춘다
+        # — SSR 라벨("HT" 등)은 0~수 분 지연되지만 status.halfs는 신뢰·선반영되므로 라벨을 안 기다림.
+        live_short, live_seconds = _break_override(
+            status, live_short, live_seconds, live_added, first_added, second_added)
 
     return {
         "matchId": general.get("matchId"),
