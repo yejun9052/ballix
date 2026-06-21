@@ -14,6 +14,7 @@ import { EventTimeline } from "../components/lineup/EventTimeline.jsx";
 import { PredictionPanel } from "../components/match/PredictionPanel.jsx";
 import { AiProbabilityCard } from "../components/match/AiProbabilityCard.jsx";
 import { ReplayPanel } from "../components/match/ReplayPanel.jsx";
+import { CommentSection } from "../components/match/CommentSection.jsx";
 
 export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi, onLogin, onOpenMyPage, user }) {
   const [collapsedPanels, setCollapsedPanels] = useState({});
@@ -365,6 +366,22 @@ export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi,
             <PredictionPanel
               match={match}
               isLoggedIn={isLoggedIn}
+              onLogin={onLogin}
+            />
+          </CollapsiblePanel>
+
+          <CollapsiblePanel
+            badge="COMMENTS"
+            className="detail-panel"
+            collapsed={collapsedPanels.comments}
+            id="comments"
+            onToggle={togglePanel}
+            title="댓글"
+          >
+            <CommentSection
+              matchId={matchId}
+              isLoggedIn={isLoggedIn}
+              isAdmin={isAdmin}
               onLogin={onLogin}
             />
           </CollapsiblePanel>

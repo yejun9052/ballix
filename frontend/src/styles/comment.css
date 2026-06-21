@@ -1,0 +1,29 @@
+/* 경기 댓글 */
+.comment-section { display: flex; flex-direction: column; gap: 12px; }
+
+.comment-form { display: flex; gap: 8px; align-items: flex-start; }
+.comment-form textarea {
+  flex: 1; resize: vertical; min-height: 44px; max-height: 160px;
+  padding: 10px 12px; border: var(--bd) solid var(--paper); border-radius: var(--r-sm);
+  font: inherit; background: #ffffff10; color: inherit;
+}
+.comment-form button {
+  flex-shrink: 0; padding: 10px 16px; border: 0; border-radius: var(--r-sm);
+  background: var(--yellow); color: #1a1a1a; font-weight: 800; cursor: pointer;
+}
+.comment-form button:disabled { opacity: .5; cursor: not-allowed; }
+.comment-form-foot { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--faint); }
+
+.comment-login-hint { padding: 14px; text-align: center; color: var(--faint); font-size: 13px; }
+
+.comment-list { display: flex; flex-direction: column; gap: 10px; list-style: none; padding: 0; margin: 0; }
+.comment-item { padding: 10px 12px; border: var(--bd) solid var(--paper); border-radius: var(--r-sm); background: #ffffff08; }
+.comment-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.comment-item-head .author { font-weight: 800; font-size: 13px; }
+.comment-item-head .me-tag { font-size: 10px; font-weight: 800; color: var(--yellow); border: 1px solid var(--yellow); border-radius: 4px; padding: 0 4px; }
+.comment-item-head .time { margin-left: auto; font-size: 11px; color: var(--faint); }
+.comment-item-head .comment-del { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 12px; padding: 2px 4px; }
+.comment-item-head .comment-del:hover { color: #e0524d; }
+.comment-item-body { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
+.comment-empty { padding: 16px; text-align: center; color: var(--faint); font-size: 13px; }

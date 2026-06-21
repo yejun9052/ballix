@@ -14,3 +14,4 @@
 @import "./styles/account.css";    /* 마이페이지·닉네임 모달 */
 @import "./styles/replay.css";     /* 다시보기 */
 @import "./styles/player.css";     /* 선수 상세 모달 */
+@import "./styles/comment.css";    /* 경기 댓글 */

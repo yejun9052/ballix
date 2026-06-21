@@ -274,6 +274,26 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 
 ---
 
+## 5-3b. 댓글 (Comment) — 경기별
+
+> 경기마다 다는 댓글. **조회는 공개, 작성/삭제는 로그인 필요.** 삭제는 **본인 또는 관리자(`ADMIN_USER`)**만.
+
+### `GET /api/match/{matchId}/comments`  *(공개)*
+경기 댓글 목록 (최신순, 페이지당 10).
+- 응답: **페이지** — `data.content` = `CommentView[]` (`?page=&size=10`)
+- `CommentView`: `{ id, matchId, authorId, authorName, content, createAt, mine }`
+- `mine`: 현재 로그인 유저가 작성자인지(비로그인이면 항상 false) — 삭제 버튼 노출 판단용. **관리자는 `me().role`로 모든 댓글 삭제 버튼 노출.**
+
+### `POST /api/match/{matchId}/comments`  *(로그인 필요)*
+댓글 작성. 본문 `{ "content": "..." }` (1~500자, 공백만이면 거절).
+- 응답: `data` = `CommentView`
+- 실패: 비로그인 `"로그인이 필요합니다."` / 내용 없음 `"댓글 내용을 입력하세요."` / 없는 경기 `"경기를 찾을 수 없습니다."`
+
+### `DELETE /api/comments/{commentId}`  *(로그인 필요)*
+댓글 삭제 — 본인 또는 관리자만.
+- 응답: `data` = null
+- 실패: 권한 없음 `"본인 댓글만 삭제할 수 있습니다."`(401) / 없는 댓글 `"댓글을 찾을 수 없습니다."`(404)
+
 ## 5-4. 공지사항 (Notice)
 
 > 관리자가 "공지를 때리는" 기능. **조회는 공개, 작성/수정/삭제는 관리자(`ROLE_ADMIN_USER`) 전용.**
