@@ -6,6 +6,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -69,6 +70,24 @@ public class FotmobPollScheduler {
     @Value("${fotmob.schedule.refresh-past-days:2}")
     private int refreshPastDays;   // 주기 재동기화 시 과거 범위(과거 날짜는 거의 안 바뀌어 축소 → 부하·차단위험↓)
 
+    // ── 종료경기 상세 선반영(prewarm) 설정 ──
+    // 일정 동기화로 스코어만 들어오고 상세(라인업·이벤트) 크롤이 실패한 종료경기를, 유저가 열기 전에
+    // 미리 한가할 때(IN_PLAY 없을 때) 소량씩 채워둔다 → Render free 등에서 request-time lazy 크롤 타임아웃 회피.
+    @Value("${fotmob.poll.prewarm.enabled:true}")
+    private boolean prewarmEnabled;
+
+    @Value("${fotmob.poll.prewarm.since-days:7}")
+    private int prewarmSinceDays;        // 최근 N일 내 종료경기만 대상(오래된 경기 제외)
+
+    @Value("${fotmob.poll.prewarm.limit:3}")
+    private int prewarmLimit;            // 한 tick에 선반영할 최대 경기 수(작게 → 메모리·차단 안전)
+
+    @Value("${fotmob.poll.prewarm.cooldown-hours:6}")
+    private int prewarmCooldownHours;    // 같은 경기 재크롤 쿨다운(빈 라인업 경기 반복 크롤 방지)
+
+    /** matchId → 마지막 선반영 시도 시각(쿨다운용, 인메모리). 재시작 시 비므로 콜드스타트마다 1회 재시도(bounded). */
+    private final Map<Long, LocalDateTime> prewarmAttempted = new ConcurrentHashMap<>();
+
     private volatile boolean firstSync = true;
 
     /** matchId → 마지막 폴링 시각 (N분 간격 준수용, 메모리 보관). */
@@ -77,9 +96,10 @@ public class FotmobPollScheduler {
     @PostConstruct
     void logConfig() {
         log.info("[fotmob-poll] 설정: pollEnabled={} interval={}분 lineupWindow={}분 일정범위=-{}~+{}일(주기 과거={}일) "
-                        + "라이브폴링={} 기준={}초+지터({}~{}ms)",
+                        + "라이브폴링={} 기준={}초+지터({}~{}ms) 선반영={}(최근{}일·{}건·쿨다운{}h)",
                 pollEnabled, intervalMinutes, lineupWindowMinutes, pastDays, futureDays, refreshPastDays,
-                livePollEnabled, liveIntervalSeconds, liveJitterMinMs, liveJitterMaxMs);
+                livePollEnabled, liveIntervalSeconds, liveJitterMinMs, liveJitterMaxMs,
+                prewarmEnabled, prewarmSinceDays, prewarmLimit, prewarmCooldownHours);
     }
 
     // ── 일정 동기화: 부팅 10초 뒤 + 30분마다 ──────────────────────────
@@ -93,6 +113,7 @@ public class FotmobPollScheduler {
         try {
             scheduleService.syncRange(past, futureDays);   // 날짜 ±N일(친선 등)
             scheduleService.syncFullLeagues();             // 시즌 전체 일정(월드컵 — 결승까지)
+            scheduleService.syncPlayoffLeagues();          // 예상 브래킷(32강 예상 대진) — 반드시 일정 동기화 뒤에
             firstSync = false;
         } catch (Exception e) {
             log.warn("[fotmob-poll] 일정 동기화 실패(Python 서버 확인): {}", e.getMessage());
@@ -198,6 +219,53 @@ public class FotmobPollScheduler {
             }
         }
         log.info("[fotmob-clock] 라이브 {}경기 시계 갱신", ok);
+    }
+
+    // ── 종료경기 상세 선반영(prewarm): 한가할 때(IN_PLAY 없음) 빈 종료경기 상세를 소량씩 미리 채움 ──
+    // 목적: 유저가 종료경기를 처음 열 때 request-time lazy 크롤(느림/타임아웃, Render free에서 특히)이 일어나지 않도록
+    // DB를 미리 데워둔다. 라이브 크롤과 경쟁하지 않게 IN_PLAY가 하나라도 있으면 통째로 건너뛴다.
+    @Scheduled(fixedDelayString = "${fotmob.poll.prewarm.tick-ms:180000}")
+    public void prewarmFinishedDetails() {
+        if (!pollEnabled || !prewarmEnabled) {
+            return;
+        }
+        // 진행 중 경기가 있으면 라이브 크롤 지연을 막기 위해 선반영을 미룬다(종료경기 상세는 급하지 않음).
+        if (!matchRepository.findByStatusAndFotmobMatchIdIsNotNull("IN_PLAY").isEmpty()) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime since = now.minusDays(prewarmSinceDays);
+        // 스캔 윈도우는 limit보다 넉넉히 — 쿨다운에 걸린 경기를 지나 새 대상을 고를 수 있게.
+        int scan = Math.max(prewarmLimit * 10, 40);
+        List<Match> targets = matchRepository.findDetailBackfillTargets(since, PageRequest.of(0, scan));
+        if (targets.isEmpty()) {
+            if (!prewarmAttempted.isEmpty()) prewarmAttempted.clear();   // 대상 없으면 캐시 정리
+            return;
+        }
+        int done = 0;
+        for (Match m : targets) {
+            if (done >= prewarmLimit) {
+                break;
+            }
+            LocalDateTime last = prewarmAttempted.get(m.getId());
+            if (last != null && ChronoUnit.HOURS.between(last, now) < prewarmCooldownHours) {
+                continue;   // 쿨다운 중 — 빈 라인업 경기 반복 크롤 방지
+            }
+            try {
+                syncService.syncMatch(m);   // HTTP 크롤(트랜잭션 밖) + 독립 트랜잭션 저장. 스크래퍼가 직렬화/throttle.
+                done++;
+            } catch (Exception e) {
+                log.warn("[fotmob-prewarm] 상세 선반영 실패 matchId={} fotmobId={} : {}",
+                        m.getId(), m.getFotmobMatchId(), e.getMessage());
+            }
+            prewarmAttempted.put(m.getId(), now);   // 성공·실패 모두 쿨다운 기록(라인업 없는 경기 폭주 방지)
+        }
+        // 쿨다운 만료 항목 정리(메모리 누수 방지) — 만료분은 어차피 재시도 대상이라 제거해도 무방.
+        prewarmAttempted.values().removeIf(t -> ChronoUnit.HOURS.between(t, now) >= prewarmCooldownHours);
+        if (done > 0) {
+            log.info("[fotmob-prewarm] 종료경기 상세 선반영 {}건 (대상 {}건, since={}일, limit={}, cooldown={}h)",
+                    done, targets.size(), prewarmSinceDays, prewarmLimit, prewarmCooldownHours);
+        }
     }
 
     /** 관리자: 폴링 주기(분) 런타임 변경. */

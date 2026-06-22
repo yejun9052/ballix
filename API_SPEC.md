@@ -630,6 +630,7 @@ fetch("http://localhost:8080/api/prediction/myPrediction", { credentials: "inclu
 | `GET /api/match/MatchDay?date=2026-06-16` | ✅ 200 | DB-first lazy-crawl |
 | `GET /api/match/search?q=Korea` · `?q=대한민국` | ✅ 200 | 팀명 검색(한글·영어 모두, 관리자 UI) |
 | `POST /api/fotmob/teams/translate` | ✅ 200 | 팀 이름 전체 재번역(관리자) — `nameKo` 없는 팀만. 응답 data=번역 건수 |
+| `POST /api/fotmob/details/backfill?sinceDays=&limit=` | ✅ 200 | 상세 누락 경기 일괄 보강(관리자) — `lineupSynced=false`인 경기 재크롤. 응답 data=보강 건수 |
 
 ### 경기 상세 — 라인업/이벤트/라이브 (공개)
 | 엔드포인트 | 결과 | 비고 |

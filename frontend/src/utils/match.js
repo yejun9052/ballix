@@ -34,6 +34,8 @@ export function normalizeMatch(match) {
     matchTimeRaw: match.matchTime,
     venue: match.venue || "경기장 미정",
     group: match.groupName || match.stage || "일정",
+    stage: match.stage || null,
+    bracketOrder: match.bracketOrder ?? null,
     status: statusLabels[match.status] || match.status || "상태 미정",
     statusRaw: match.status,
     score: getMatchScore(match),

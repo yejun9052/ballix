@@ -3,6 +3,7 @@ package com.example.backend.fotmob;
 import com.example.backend.fotmob.dto.FotmobCommentaryResponse;
 import com.example.backend.fotmob.dto.FotmobMatchResponse;
 import com.example.backend.fotmob.dto.FotmobPlayerResponse;
+import com.example.backend.fotmob.dto.FotmobPlayoffResponse;
 import com.example.backend.fotmob.dto.FotmobScheduleResponse;
 import com.example.backend.fotmob.dto.FotmobSearchResponse;
 import com.example.backend.fotmob.dto.FotmobTableResponse;
@@ -70,6 +71,14 @@ public class FotmobClient {
                 .uri("/league/{id}/fixtures", leagueId)
                 .retrieve()
                 .body(FotmobScheduleResponse.class);
+    }
+
+    /** 토너먼트 예상 브래킷(라운드별 대진) — 32강 예상 대진 동기화용. */
+    public FotmobPlayoffResponse getPlayoff(Long leagueId) {
+        return restClient.get()
+                .uri("/league/{id}/playoff", leagueId)
+                .retrieve()
+                .body(FotmobPlayoffResponse.class);
     }
 
     /** 경기 골 해설(라이브티커) — 끝난 경기 요약용. */

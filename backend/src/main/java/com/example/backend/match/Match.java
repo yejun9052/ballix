@@ -42,6 +42,10 @@ public class Match extends BaseTimeEntity {
     @Column(name = "group_name", nullable = true)
     private String groupName;
 
+    /** 토너먼트 브래킷 슬롯 순서(FotMob drawOrder) — 프론트가 라운드 내 위치 정렬에 사용. */
+    @Column(name = "bracket_order", nullable = true)
+    private Integer bracketOrder;
+
     @Column(nullable = true)
     private Integer matchday;
 
@@ -150,6 +154,12 @@ public class Match extends BaseTimeEntity {
         this.stage = stage;
         this.groupName = groupName;
         this.status = status;
+    }
+
+    /** 토너먼트 브래킷 단계/슬롯 순서 갱신(예상 대진 동기화). drawOrder 없으면 기존 유지. */
+    public void applyBracket(String stage, Integer bracketOrder) {
+        this.stage = stage;
+        if (bracketOrder != null) this.bracketOrder = bracketOrder;
     }
 
     /** 대진 팀 갱신 — 토너먼트 대진 확정 시 미정(예: "Winner SF 1")→실제 팀 반영. 값 있을 때만. */

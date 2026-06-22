@@ -51,3 +51,8 @@ export const LIVE_CLOCK_LAG_SECONDS = 20;
 // - 모르는 경우: base + MAX 초에서 멈춤(긴 정상 스토피지는 허용, 폭주만 차단).
 export const STOPPAGE_GRACE_SECONDS = 30;
 export const MAX_STOPPAGE_SECONDS = 12 * 60;
+
+// 딥 스토피지 표기 — 발표된 추가시간(예 "+7")을 넘어선 구간에서는 mm:ss를 상한에 "얼리지" 않고
+// FotMob식 "90+N'"으로 매분 계속 증가시켜 '멈춤'처럼 보이지 않게 한다(실제론 FotMob이 종료를 늦게
+// flip하는 대기 구간). N은 (발표 추가시간 + 이 여유분)에서 정지 → 폭주(예 "90+30'")는 막는다.
+export const DEEP_STOPPAGE_GRACE_MIN = 6;

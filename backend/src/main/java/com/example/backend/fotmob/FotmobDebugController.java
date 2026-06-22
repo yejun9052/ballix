@@ -78,6 +78,14 @@ public class FotmobDebugController {
         return ResponseEntity.ok(CommonResponse.success("일정 " + n + "경기 동기화", n));
     }
 
+    /** 예상 브래킷(32강 예상 대진) 동기화 (수동 트리거) — 토너먼트 경기에 stage·대진 반영. */
+    @PreAuthorize("hasRole('ADMIN_USER')")
+    @PostMapping("/playoff/sync")
+    public ResponseEntity<CommonResponse<?>> playoffSync() {
+        int n = scheduleService.syncPlayoffLeagues();
+        return ResponseEntity.ok(CommonResponse.success("예상 브래킷 " + n + "대진 동기화", n));
+    }
+
     /**
      * 팀(나라) 이름 전체 재번역 (수동 트리거) — 아직 한국어 이름(nameKo)이 없는 팀만 골라 Gemini로 번역해 채운다.
      * '전체 재번역' 버튼용. 이미 번역된 팀은 건드리지 않는다(다시 번역하려면 해당 nameKo를 비워야 함).

@@ -42,12 +42,13 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 
 **HTTP-in-transaction 방지 패턴**: `FotmobSyncService`와 `FotmobScheduleService` 모두 `@Lazy @Autowired private XxxService self`로 자기 자신의 스프링 프록시를 주입한다. HTTP 크롤(네트워크 I/O)은 트랜잭션 밖에서 수행하고, DB 저장(`applySyncResult`/`persistSchedule`)만 `self.xxx()` 경유로 독립 트랜잭션에서 커밋한다 — `@Transactional` 자기호출(self-invocation)은 프록시를 우회해 무시되기 때문. 새 sync 서비스를 만들 때 이 패턴을 따라야 한다.
 
-`FotmobPollScheduler`가 네 가지 `@Scheduled` 작업을 돌린다:
+`FotmobPollScheduler`가 다섯 가지 `@Scheduled` 작업을 돌린다:
 
 1. **일정 동기화** (부팅 10초 뒤 + 30분마다): 두 방식을 함께 돌린다 — (a) `syncRange()`가 `fotmob.schedule.leagues`(날짜 ±N일 방식, 기본 친선 `114`)를 과거/미래 N일치 날짜별로 upsert, (b) `syncFullLeagues()`가 `fotmob.schedule.full-season-leagues`(시즌 전체 일정 방식, 기본 월드컵 `77`)를 Python `/league/{id}/fixtures`로 **결승까지 전 경기 한 번에** upsert. 날짜 ±N일 방식만 쓰면 먼 미래(결승 등)를 못 가져오므로 토너먼트는 (b)로 받는다. 리그 필터는 Python `build_schedule`에서 적용(**토큰 숫자=leagueId 정확매칭, 문자=leagueName 부분매칭** — 여자/U21/클럽 파생 리그가 같은 이름을 써서 이름 매칭으론 못 거름 → 숫자 ID 권장). **기존 경기 upsert 시 팀(homeTeam/awayTeam)도 갱신**한다 — 토너먼트 대진이 확정되면 미정 플레이스홀더("Winner SF 1")가 실제 팀으로 자동 반영(`Match.updateTeams`). 일정 데이터엔 구장 정보가 없으므로 저장 후 `enrichScheduledVenues()`가 **venue 없는 예정 경기 중 향후 14일 이내만** 상세(`/match/{id}`)를 추가 크롤해 `Match.venue`를 1회 채운다(멱등·윈도우 제한 — 먼 경기는 가까워지면 채움). 진행/종료 경기 venue는 폴링이 채운다. 저장 후 `enrichTeamTranslations()`가 **번역 안 된(`Team.nameKo` 비어있는) 팀 이름을 한 번에 모아** `TranslationService`(`ai` 패키지, Gemini 구조화출력)로 한국어로 번역해 `Team.nameKo`에 채운다 — **번역 전=`Team.name`(FotMob 영문), 번역 후=`Team.nameKo`(한국어) 둘 다 보관**. `enrichScheduledVenues`와 같은 패턴: Gemini HTTP는 트랜잭션 밖에서 한 번에 묶고 저장만 `self.applyTeamTranslation`(독립 트랜잭션), 번역 대상 없으면 Gemini 미호출(멱등). 원본 이름이 바뀌면(미정 플레이스홀더→실제 팀) `Team.updateInfo`가 `nameKo`를 비워 재번역. 호출당 최대 `TRANSLATE_BATCH_MAX`(80)팀. `ai.translation.enabled`로 on/off. **`fotmob → ai` 의존**(단, `TranslationService`는 `GeminiClient`만 의존해 bean 순환 없음).
 2. **데이터 폴링** (1분 tick, `interval-minutes` 간격으로 게이트): 킥오프 `lineup-window-minutes`분 전부터 `FotmobSyncService.syncMatch()`로 라인업·평점·이벤트·스코어·**포메이션**(`Match.homeFormation/awayFormation`)·**선수 피치좌표**(`LineupPlayer.posX/posY`)·**전·후반 추가시간**(`Match.firstHalfAddedTime/secondHalfAddedTime` — Python이 FotMob `type:"AddedTime"` 이벤트 `time=45/90`에서 추출, 값 있을 때만 갱신)을 갱신. 라인업이 뜨면 `markLineupSynced`, 종료되면 `markFinalized` + 해당 리그 순위(`FotmobStandingService`) 갱신.
 3. **라이브 빠른 폴링** (`live.tick-ms`, 기본 2초마다 깨어남 + 경기별 `live.interval-seconds`(기본 20초) + **랜덤 지터 `live.jitter-min/max-ms`(300~500ms)** 게이트): IN_PLAY 경기만 `FotmobSyncService.syncLive()`로 **이벤트·스코어·status·하프타임(HT)·종료(FT)**를 초 단위로 즉시 반영(하프타임/골/종료가 분 단위 풀폴링보다 빨리 뜨게 하는 게 목적). **시계 앵커는 `updateLiveIfAbsent`로 1회만 설정(재앵커 X)** — 흐르는 시계는 안 흔들고 HT 라벨/앵커정리·이벤트·종료만 빠르게. 종료 감지 시 `applySyncResult`와 **공유하는 `finalizeIfFinished()`**(확정+예측채점은 트랜잭션 안 DB작업)를 호출하고, **무거운 후속작업(ntfy 종료알림·리그 순위 HTTP 크롤)은 `FinalizeOutcome`으로 넘겨 커밋 후 `runPostFinalize()`에서** 트랜잭션 밖에서 수행한다(HTTP-in-transaction 방지). 매 조회 후 다음 due = `지금 + interval-seconds + 랜덤(300~500ms)`로 재계산해 고정 주기를 피한다. `live.enabled`로 on/off. **동시성**: `poll`·`liveTick`·시계갱신이 같은 경기를 동시에 쓰지 않도록 `FotmobSyncService`가 matchId 스트라이프 락(32개)으로 트랜잭션 적용 구간만 직렬화한다(HTTP 크롤은 락 밖).
 4. **라이브 시계 재앵커** (`clock-ms`, 기본 11분): IN_PLAY 경기만 `FotmobSyncService.refreshLiveClock()`로 진행시간/스코어만 가볍게(라인업·이벤트 안 건드림) **재앵커**해 누적 드리프트 보정. 아래 "라이브 시계" 참고.
+5. **종료경기 상세 선반영(prewarm)** (`prewarm.tick-ms`, 기본 3분): 일정 동기화로 스코어만 들어오고 상세 크롤이 실패한 종료경기(`FINISHED && lineupSynced=false`, 최근 `since-days`일)를 **유저가 열기 전에 미리** `syncMatch`로 채운다 — request-time lazy 크롤(느림/타임아웃, Render free 등)을 회피하는 게 목적. **IN_PLAY 경기가 하나라도 있으면 통째로 건너뛴다**(라이브 크롤 지연 방지). 한 tick당 `limit`(기본 3)건만, 경기별 **인메모리 쿨다운**(`cooldown-hours`, 기본 6h)으로 빈 라인업(친선 등) 경기 반복 크롤을 막는다(성공·실패 모두 기록). `findDetailBackfillTargets`는 관리자 수동 일괄보강(`POST /api/fotmob/details/backfill`)과 공유. **주의**: 선반영이 오래된 종료경기를 뒤늦게 finalize할 수 있으므로, "경기 종료" ntfy 알림은 **킥오프 `NOTIFY_END_RECENCY_HOURS`(6h) 이내일 때만** 보낸다(`finalizeIfFinished`의 `notifyEnd` — 늦은 종료 푸시 방지, 수동 보강도 함께 보호). `fotmob.poll.prewarm.{enabled,tick-ms,since-days,limit,cooldown-hours}` config.
 
 폴링 주기(`interval-minutes`, 기본 3)는 `POST /api/fotmob/poll-interval?minutes=`로 런타임 변경 가능. **모든 `@Scheduled`는 `spring.task.scheduling.pool.size`(기본 4) 스레드풀에서 돌아 라이브 빠른 폴링(크롤로 수 초 점유)이 다른 폴링/일정 동기화를 막지 않는다**(기본 단일 스레드면 굶음).
 
@@ -104,10 +105,12 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 
 ### 인증 흐름 (기존 유지)
 
-1. 프론트가 `/oauth2/authorization/google`로 리다이렉트.
-2. `CustomOAuth2UserService`가 Google 프로필로 `User` upsert.
-3. `OAuth2SuccessHandler`가 **새 세션(`User.sessionId`=UUID)을 발급·저장**하고 JWT(`sid` 클레임 포함)를 HTTP-only 쿠키로 설정. 정지 계정이면 토큰 발급 거부 후 `/home?error=banned[&msg=]`.
+1. 프론트가 `/oauth2/authorization/google`로 리다이렉트. 세션이 **STATELESS**라 OAuth2 인가요청 state를 서버 세션 대신 **쿠키에 저장**한다(`HttpCookieOAuth2AuthorizationRequestRepository`) — 클라우드(다중 인스턴스/콜드스타트)에서 콜백 시 state 유실 방지.
+2. **Google은 OIDC라 `CustomOidcUserService`(OidcUserService 확장)가 프로필로 `User` upsert**한다 — `CustomOAuth2UserService`는 비-OIDC 제공자용 경로라 Google 로그인엔 호출되지 않는다(둘 다 등록돼 있으니 수정 시 OIDC 쪽을 건드릴 것).
+3. `OAuth2SuccessHandler`가 **새 세션(`User.sessionId`=UUID)을 발급·저장**하고 JWT(`sid` 클레임 포함)를 HTTP-only 쿠키로 설정한 뒤 **`app.frontend-base-url`(기본 `http://localhost:5173`)로 리다이렉트**. 정지 계정이면 토큰 발급 거부 후 `{frontend-base-url}/?error=banned[&msg=]`.
 4. `JwtFiller`(서블릿 필터)가 매 요청마다 쿠키를 검증해 `SecurityContext`에 등록(토큰 없으면 익명 통과).
+
+> **크로스도메인 배포 주의** — CSRF는 메서드 레퍼런스로만 disable(`AbstractHttpConfigurer::disable`, 람다형은 무시돼 POST가 302됨). CORS Origin은 `app.cors.allowed-origins`(쉼표구분, 기본 `http://localhost:*`)로 주입. 프론트(Vercel)와 백엔드가 다른 도메인이면 쿠키 전송을 위해 `app.cookie.same-site=None` + `app.cookie.secure=true`(HTTPS)로 줘야 한다(기본 `Lax`/`false`는 동일 도메인·로컬용). 셀프호스트 배포 절차는 `docs/LINUX_SELFHOST_DEPLOY.md` 참고.
 
 **동시 로그인 차단(새 로그인이 기존을 밀어냄)** — 로그인할 때마다 `sessionId`를 새로 발급하므로 JWT의 `sid`는 마지막 로그인 기기 것만 DB와 일치한다. `JwtFiller`는 토큰 `sid` ≠ `User.sessionId`면 쿠키를 만료시키고 **`401 {code:"SESSION_REPLACED"}`** 로 즉시 응답(프론트 경고창용). DB `sessionId=null`(구버전 세션)이면 검사 생략 — 재로그인 시 sid가 부여되며 활성화. 정지·삭제 계정 차단(쿠키 삭제 후 익명 통과)은 종전대로.
 
@@ -173,7 +176,9 @@ cd C:\ballix\frontend; npm run build ; npm run lint
 - `GET /api/match/{id}/fotmob` · `/lineup` · `/events` — 경기별 라인업/이벤트 조회
 - `POST /api/match/{id}/fotmob/sync` — 단일 경기 즉시 동기화(스케줄 대기 없이)
 - `POST /api/fotmob/schedule/sync?pastDays=&futureDays=` , `.../sync/{YYYYMMDD}` — 일정 동기화 트리거
+- `POST /api/fotmob/playoff/sync`(관리자) — 예상 브래킷(토너먼트 대진) 동기화 트리거. FotMob `playoff`(리그 상세 `/api/data/leagues`)에서 라운드별 예상 대진을 받아 **기존 토너먼트 경기에 `Match.stage`(라운드명)·`bracketOrder`(슬롯순서)·예상 팀(32강 한정)을 반영**(`FotmobScheduleService.syncPlayoffLeagues`). 일정 동기화가 `stage=null`로 덮으므로 **반드시 그 뒤에** 돈다(스케줄러도 `syncFullLeagues` 다음에 호출). 32강(`stage "1/16"`)만 실제 예상 팀(`tbd=false`)이고 16강 이후는 미정(placeholder, 단계만 채움). `fotmob.schedule.playoff-leagues`(비우면 `full-season-leagues` 따름)
 - `POST /api/fotmob/teams/translate`(관리자) — 팀(나라) 이름 전체 재번역. `nameKo` 비어있는 팀만 골라 `TranslationService`로 번역(`FotmobScheduleService.translateMissingTeamNames`, 배치 반복·진척 없으면 종료). '전체 재번역' 버튼용
+- `POST /api/fotmob/details/backfill?sinceDays=&limit=`(관리자) — 상세(라인업·이벤트) 누락 종료/진행 경기 일괄 보강. `lineupSynced=false`인 경기를 최신순 `limit`(기본 8)건 재크롤(`syncService.backfillMissingDetails`). 스케줄러 선반영(prewarm)과 대상 쿼리(`findDetailBackfillTargets`) 공유 — 둘 다 request-time lazy 크롤 타임아웃 회피용
 - `GET /api/fotmob/standings/{competitionId}` , `POST .../sync` — 리그 순위(조별)
 - `GET|POST /api/fotmob/poll-interval` — 폴링 주기 조회/변경(관리자)
 - `GET /api/fotmob/preview/{fotmobMatchId}` — DB 미저장 미리보기(프록시)
@@ -190,9 +195,11 @@ cd C:\ballix\frontend; npm run build ; npm run lint
 
 > 프론트 연동용 전체 응답 스키마/예시는 루트 **`API_SPEC.md`** 참고(프론트엔드 담당자 전달용).
 
-**Python 스크래퍼(`fotmob_scraper/api.py`) 엔드포인트**: `/match/{id}`(라인업·이벤트·평점·**liveTime/liveSeconds**·포메이션·posX/posY·**venue**=구장이름 `infoBox.Stadium.name`), `/player/{id}`(선수 상세 — 선수 페이지 `/players/{id}`에서 내부 API `/api/data/playerData` fetch, 실패 시 `__NEXT_DATA__` 폴백. `playerInformation`→`info[{label,value}]`, `mainLeague.stats`→`stats[{title,value}]`로 평탄화), `/schedule`, `/league/{id}/table`, `/league/{id}/fixtures`(시즌 전체 경기 — 결승까지, `syncFullLeagues` 전용), `/commentary/{id}`(라이브티커 골 해설 — 골 요약용), `/search`, `/youtube/search?q=`(유튜브 동영상 검색 — 하이라이트 찾기용, `window.ytInitialData`에서 추출), `/youtube/embeddable/{id}`(영상 임베드 가능 여부 — watch 페이지 `playabilityStatus`). **선수 사진은 백엔드에 저장 안 한다** — 프론트가 `fotmobPlayerId`로 `https://images.fotmob.com/image_resources/playerimages/{id}.png` URL을 직접 구성.
+**Python 스크래퍼(`fotmob_scraper/api.py`) 엔드포인트**: `/match/{id}`(라인업·이벤트·평점·**liveTime/liveSeconds**·포메이션·posX/posY·**venue**=구장이름 `infoBox.Stadium.name`), `/player/{id}`(선수 상세 — 선수 페이지 `/players/{id}`에서 내부 API `/api/data/playerData` fetch, 실패 시 `__NEXT_DATA__` 폴백. `playerInformation`→`info[{label,value}]`, `mainLeague.stats`→`stats[{title,value}]`로 평탄화), `/schedule`, `/league/{id}/table`, `/league/{id}/fixtures`(시즌 전체 경기 — 결승까지, `syncFullLeagues` 전용), `/league/{id}/playoff`(토너먼트 예상 브래킷 — 리그 상세 raw의 `playoff.rounds[].matchups[]`를 매치 단위로 평탄화, stage·drawOrder·tbd 포함, `syncPlayoffLeagues` 전용), `/commentary/{id}`(라이브티커 골 해설 — 골 요약용), `/search`, `/youtube/search?q=`(유튜브 동영상 검색 — 하이라이트 찾기용, `window.ytInitialData`에서 추출), `/youtube/embeddable/{id}`(영상 임베드 가능 여부 — watch 페이지 `playabilityStatus`). **선수 사진은 백엔드에 저장 안 한다** — 프론트가 `fotmobPlayerId`로 `https://images.fotmob.com/image_resources/playerimages/{id}.png` URL을 직접 구성.
 
 **크롤 간격 제한(throttle)**: 모든 크롤 엔드포인트는 시작 시 `crawl_throttle()`(api.py)로 **직전 크롤과 300~500ms 랜덤 간격**(예: 352ms·421ms·367ms)을 강제한다 — 락 + 마지막 크롤 시각(`_last_crawl_ts`) 기반이라 동시/연속 요청이 몰려도 FotMob에 일정 텀을 두고 접근(차단 위험 ↓), 한가할 땐 지연 없음. 간격 범위는 `CRAWL_DELAY_MIN_MS`/`CRAWL_DELAY_MAX_MS`. **새 크롤 엔드포인트를 추가하면 본문 첫 줄에 `await crawl_throttle()`을 넣을 것.**
+
+**메모리 절감(무료 512MB OOM 방지)**: ① 공유 컨텍스트에 `context.route`로 **페이지 렌더 전용 리소스(이미지·폰트·CSS·미디어)와 서드파티 광고·트래커 요청을 abort**한다 — 우리가 쓰는 데이터는 전부 same-origin `/api/data/*` fetch + HTML 내장 `__NEXT_DATA__`라 렌더 리소스가 불필요(스크립트·문서·XHR은 통과시켜 LIVE-FETCH/XHR-CAPTURE 신선경로 보존). ② **단일 세마포어(`_browser_sem`)로 모든 크롤을 직렬화**(동시에 페이지 1개만 렌더) → 일정 동기화·폴링·일괄보강이 몰려도 Chromium 피크 메모리가 안 터진다(대신 동시 크롤은 throttle 간격 두고 하나씩, 처리량보다 안정성 우선).
 
 ## 함정 / 주의사항 (이 코드베이스 특유)
 
@@ -204,7 +211,7 @@ cd C:\ballix\frontend; npm run build ; npm run lint
 - **FotMob 평점은 스탯 커버 경기만** 준다(소규모 친선은 전 선수 `rating=null`). 라이브 진행시간도 SSR 지연으로 실제보다 몇 분 느림 — 둘 다 소스 한계지 버그 아님.
 - **백엔드 재부팅 전 8080 포트의 기존 프로세스를 반드시 종료**하라. 안 그러면 새 빌드가 포트 충돌로 안 뜨고 구버전이 응답해 "엔드포인트가 302/404로 사라진 것처럼" 보인다.
 - **Python은 3.12 전용 venv(`fotmob_scraper/.venv`)를 쓴다.** 시스템 Python 3.15(alpha)는 pydantic 빌드가 깨진다.
-- **MySQL은 docker-compose(`backend/docker-compose.yml`) 또는 로컬 설치본 중 3306을 잡은 쪽에 붙는다.** 이 머신엔 로컬 MySQL 8.0이 3306을 점유 중이라 `docker compose up`이 포트 충돌날 수 있다. 어느 쪽이든 접속정보는 동일(root/1234, DB `backend`). DB를 직접 볼 땐 `& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -uroot -p1234 backend`.
+- **MySQL 포트**: 이 머신엔 로컬 MySQL 8.0이 **3306**을 점유 중이라, 루트 `docker-compose.yml`의 mysql은 **호스트 3307→컨테이너 3306**으로 매핑해 충돌을 피한다(backend는 컨테이너 네트워크 `mysql:3306`으로 붙으므로 무관). 접속정보는 동일(root/1234, DB `backend`). 도커 DB를 직접 볼 땐 `docker exec ballix-mysql mysql -uroot -p1234 backend -e "..."` 또는 호스트에서 `... -h127.0.0.1 -P3307`. 로컬 설치본은 `& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -uroot -p1234 backend`.
 - 데이터 재적재 시: FotMob 데이터는 fotmobId 기준 upsert라 중복은 안 생기지만, 과거 다른 소스 데이터를 지우려면 `lineup_player, match_event, league_standing, matches, teams, competitions` 순으로 truncate(FK 때문).
 
 ## 설정
@@ -218,11 +225,17 @@ cd C:\ballix\frontend; npm run build ; npm run lint
 - `fotmob.schedule.enabled` / `fotmob.poll.enabled` — 일정 동기화·폴링 전체 on/off(기본 true; 테스트 시 false로 끔)
 - `fotmob.poll.{lineup-window-minutes,interval-minutes,clock-ms}` — 폴링 동작. `interval-minutes`(기본 3)=풀폴링, `clock-ms`(기본 660000=11분)=라이브 진행시간 재앵커
 - `fotmob.poll.live.{enabled,interval-seconds,tick-ms,jitter-min-ms,jitter-max-ms}` — 라이브 빠른 폴링(IN_PLAY 경기 이벤트·HT·종료 초 단위 반영). `interval-seconds`(기본 20)=경기별 재조회 기준 간격, `tick-ms`(기본 2000)=스케줄러 due 체크 주기, `jitter-min/max-ms`(기본 300/500)=매 주기 더하는 랜덤 지터(고정 주기 회피). `interval-seconds`를 낮추면 더 빠르게(크롤 부하↑)
+- `fotmob.poll.prewarm.{enabled,tick-ms,since-days,limit,cooldown-hours}` — 종료경기 상세 선반영(기본 on, 3분 주기, 최근 7일, tick당 3건, 쿨다운 6h). IN_PLAY 있으면 스킵. request-time lazy 크롤 타임아웃 회피용
 - `spring.task.scheduling.pool.size`(기본 4) — `@Scheduled` 스레드풀. 라이브 빠른 폴링이 크롤로 스레드를 점유해도 다른 폴링/일정 동기화가 굶지 않게(기본 1이면 직렬화돼 지연)
 - `prediction.allowed-leagues` — 예측 허용 리그 fotmobLeagueId(쉼표구분, 기본 `77`=월드컵)
 - `ai.gemini.{api-key,model,base-url}` — Gemini(기본 `gemini-3.1-flash-lite`). 관리자 판별은 화이트리스트 없이 role=ADMIN_USER만 사용.
 - `ai.live-prediction.{enabled,interval-minutes,tick-ms}` — 실시간 AI 승률 갱신(기본 on). `predictionEnabled && IN_PLAY` 경기를 **킥오프 기준 경과 `interval-minutes`(기본 15)분 간격**으로 라이브 상태 재예측. **하프타임 제외, 전·후반에만 동작**. `tick-ms`(기본 60000=1분)는 경계 확인 주기.
 - `ai.translation.enabled` — 나라/팀명 한국어 번역(기본 on). 일정 동기화 시 `Team.nameKo` 없는 팀을 Gemini로 일괄 번역해 채움(번역 전 `Team.name` / 번역 후 `Team.nameKo` 둘 다 보관).
-- `ntfy.{enabled,base-url,topic,start-window-minutes,start-tick-ms}` — ntfy 푸시 알림(`com.example.backend.notify`). `NtfyClient`가 `POST {base-url}/{topic}`으로 단일 토픽에 전송(셀프호스트/ntfy.sh 공용). **한글은 HTTP 헤더에서 깨지므로 본문(UTF-8)에 싣고, Title은 ASCII 라벨·Tags는 ntfy 이모지 단축명(ASCII)만** 쓴다. 전송 실패는 본 로직을 막지 않도록 `NtfyClient`가 내부에서 삼킨다(로그만). 알림 4종 — 경기 시작 임박(`NtfyNotifier` @Scheduled, 킥오프 N분 전 1회·메모리 중복방지) / 경기 종료(`FotmobSyncService.applySyncResult`, 첫 finalize시) / 예측 채점(`PredictionService.gradeMatch`, 예측별 적중·실패) / 공지 게시(`NoticeService.create`, 즉시 게시분만).
+- `ntfy.{enabled,base-url,topic,start-window-minutes,start-tick-ms}` — ntfy 푸시 알림(`com.example.backend.notify`). `NtfyClient`가 `POST {base-url}/{topic}`으로 단일 토픽에 전송(셀프호스트/ntfy.sh 공용). **한글은 HTTP 헤더에서 깨지므로 본문(UTF-8)에 싣고, Title은 ASCII 라벨·Tags는 ntfy 이모지 단축명(ASCII)만** 쓴다. 전송 실패는 본 로직을 막지 않도록 `NtfyClient`가 내부에서 삼킨다(로그만). 알림 4종 — 경기 시작 임박(`NtfyNotifier` @Scheduled, 킥오프 N분 전 1회·메모리 중복방지) / 경기 종료(`FotmobSyncService.applySyncResult`, 첫 finalize시 **+ 킥오프 6h 이내일 때만** — 선반영/일괄보강의 늦은 종료 푸시 방지) / 예측 채점(`PredictionService.gradeMatch`, 예측별 적중·실패) / 공지 게시(`NoticeService.create`, 즉시 게시분만).
+
+**배포(클라우드/셀프호스트) 전용 키** — `application.yml.example`엔 없고 `@Value` 기본값으로만 존재한다(로컬은 기본값으로 동작, 배포 시 환경변수/yml로 주입):
+- `app.frontend-base-url`(기본 `http://localhost:5173`) — OAuth 로그인 성공 후 리다이렉트할 **프론트** 도메인(`OAuth2SuccessHandler`).
+- `app.cors.allowed-origins`(기본 `http://localhost:*`) — 허용 Origin 패턴(쉼표구분). 운영은 실제 프론트 도메인만(와일드카드 지양).
+- `app.cookie.{same-site,secure}`(기본 `Lax`/`false`) — 크로스도메인 배포면 `None`/`true`(`CookieUtil`·`HttpCookieOAuth2AuthorizationRequestRepository`가 공유). Google 콜백 URI는 `{백엔드도메인}/login/oauth2/code/google`.
 
 JPA는 `ddl-auto: update`라 엔티티 추가 시 컬럼/테이블이 자동 생성된다(마이그레이션 불필요).

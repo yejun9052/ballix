@@ -12,6 +12,7 @@
 | `POST /api/fotmob/schedule/sync/{YYYYMMDD}` | 특정 날짜 일정만 동기화 |
 | `POST /api/fotmob/standings/{competitionId}/sync` | 리그 순위 강제 갱신 (competitionId = 내부 Competition PK) |
 | `POST /api/fotmob/teams/translate` | 팀(나라) 이름 전체 재번역. `nameKo`가 비어있는 팀만 골라 Gemini로 한국어 번역. 응답 `data`=번역된 팀 수. '전체 재번역' 버튼용. |
+| `POST /api/fotmob/details/backfill?sinceDays=&limit=` | 상세(라인업·이벤트) 누락 경기 일괄 보강. 최근 `sinceDays`(기본 14)일 내 시작된 경기 중 `lineupSynced=false`(크롤 실패 등)인 것을 최신순 `limit`(기본 8)건까지 다시 크롤. 스크래퍼가 직렬화/throttle. 건수가 많으면 `limit`를 나눠 여러 번 눌러 이어서 처리. 응답 `data`=보강된 경기 수. (스케줄러 prewarm과 대상 쿼리 `findDetailBackfillTargets` 공유.) |
 
 ## AI
 

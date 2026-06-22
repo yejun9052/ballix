@@ -852,6 +852,69 @@ async def league_fixtures(league_id: int):
     return result
 
 
+def build_playoff(raw: dict, league_id: int) -> dict:
+    """리그 상세 raw의 playoff(토너먼트 브래킷)를 매치 단위로 평탄화.
+
+    rounds[].matchups[] 각 대진을 한 경기로 펼친다. FotMob은 그룹 진행 상황에 따라 **예상 대진**을 채워
+    주는데, 32강(stage "1/16")은 실제 예상 팀(tbdTeam=false), 그 이후 라운드는 미정(placeholder)이다.
+    stage·drawOrder(슬롯 순서)·tbd 플래그를 함께 내려 백엔드가 기존 경기에 단계/대진을 반영하게 한다.
+    """
+    po = raw.get("playoff", {}) or {}
+    out = []
+    for rd in po.get("rounds", []) or []:
+        stage = rd.get("stage")
+        for mu in rd.get("matchups", []) or []:
+            matches = mu.get("matches") or []
+            m = matches[0] if matches else {}
+            st = m.get("status", {}) or {}
+            home = m.get("home", {}) or {}
+            away = m.get("away", {}) or {}
+            started = st.get("started", False)
+            finished = st.get("finished", False)
+            out.append({
+                "matchId": _to_int(m.get("matchId")),
+                "stage": stage,
+                "drawOrder": _to_int(mu.get("drawOrder")),
+                "tbd1": bool(mu.get("tbdTeam1")),
+                "tbd2": bool(mu.get("tbdTeam2")),
+                "homeId": _to_int(home.get("id")),
+                "homeName": home.get("name"),
+                "homeShortName": home.get("shortName"),
+                "homeCrest": _team_logo(home.get("id")),
+                "homeScore": _to_int(home.get("score")) if (started or finished) else None,
+                "awayId": _to_int(away.get("id")),
+                "awayName": away.get("name"),
+                "awayShortName": away.get("shortName"),
+                "awayCrest": _team_logo(away.get("id")),
+                "awayScore": _to_int(away.get("score")) if (started or finished) else None,
+                "utcTime": st.get("utcTime"),
+                "started": started,
+                "finished": finished,
+                "cancelled": st.get("cancelled", False),
+            })
+    return {"leagueId": league_id, "matchups": out}
+
+
+@app.get("/league/{league_id}/playoff")
+async def league_playoff(league_id: int):
+    """토너먼트 예상 브래킷(라운드별 대진). 월드컵 등 32강 예상 대진 동기화용."""
+    await crawl_throttle()
+    print(f"[crawl] 브래킷 수집 시작 leagueId={league_id}", flush=True)
+    t0 = time.perf_counter()
+    try:
+        async with crawl_page(navigate_home=True) as page:
+            raw = await fetch_league_table_from_page(page, league_id)
+    except Exception as e:
+        print(f"[crawl] 브래킷 수집 실패 leagueId={league_id}: {e}", flush=True)
+        raise HTTPException(status_code=502, detail=f"브래킷 수집 실패: {e}")
+    if not raw:
+        raise HTTPException(status_code=502, detail="브래킷 데이터를 가져오지 못했습니다.")
+    result = build_playoff(raw, league_id)
+    print(f"[crawl] 브래킷 수집 완료 leagueId={league_id} {len(result['matchups'])}대진 "
+          f"({time.perf_counter() - t0:.1f}s)", flush=True)
+    return result
+
+
 @app.get("/league/{league_id}/table")
 async def league_table(league_id: int):
     await crawl_throttle()

@@ -3,8 +3,8 @@
 import { useTicker } from "../../hooks/useTicker.js";
 import {
   LIVE_CLOCK_LAG_SECONDS,
-  STOPPAGE_GRACE_SECONDS,
   MAX_STOPPAGE_SECONDS,
+  DEEP_STOPPAGE_GRACE_MIN,
 } from "../../utils/constants.js";
 
 export function LiveClock({ match }) {
@@ -64,28 +64,25 @@ export function LiveClock({ match }) {
     0,
     Math.floor((now - anchorMs) / 1000) - LIVE_CLOCK_LAG_SECONDS,
   );
-  // 스토피지 상한 — 시계가 부여 추가시간을 넘겨 무한정 흐르지 않도록 멈춘다(데이터 지연/스크래퍼 다운 안전장치).
-  // 부여 추가시간을 알면 base+N+GRACE, 모르면 base+MAX 에서 정지. (신선한 HT/FT가 오면 위에서 이미 정지함)
-  let elapsed = rawElapsed;
-  if (Math.floor(rawElapsed / 60) >= base) {
-    const capStoppage =
-      addedMinutes != null && addedMinutes > 0
-        ? addedMinutes * 60 + STOPPAGE_GRACE_SECONDS
-        : MAX_STOPPAGE_SECONDS;
-    elapsed = Math.min(rawElapsed, base * 60 + capStoppage);
-  }
-  const minute = Math.floor(elapsed / 60);
-  const second = elapsed % 60;
+  const rawMinute = Math.floor(rawElapsed / 60);
 
-  const mmss = `${minute}:${String(second).padStart(2, "0")}`;
   let text;
-  if (minute < base) {
+  if (rawMinute < base) {
     // 정규 시간(전반 ~45, 후반 ~90): mm:ss 로 매초 흐름
-    text = mmss;
+    text = `${rawMinute}:${String(rawElapsed % 60).padStart(2, "0")}`;
+  } else if (addedMinutes != null && rawMinute < base + addedMinutes) {
+    // 발표된 추가시간 이내: mm:ss 부드럽게 흐르며 "+N" 배지. 예) "92:34 +7" → "96:20 +7"
+    text = `${rawMinute}:${String(rawElapsed % 60).padStart(2, "0")} +${addedMinutes}`;
   } else {
-    // 추가시간 구간: 시계는 계속 흐르고(mm:ss), 부여 추가시간(DB값)을 "+N"으로 뒤에만 붙인다.
-    // 예) 후반 추가 5분이면 "90:34 +5" → "91:20 +5" … (N은 고정, 시간만 흐름)
-    text = addedMinutes != null ? `${mmss} +${addedMinutes}` : mmss;
+    // 발표 추가시간 초과(딥 스토피지 = FotMob이 종료를 늦게 flip하는 대기 구간):
+    // mm:ss를 상한에 얼리면 "멈춘 것처럼" 보이므로, FotMob식 "base+N'"으로 **매분 계속 증가**시킨다.
+    // N은 (발표 추가시간 + GRACE) 또는 미상 시 MAX 에서 정지(폭주 "90+30'" 방지).
+    const capExtra =
+      addedMinutes != null && addedMinutes > 0
+        ? addedMinutes + DEEP_STOPPAGE_GRACE_MIN
+        : Math.floor(MAX_STOPPAGE_SECONDS / 60);
+    const extra = Math.min(rawMinute - base, capExtra);
+    text = `${base}+${extra}'`;
   }
 
   return <span className="live-clock">● {text}</span>;

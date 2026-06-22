@@ -74,6 +74,35 @@ export const countryNameKo = {
 };
 
 
+// 국가 3글자 약자 (FIFA 코드) — FotMob tla가 비어있어 프론트에서 매핑
+export const countryTla = {
+  Afghanistan: "AFG", Algeria: "ALG", Andorra: "AND", Argentina: "ARG",
+  Australia: "AUS", Austria: "AUT", Belgium: "BEL", "Bosnia and Herzegovina": "BIH",
+  Brazil: "BRA", Bulgaria: "BUL", Canada: "CAN", "Cape Verde": "CPV",
+  Colombia: "COL", Croatia: "CRO", Curacao: "CUW", Czechia: "CZE",
+  "DR Congo": "COD", Ecuador: "ECU", Egypt: "EGY", England: "ENG",
+  Finland: "FIN", France: "FRA", Gambia: "GAM", Germany: "GER",
+  Ghana: "GHA", Haiti: "HAI", Iceland: "ISL", India: "IND",
+  Iran: "IRN", Iraq: "IRQ", "Ivory Coast": "CIV", Jamaica: "JAM",
+  Japan: "JPN", Jordan: "JOR", Kosovo: "KVX", Maldives: "MDV",
+  Malta: "MLT", Mexico: "MEX", Mongolia: "MNG", Montenegro: "MNE",
+  Morocco: "MAR", Netherlands: "NED", "New Zealand": "NZL", Nicaragua: "NCA",
+  Nigeria: "NGA", "North Macedonia": "MKD", Norway: "NOR", Panama: "PAN",
+  Paraguay: "PAR", Poland: "POL", Portugal: "POR", Qatar: "QAT",
+  "Saudi Arabia": "KSA", Scotland: "SCO", Senegal: "SEN", Serbia: "SRB",
+  Singapore: "SGP", Slovakia: "SVK", "South Africa": "RSA", "South Korea": "KOR",
+  Spain: "ESP", Sweden: "SWE", Switzerland: "SUI", Tunisia: "TUN",
+  Turkiye: "TUR", Ukraine: "UKR", Uruguay: "URU", USA: "USA",
+  Uzbekistan: "UZB", Zimbabwe: "ZIM",
+};
+
+// 3글자 약자 반환 — 없으면 한글명, 그것도 없으면 원본
+export function teamTla(originalName) {
+  if (!originalName) return "TBD";
+  return countryTla[originalName] || countryNameKo[originalName] || originalName;
+}
+
+
 export function getTeamName(team) {
   const originalName = team?.name || team?.shortName || "TBD";
   return countryNameKo[originalName] || countryNameKo[team?.shortName] || originalName;

@@ -1,7 +1,18 @@
 // 월드컵 화면 — 조별리그 그리드/상세 + 토너먼트 브래킷(중심 대칭, 자동 스케일)
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LiveClock } from "../common/LiveClock.jsx";
-import { teamKo } from "../../utils/team.js";
+import { teamKo, getTeamNameByOriginal, teamTla } from "../../utils/team.js";
+import { getStandings } from "../../api/standings.js";
+import { getPageContent } from "../../utils/format.js";
+import {
+  buildStandingsByLetter,
+  buildThirdPlaceRanking,
+  computeQualifiers,
+  qualStatus,
+} from "../../utils/wcStandings.js";
+
+// 월드컵 Competition PK 폴백 (보통은 매치 데이터에서 동적으로 가져옴)
+const WC_COMPETITION_ID = 6;
 
 export const WC_GROUPS = [
   "Grp. A", "Grp. B", "Grp. C", "Grp. D",
@@ -20,8 +31,34 @@ export function wcGroupLetter(key) {
 export function WorldCupScreen({ matches, onBack, onSelectMatch }) {
   const [tab, setTab] = useState("group");
   const [selectedGroup, setSelectedGroup] = useState(null);
+  const [standings, setStandings] = useState([]);
 
   const wcMatches = matches.filter((m) => m.isWorldCup);
+
+  // 월드컵 Competition PK는 환경마다 달라(예: 2 vs 6) 매치 데이터에서 동적으로 가져온다
+  const wcCompetitionId =
+    wcMatches.find((m) => m.raw?.competition?.id)?.raw?.competition?.id ??
+    WC_COMPETITION_ID;
+
+  useEffect(() => {
+    getStandings(wcCompetitionId)
+      .then((data) => setStandings(getPageContent(data)))
+      .catch(() => setStandings([]));
+  }, [wcCompetitionId]);
+
+  const standingsByLetter = useMemo(
+    () => buildStandingsByLetter(standings),
+    [standings],
+  );
+  const quals = useMemo(
+    () => computeQualifiers(standingsByLetter),
+    [standingsByLetter],
+  );
+  const thirdRanking = useMemo(
+    () => buildThirdPlaceRanking(standingsByLetter),
+    [standingsByLetter],
+  );
+  const qualifiedCount = quals.direct.size + quals.wildcard.size;
 
   function handleTabChange(next) {
     setTab(next);
@@ -67,62 +104,175 @@ export function WorldCupScreen({ matches, onBack, onSelectMatch }) {
       {/* 스크롤 영역 */}
       <div className={`wc-page-body ${tab === "bracket" ? "is-bracket" : ""}`}>
         {tab === "group" && !selectedGroup && (
-          <WcGroupGrid wcMatches={wcMatches} onSelectGroup={setSelectedGroup} />
+          <WcGroupGrid
+            wcMatches={wcMatches}
+            standingsByLetter={standingsByLetter}
+            quals={quals}
+            qualifiedCount={qualifiedCount}
+            thirdRanking={thirdRanking}
+            onSelectGroup={setSelectedGroup}
+          />
         )}
         {tab === "group" && selectedGroup && (
           <WcGroupDetail
             groupKey={selectedGroup}
             wcMatches={wcMatches}
+            standingsByLetter={standingsByLetter}
+            quals={quals}
             onSelectMatch={onSelectMatch}
           />
         )}
         {tab === "bracket" && (
-          <WcBracket wcMatches={wcMatches} onSelectMatch={onSelectMatch} onSelectGroup={handleGroupFromBracket} />
+          <WcBracket
+            wcMatches={wcMatches}
+            standingsByLetter={standingsByLetter}
+            quals={quals}
+            onSelectMatch={onSelectMatch}
+            onSelectGroup={handleGroupFromBracket}
+          />
         )}
       </div>
     </div>
   );
 }
 
-export function WcGroupGrid({ wcMatches, onSelectGroup }) {
+export function WcGroupGrid({ wcMatches, standingsByLetter, quals, qualifiedCount, thirdRanking, onSelectGroup }) {
   return (
-    <div className="wc-group-grid">
-      {WC_GROUPS.map((key) => {
-        const letter = wcGroupLetter(key);
-        const grpMatches = wcMatches.filter((m) => m.group === key);
-        const teams = [...new Set([
-          ...grpMatches.map((m) => m.homeTeamOriginal).filter(Boolean),
-          ...grpMatches.map((m) => m.awayTeamOriginal).filter(Boolean),
-        ])];
-        const hasData = teams.length > 0;
-        return (
-          <button
-            key={key}
-            type="button"
-            className={`wc-group-card ${!hasData ? "disabled" : ""}`}
-            onClick={hasData ? () => onSelectGroup(key) : undefined}
-            disabled={!hasData}
-          >
-            <span className="wc-group-letter">{letter}조</span>
-            <ul className="wc-group-teams">
-              {hasData
-                ? teams.map((t) => <li key={t}>{teamKo(t)}</li>)
-                : <li className="wc-na">TBD</li>}
-            </ul>
-          </button>
-        );
-      })}
-    </div>
+    <>
+      <div className="wc-qual-legend">
+        <span className="wc-qual-legend-title">32강 진출 현황</span>
+        <span className="wc-qual-count">{qualifiedCount}<i>/32</i></span>
+        <span className="wc-qual-chip direct"><em /> 조 1·2위 직접진출</span>
+        <span className="wc-qual-chip wildcard"><em /> 3위 와일드카드 (상위 8)</span>
+      </div>
+
+      <div className="wc-group-grid">
+        {WC_GROUPS.map((key) => {
+          const letter = wcGroupLetter(key);
+          const rows = standingsByLetter[letter] || [];
+          const grpMatches = wcMatches.filter((m) => m.group === key);
+          const teamFallback = [...new Set([
+            ...grpMatches.map((m) => m.homeTeamOriginal).filter(Boolean),
+            ...grpMatches.map((m) => m.awayTeamOriginal).filter(Boolean),
+          ])];
+          const hasData = rows.length > 0 || teamFallback.length > 0;
+          return (
+            <button
+              key={key}
+              type="button"
+              className={`wc-group-card ${!hasData ? "disabled" : ""}`}
+              onClick={hasData ? () => onSelectGroup(key) : undefined}
+              disabled={!hasData}
+            >
+              <span className="wc-group-letter">{letter}조</span>
+
+              {rows.length > 0 ? (
+                <div className="wc-mini-standings">
+                  <div className="wc-ms-head">
+                    <span className="wc-ms-rank">순위</span>
+                    <span className="wc-ms-nation">나라</span>
+                    <span className="wc-ms-pts">승점</span>
+                    <span className="wc-ms-gd">득실</span>
+                  </div>
+                  {rows.map((row, i) => {
+                    const status = qualStatus(row, quals);
+                    const gd = row.goalDiff ?? 0;
+                    const gdText = gd > 0 ? `+${gd}` : `${gd}`;
+                    const gdCls = gd > 0 ? "pos" : gd < 0 ? "neg" : "";
+                    return (
+                      <div key={row.id ?? row.fotmobTeamId} className={`wc-ms-row ${status ?? ""}`}>
+                        <span className="wc-ms-rank">{row.rankNo ?? i + 1}</span>
+                        <span className="wc-ms-nation">
+                          {row.crest && <img src={row.crest} alt="" className="wc-ms-crest" />}
+                          <span className="wc-ms-team" title={getTeamNameByOriginal(row.teamName)}>{teamTla(row.teamName)}</span>
+                        </span>
+                        <span className="wc-ms-pts">{row.points ?? 0}</span>
+                        <span className={`wc-ms-gd ${gdCls}`}>{gdText}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <ul className="wc-group-teams">
+                  {teamFallback.length > 0
+                    ? teamFallback.map((t) => <li key={t}>{teamKo(t)}</li>)
+                    : <li className="wc-na">TBD</li>}
+                </ul>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <WcWildcardTable thirdRanking={thirdRanking} onSelectGroup={onSelectGroup} />
+    </>
   );
 }
 
-export function WcGroupDetail({ groupKey, wcMatches, onSelectMatch }) {
+// 3위 와일드카드 순위표 — 12개 조 3위를 한 줄로 줄세워 상위 8팀 진출 표시
+export function WcWildcardTable({ thirdRanking, onSelectGroup }) {
+  if (!thirdRanking || thirdRanking.length === 0) return null;
+  return (
+    <section className="wc-wildcard">
+      <div className="wc-wildcard-hdr">
+        <span className="wc-wildcard-title">3위 와일드카드 순위</span>
+        <span className="wc-wildcard-sub">각 조 3위 중 상위 8팀 진출</span>
+      </div>
+      <div className="wc-standings-card">
+        <table className="wc-standings-table wc-wildcard-table">
+          <thead>
+            <tr>
+              <th className="c-rank">#</th>
+              <th className="c-team">팀</th>
+              <th>조 순위</th>
+              <th>경기</th>
+              <th>득실</th>
+              <th>승점</th>
+            </tr>
+          </thead>
+          <tbody>
+            {thirdRanking.map(({ row, letter, rank, qualified }) => (
+              <tr
+                key={row.id ?? row.fotmobTeamId}
+                className={`wc-st-row ${qualified ? "wildcard" : "out"} ${onSelectGroup ? "clickable" : ""}`}
+                role={onSelectGroup ? "button" : undefined}
+                tabIndex={onSelectGroup ? 0 : undefined}
+                onClick={onSelectGroup ? () => onSelectGroup(`Grp. ${letter}`) : undefined}
+                onKeyDown={onSelectGroup ? (e) => e.key === "Enter" && onSelectGroup(`Grp. ${letter}`) : undefined}
+              >
+                <td className="c-rank"><span className="wc-st-rank">{rank}</span></td>
+                <td className="c-team">
+                  {row.crest && <img src={row.crest} alt="" className="wc-st-crest" />}
+                  <span>{getTeamNameByOriginal(row.teamName)}</span>
+                  {qualified
+                    ? <span className="wc-st-tag wildcard">진출</span>
+                    : <span className="wc-st-tag out">탈락권</span>}
+                </td>
+                <td className="wc-wc-grp">{letter}조 {row.rankNo ?? 3}위</td>
+                <td>{row.played ?? 0}</td>
+                <td>{(row.goalDiff ?? 0) > 0 ? `+${row.goalDiff}` : row.goalDiff ?? 0}</td>
+                <td><b className="wc-st-pts">{row.points ?? 0}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="wc-standings-foot">
+          <span className="wc-qual-chip wildcard"><em /> 상위 8팀 진출</span>
+          <span className="wc-qual-chip out"><em /> 9위 이하 탈락권</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function WcGroupDetail({ groupKey, wcMatches, standingsByLetter, quals, onSelectMatch }) {
   const letter = wcGroupLetter(groupKey);
+  const rows = standingsByLetter[letter] || [];
   const grpMatches = wcMatches
     .filter((m) => m.group === groupKey)
     .sort((a, b) => new Date(a.matchTimeRaw) - new Date(b.matchTimeRaw));
 
-  // 조 내 팀 목록 (승점 정렬은 향후 지원, 현재 이름 순)
+  // 조 내 팀 목록 (순위 데이터 없을 때 폴백)
   const teams = [...new Set([
     ...grpMatches.map((m) => m.homeTeamOriginal).filter(Boolean),
     ...grpMatches.map((m) => m.awayTeamOriginal).filter(Boolean),
@@ -132,11 +282,56 @@ export function WcGroupDetail({ groupKey, wcMatches, onSelectMatch }) {
     <div className="wc-group-detail">
       <h2 className="wc-group-detail-title">{letter}조</h2>
 
-      <div className="wc-group-team-list">
-        {teams.map((t) => (
-          <span key={t} className="wc-team-chip">{teamKo(t)}</span>
-        ))}
-      </div>
+      {rows.length > 0 ? (
+        <div className="wc-standings-card">
+          <table className="wc-standings-table">
+            <thead>
+              <tr>
+                <th className="c-rank">#</th>
+                <th className="c-team">팀</th>
+                <th>경기</th>
+                <th>승</th>
+                <th>무</th>
+                <th>패</th>
+                <th>득실</th>
+                <th>승점</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => {
+                const status = qualStatus(row, quals);
+                return (
+                  <tr key={row.id ?? row.fotmobTeamId} className={`wc-st-row ${status ?? ""}`}>
+                    <td className="c-rank"><span className="wc-st-rank">{row.rankNo ?? i + 1}</span></td>
+                    <td className="c-team">
+                      {row.crest && <img src={row.crest} alt="" className="wc-st-crest" />}
+                      <span>{getTeamNameByOriginal(row.teamName)}</span>
+                      {status === "direct" && <span className="wc-st-tag direct">진출</span>}
+                      {status === "wildcard" && <span className="wc-st-tag wildcard">WC</span>}
+                    </td>
+                    <td>{row.played ?? 0}</td>
+                    <td>{row.wins ?? 0}</td>
+                    <td>{row.draws ?? 0}</td>
+                    <td>{row.losses ?? 0}</td>
+                    <td>{(row.goalDiff ?? 0) > 0 ? `+${row.goalDiff}` : row.goalDiff ?? 0}</td>
+                    <td><b className="wc-st-pts">{row.points ?? 0}</b></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="wc-standings-foot">
+            <span className="wc-qual-chip direct"><em /> 직접진출</span>
+            <span className="wc-qual-chip wildcard"><em /> 와일드카드</span>
+          </div>
+        </div>
+      ) : (
+        <div className="wc-group-team-list">
+          {teams.map((t) => (
+            <span key={t} className="wc-team-chip">{teamKo(t)}</span>
+          ))}
+        </div>
+      )}
 
       <div className="wc-group-matches">
         {grpMatches.length === 0 ? (
@@ -177,8 +372,8 @@ export function WcGroupDetail({ groupKey, wcMatches, onSelectMatch }) {
 
 // ─── 토너먼트 브래킷 (중심 대칭) ─────────────────────────────────────────────
 
-export const B_SLOT_H  = 72;   // R32 한 슬롯 높이(px)
-export const B_BOX_H   = 58;   // 매치 박스 높이(px)
+export const B_SLOT_H  = 82;   // R32 한 슬롯 높이(px)
+export const B_BOX_H   = 64;   // 매치 박스 높이(px)
 export const B_BOX_W   = 130;  // 매치 박스 너비(px)
 export const B_COL_GAP = 40;   // 라운드 사이 간격(px)
 export const B_HDR_H   = 26;   // 라운드 라벨 높이(px)
@@ -219,7 +414,7 @@ export const B_RIGHT_COLS = [
 ];
 
 
-export function WcBracket({ wcMatches, onSelectMatch, onSelectGroup }) {
+export function WcBracket({ wcMatches, standingsByLetter, quals, onSelectMatch, onSelectGroup }) {
   // ── 자동 스케일: 컨테이너 너비에 맞게 축소 ──────────────────────────────
   const outerRef = useRef(null);
   const [scale, setScale] = useState(1);
@@ -246,23 +441,48 @@ export function WcBracket({ wcMatches, onSelectMatch, onSelectGroup }) {
     });
 
   function getSorted(roundKey) {
-    return (knockoutByRound[roundKey] || []).sort(
-      (a, b) => new Date(a.matchTimeRaw) - new Date(b.matchTimeRaw),
-    );
+    // FotMob drawOrder(bracketOrder)로 슬롯 위치를 맞춘다 — 없으면 킥오프 시간순 폴백
+    return (knockoutByRound[roundKey] || []).slice().sort((a, b) => {
+      const ao = a.bracketOrder, bo = b.bracketOrder;
+      if (ao != null && bo != null) return ao - bo;
+      return new Date(a.matchTimeRaw) - new Date(b.matchTimeRaw);
+    });
   }
   function getSlot(roundKey, idx) {
     return getSorted(roundKey)[idx] || null;
   }
 
-  // ── 매치 박스 ────────────────────────────────────────────────────────────
+  // ── 매치 박스 (2행: 엠블럼+약자+득점, 승자 강조) ─────────────────────────
+  function BoxTeamRow({ crest, original, fallback, goal, played, win, lose }) {
+    return (
+      <div className={`wc-bx-row ${win ? "win" : ""} ${lose ? "lose" : ""}`}>
+        {crest
+          ? <img src={crest} alt="" className="wc-bx-crest" />
+          : <span className="wc-bx-crest empty" />}
+        <span className="wc-bx-code" title={getTeamNameByOriginal(original) || fallback}>
+          {teamTla(original) || fallback}
+        </span>
+        <span className="wc-bx-goal">{played ? goal ?? 0 : ""}</span>
+      </div>
+    );
+  }
+
   function Box({ roundKey, slotIdx, x, centerY, w }) {
     const bw = w || B_BOX_W;
     const match = getSlot(roundKey, slotIdx);
     const has = Boolean(match);
+    const live = match?.statusRaw === "IN_PLAY";
+    const played = has && ["IN_PLAY", "FINISHED"].includes(match.statusRaw);
+    const hg = match?.raw?.homeScore;
+    const ag = match?.raw?.awayScore;
+    const winner = match?.raw?.winner;
+    const homeWin = played && (winner ? winner === "HOME_TEAM" : hg > ag);
+    const awayWin = played && (winner ? winner === "AWAY_TEAM" : ag > hg);
+    const decided = match?.statusRaw === "FINISHED";
     return (
       <div
         key={`bx-${roundKey}-${slotIdx}`}
-        className={`wc-bracket-box ${has ? "has-match" : "na"}`}
+        className={`wc-bracket-box ${has ? "has-match" : "na"} ${live ? "live" : ""}`}
         style={{ position: "absolute", left: x, top: centerY - B_BOX_H / 2, width: bw, height: B_BOX_H }}
         role={has ? "button" : undefined}
         tabIndex={has ? 0 : undefined}
@@ -271,15 +491,17 @@ export function WcBracket({ wcMatches, onSelectMatch, onSelectGroup }) {
       >
         {has ? (
           <>
-            <span className="wc-box-team home">{teamKo(match.homeTeamOriginal) || match.homeTeam}</span>
-            <span className="wc-box-score">
-              {["IN_PLAY", "FINISHED"].includes(match.statusRaw)
-                ? match.statusRaw === "IN_PLAY"
-                  ? <><span>{match.score}</span><LiveClock match={match} /></>
-                  : match.score
-                : match.matchTime.split(" ")[0]}
-            </span>
-            <span className="wc-box-team away">{teamKo(match.awayTeamOriginal) || match.awayTeam}</span>
+            <BoxTeamRow crest={match.homeCrest} original={match.homeTeamOriginal} fallback={match.homeTeam}
+              goal={hg} played={played} win={homeWin} lose={decided && !homeWin} />
+            <BoxTeamRow crest={match.awayCrest} original={match.awayTeamOriginal} fallback={match.awayTeam}
+              goal={ag} played={played} win={awayWin} lose={decided && !awayWin} />
+            <div className="wc-bx-foot">
+              {live
+                ? <LiveClock match={match} />
+                : played
+                  ? <span className="wc-bx-ft">종료</span>
+                  : <span className="wc-bx-time">{match.matchTime}</span>}
+            </div>
           </>
         ) : (
           <span className="wc-na-text">NA</span>
@@ -367,28 +589,41 @@ export function WcBracket({ wcMatches, onSelectMatch, onSelectGroup }) {
 
   function GroupMini({ groupKey, panelIdx, x }) {
     const letter = wcGroupLetter(groupKey);
+    const rows   = standingsByLetter[wcGroupLetter(groupKey)] || [];
     const grpMs  = wcMatches.filter((m) => m.group === groupKey);
     const teams  = [...new Set([
       ...grpMs.map((m) => m.homeTeamOriginal).filter(Boolean),
       ...grpMs.map((m) => m.awayTeamOriginal).filter(Boolean),
     ])];
-    const hasTeams = teams.length > 0;
+    const hasData = rows.length > 0 || teams.length > 0;
     const top = B_HDR_H + panelIdx * gpSlotH;
     return (
       <div
         key={groupKey}
-        className={`wc-mini-group ${hasTeams && onSelectGroup ? "clickable" : ""}`}
+        className={`wc-mini-group ${hasData && onSelectGroup ? "clickable" : ""}`}
         style={{ position: "absolute", left: x, top, width: B_GRP_W, height: gpSlotH - 4 }}
-        role={hasTeams && onSelectGroup ? "button" : undefined}
-        tabIndex={hasTeams && onSelectGroup ? 0 : undefined}
-        onClick={hasTeams && onSelectGroup ? () => onSelectGroup(groupKey) : undefined}
-        onKeyDown={hasTeams && onSelectGroup ? (e) => e.key === "Enter" && onSelectGroup(groupKey) : undefined}
+        role={hasData && onSelectGroup ? "button" : undefined}
+        tabIndex={hasData && onSelectGroup ? 0 : undefined}
+        onClick={hasData && onSelectGroup ? () => onSelectGroup(groupKey) : undefined}
+        onKeyDown={hasData && onSelectGroup ? (e) => e.key === "Enter" && onSelectGroup(groupKey) : undefined}
       >
         <div className="wc-mini-letter">{letter}조</div>
         <div className="wc-mini-teams">
-          {hasTeams
-            ? teams.slice(0, 4).map((t) => <div key={t} className="wc-mini-team">{teamKo(t)}</div>)
-            : <div className="wc-mini-team">-</div>}
+          {rows.length > 0
+            ? rows.slice(0, 4).map((row, i) => {
+                const status = qualStatus(row, quals);
+                return (
+                  <div key={row.id ?? row.fotmobTeamId} className={`wc-mini-team standing ${status ?? ""}`} title={getTeamNameByOriginal(row.teamName)}>
+                    <span className="wc-mini-seed">{row.rankNo ?? i + 1}</span>
+                    {row.crest && <img src={row.crest} alt="" className="wc-mini-crest" />}
+                    <span className="wc-mini-name">{teamTla(row.teamName)}</span>
+                    <span className="wc-mini-pts">{row.points ?? 0}</span>
+                  </div>
+                );
+              })
+            : teams.length > 0
+              ? teams.slice(0, 4).map((t) => <div key={t} className="wc-mini-team" title={getTeamNameByOriginal(t)}>{teamTla(t)}</div>)
+              : <div className="wc-mini-team">-</div>}
         </div>
       </div>
     );

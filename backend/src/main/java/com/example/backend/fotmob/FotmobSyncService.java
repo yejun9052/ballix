@@ -70,12 +70,18 @@ public class FotmobSyncService {
      * 필요한 데이터만 담아 반환한다(P2: HTTP-in-transaction 방지).
      */
     // package-private — public @Transactional 메서드의 반환 타입이라 CGLIB 프록시(같은 패키지)가 참조 가능해야 함(private 금지).
-    record FinalizeOutcome(boolean finalized, boolean firstFinalize, Long competitionId,
+    record FinalizeOutcome(boolean finalized, boolean firstFinalize, boolean notifyEnd, Long competitionId,
                            String homeTeamName, Integer homeScore, Integer awayScore, String awayTeamName) {
         static FinalizeOutcome none() {
-            return new FinalizeOutcome(false, false, null, null, null, null, null);
+            return new FinalizeOutcome(false, false, false, null, null, null, null, null);
         }
     }
+
+    /** matchTime(KST 벽시계)과 비교할 기준 타임존 — 서버 JVM이 UTC(도커)여도 now(KST)로 비교해야 9시간 오차가 없다. */
+    private static final java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
+    /** 종료 알림(ntfy)을 보낼 최대 경과시간(시간). 킥오프가 이보다 오래 전이면 (상세 선반영/일괄보강으로
+     *  뒤늦게 finalize돼도) "경기 종료" 푸시를 생략한다 — 정규 경기(킥오프 ~2.5h 내 종료)는 영향 없음. */
+    private static final long NOTIFY_END_RECENCY_HOURS = 6;
 
     /**
      * 상세(라인업·이벤트) 누락 경기 일괄 보강 — 시작된(IN_PLAY/FINISHED) 경기 중 lineupSynced=false 인 것을
@@ -190,7 +196,12 @@ public class FotmobSyncService {
             log.warn("[fotmob-sync] 예측 채점 실패 matchId={} : {}", match.getId(), e.getMessage());
         }
         Long compId = match.getCompetition() != null ? match.getCompetition().getId() : null;
-        return new FinalizeOutcome(true, firstFinalize, compId,
+        // 종료 알림은 첫 finalize면서 킥오프가 최근(NOTIFY_END_RECENCY_HOURS 이내)일 때만 — 오래된 경기를
+        // 선반영/일괄보강으로 뒤늦게 finalize해도 "경기 종료" 푸시가 늦게 나가지 않도록.
+        boolean notifyEnd = firstFinalize
+                && match.getMatchTime() != null
+                && match.getMatchTime().isAfter(LocalDateTime.now(KST).minusHours(NOTIFY_END_RECENCY_HOURS));
+        return new FinalizeOutcome(true, firstFinalize, notifyEnd, compId,
                 resp.homeTeamName(), resp.homeScore(), resp.awayScore(), resp.awayTeamName());
     }
 
@@ -202,7 +213,7 @@ public class FotmobSyncService {
         if (fo == null || !fo.finalized()) {
             return;
         }
-        if (fo.firstFinalize()) {
+        if (fo.notifyEnd()) {
             ntfy.send("Full Time",
                     String.format("%s %s-%s %s 경기 종료",
                             fo.homeTeamName(), nz(fo.homeScore()), nz(fo.awayScore()), fo.awayTeamName()),

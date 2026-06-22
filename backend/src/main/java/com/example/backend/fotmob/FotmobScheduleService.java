@@ -5,6 +5,8 @@ import com.example.backend.competition.Competition;
 import com.example.backend.competition.CompetitionRepository;
 import com.example.backend.competition.enums.CompType;
 import com.example.backend.fotmob.dto.FotmobMatchResponse;
+import com.example.backend.fotmob.dto.FotmobPlayoffResponse;
+import com.example.backend.fotmob.dto.FotmobPlayoffResponse.PlayoffMatch;
 import com.example.backend.fotmob.dto.FotmobScheduleResponse;
 import com.example.backend.fotmob.dto.FotmobScheduleResponse.ScheduledMatch;
 import com.example.backend.match.Match;
@@ -68,6 +70,10 @@ public class FotmobScheduleService {
     /** 시즌 전체 일정으로 받을 리그 leagueId(쉼표구분). 월드컵 등 토너먼트 — 결승까지 한 번에. */
     @Value("${fotmob.schedule.full-season-leagues:}")
     private String fullSeasonLeaguesCsv;
+
+    /** 예상 브래킷(playoff)을 동기화할 리그 leagueId(쉼표구분). 비우면 full-season-leagues를 따른다. */
+    @Value("${fotmob.schedule.playoff-leagues:}")
+    private String playoffLeaguesCsv;
 
     /**
      * 과거~미래 N일치 일정을 동기화.
@@ -240,6 +246,109 @@ public class FotmobScheduleService {
         enrichTeamTranslations();      // 새로 들어온 팀(나라) 이름을 한국어로 번역(번역 전=name / 번역 후=nameKo)
         log.info("[fotmob-schedule] 리그 {} 전체 일정 {}경기 동기화", leagueId, count);
         return count;
+    }
+
+    // ── 토너먼트 예상 브래킷(playoff) 동기화 ──────────────────────────────
+    // FotMob는 그룹 진행에 따라 32강 등 **예상 대진**을 채워준다. 이를 받아 기존(일정 동기화로 만들어진)
+    // 토너먼트 경기에 stage(라운드명)·bracketOrder(슬롯 순서)·예상 팀(32강 한정)을 반영한다.
+    // 일정 동기화(syncFullLeague)가 stage=null로 덮으므로 **반드시 그 뒤에** 돌려야 한다.
+
+    /** "1/16"·"1/8"·"1/4"·"1/2"·"final" → 프론트 라운드 키. 알 수 없으면 null(스킵). */
+    private String mapPlayoffStage(String fotmobStage) {
+        if (fotmobStage == null) return null;
+        return switch (fotmobStage.trim().toLowerCase()) {
+            case "1/16" -> "Round of 32";
+            case "1/8"  -> "Round of 16";
+            case "1/4"  -> "Quarter-final";
+            case "1/2"  -> "Semi-final";
+            case "final" -> "Final";
+            default -> null;
+        };
+    }
+
+    /** playoff-leagues(없으면 full-season-leagues) 전체의 예상 브래킷 동기화. */
+    public int syncPlayoffLeagues() {
+        String csv = (playoffLeaguesCsv != null && !playoffLeaguesCsv.isBlank())
+                ? playoffLeaguesCsv : fullSeasonLeaguesCsv;
+        int total = 0;
+        for (Long leagueId : parseLeagueIds(csv)) {
+            try {
+                total += syncPlayoff(leagueId);
+            } catch (Exception e) {
+                log.warn("[fotmob-playoff] 리그 {} 브래킷 동기화 실패: {}", leagueId, e.getMessage());
+            }
+        }
+        return total;
+    }
+
+    /** 단일 리그 예상 브래킷 동기화 — 크롤은 트랜잭션 밖, 저장만 self.persistPlayoff. */
+    public int syncPlayoff(Long leagueId) {
+        FotmobPlayoffResponse resp = fotmobClient.getPlayoff(leagueId);
+        if (resp == null || resp.matchups() == null || resp.matchups().isEmpty()) {
+            return 0;
+        }
+        int count = self.persistPlayoff(resp);
+        log.info("[fotmob-playoff] 리그 {} 예상 브래킷 {}대진 반영", leagueId, count);
+        return count;
+    }
+
+    /**
+     * 예상 브래킷을 기존 토너먼트 경기에 반영(트랜잭션). matchId로 기존 경기를 찾아
+     * stage·bracketOrder를 설정하고, 미정 아닌(예상 확정) 대진은 팀/시각/스코어/상태까지 갱신한다.
+     * 미정(tbd) 대진은 단계만 채워 슬롯이 시간과 함께 표시되게 한다.
+     */
+    @Transactional
+    public int persistPlayoff(FotmobPlayoffResponse resp) {
+        int count = 0;
+        for (PlayoffMatch pm : resp.matchups()) {
+            if (pm.matchId() == null) continue;
+            String stage = mapPlayoffStage(pm.stage());
+            if (stage == null) continue;
+
+            Match m = matchRepository.findByFotmobMatchId(pm.matchId()).orElse(null);
+            if (m == null) continue;   // 일정 동기화가 먼저 만들어 둠 — 없으면 스킵
+
+            try {
+                m.applyBracket(stage, pm.drawOrder());
+
+                LocalDateTime kickoff = toKst(pm.utcTime());
+                String status = resolvePlayoffStatus(pm);
+                if (kickoff != null) {
+                    m.updateSchedule(kickoff, stage, m.getGroupName(), status);
+                }
+
+                // 예상 확정(미정 아님)인 쪽만 실제 팀으로 반영 — placeholder는 그대로 둔다
+                Team home = (!pm.tbd1() && pm.homeId() != null)
+                        ? upsertTeam(pm.homeId(), pm.homeName(), pm.homeCrest()) : null;
+                Team away = (!pm.tbd2() && pm.awayId() != null)
+                        ? upsertTeam(pm.awayId(), pm.awayName(), pm.awayCrest()) : null;
+                m.updateTeams(home, away);
+
+                boolean played = !"SCHEDULED".equals(status);
+                Integer hs = played ? pm.homeScore() : null;
+                Integer as = played ? pm.awayScore() : null;
+                m.updateScore(status, hs, as, resolvePlayoffWinner(played, hs, as));
+
+                count++;
+            } catch (Exception e) {
+                log.warn("[fotmob-playoff] 대진 반영 실패 fotmobId={} : {}", pm.matchId(), e.getMessage());
+            }
+        }
+        return count;
+    }
+
+    private String resolvePlayoffStatus(PlayoffMatch pm) {
+        if (pm.cancelled()) return "CANCELLED";
+        if (pm.finished()) return "FINISHED";
+        if (pm.started()) return "IN_PLAY";
+        return "SCHEDULED";
+    }
+
+    private String resolvePlayoffWinner(boolean played, Integer hs, Integer as) {
+        if (!played || hs == null || as == null) return null;
+        if (hs > as) return "HOME_TEAM";
+        if (as > hs) return "AWAY_TEAM";
+        return "DRAW";
     }
 
     private java.util.List<Long> parseLeagueIds(String csv) {

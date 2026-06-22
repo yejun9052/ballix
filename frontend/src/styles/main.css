@@ -294,17 +294,17 @@
 .item-meta b { padding: 2px 8px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font-size: 10px; font-weight: 900; }
 .ai-flag { margin-left: auto; padding: 2px 9px !important; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--yellow) !important; color: #15130f !important; font-size: 10px; font-weight: 900; }
 
-.item-body { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.item-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(72px, 112px) minmax(0, 1fr); align-items: center; gap: 10px; }
 .status-pill { display: none; }
-.match-team { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; }
-.match-team strong { flex: 1; min-width: 0; font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.match-team { display: flex; align-items: center; gap: 9px; min-width: 0; width: 100%; }
+.match-team strong { flex: 1; min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.2; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; }
 .match-team.away { text-align: right; }
 .match-team.away strong { text-align: right; }
 
-.match-centerline { display: grid; justify-items: center; gap: 3px; }
+.match-centerline { display: grid; justify-items: center; gap: 3px; min-width: 0; width: 100%; }
 .match-centerline h3 { font-size: 13px; font-weight: 900; color: var(--faint); }
 .match-scoreline { font-size: 26px; font-weight: 900; color: var(--ink); letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
-.match-subtext { font-size: 10px; color: var(--muted); text-align: center; white-space: nowrap; font-weight: 700; }
+.match-subtext { max-width: 100%; font-size: 10px; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
 
 .prediction-item footer,
 .schedule-item footer {
@@ -366,8 +366,8 @@
 .schedule-pager { padding: 4px 16px 16px; }
 
 @media (max-width: 560px) {
-  .item-body { grid-template-columns: 1fr auto 1fr; }
-  .match-team strong { font-size: 14px; }
+  .item-body { grid-template-columns: minmax(0, 1fr) minmax(60px, 96px) minmax(0, 1fr); gap: 8px; }
+  .match-team strong { font-size: 12px; }
   .schedule-item:hover { transform: translate(-2px,-2px); box-shadow: 5px 5px 0 var(--shadow-col); }
 }
 
