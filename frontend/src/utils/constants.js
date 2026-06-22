@@ -43,3 +43,11 @@ export const aiFilters = [
 // 스크래퍼가 /api/data/matchDetails(라이브 신선값)로 바뀌어 데이터가 빨리 들어오므로 기존 45→20초로 축소.
 // (45초면 짧은 전반 스토피지(1~2분) 동안 시계가 45'에 못 닿아 "+N 추가시간"이 거의 안 보였음)
 export const LIVE_CLOCK_LAG_SECONDS = 20;
+
+// 스토피지(추가시간) 시계 상한 — 시계가 부여 추가시간을 한참 넘겨 "96:00"처럼 무한정 흐르지 않게 한다.
+// 신선한 HT/FT(clockRunning=false)가 오면 그게 우선(정지)이고, 이 상한은 그 신호가 늦거나(폴링 지연)
+// 안 와도(스크래퍼 다운) 시계가 폭주하지 않게 하는 안전장치다.
+// - 부여 추가시간(N)을 아는 경우: base + N + GRACE 초에서 멈춤.
+// - 모르는 경우: base + MAX 초에서 멈춤(긴 정상 스토피지는 허용, 폭주만 차단).
+export const STOPPAGE_GRACE_SECONDS = 30;
+export const MAX_STOPPAGE_SECONDS = 12 * 60;

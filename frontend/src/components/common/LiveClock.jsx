@@ -1,7 +1,11 @@
 // 라이브 경기 진행시간 시계 — liveStartedAtMs(절대시각) 앵커 기준으로 매초 흐름.
 // 정지(하프타임 등)는 백엔드 clockRunning=false 로 알려주므로 그때 시계를 멈추고 라벨만 표시한다.
 import { useTicker } from "../../hooks/useTicker.js";
-import { LIVE_CLOCK_LAG_SECONDS } from "../../utils/constants.js";
+import {
+  LIVE_CLOCK_LAG_SECONDS,
+  STOPPAGE_GRACE_SECONDS,
+  MAX_STOPPAGE_SECONDS,
+} from "../../utils/constants.js";
 
 export function LiveClock({ match }) {
   const raw = match.raw || match;
@@ -37,15 +41,6 @@ export function LiveClock({ match }) {
     return <span className="live-clock">● {label}</span>;
   }
 
-  // 시계를 LIVE_CLOCK_LAG_SECONDS 만큼 의도적으로 늦춰, 폴링(20초)+SSR 지연으로 늦게 들어오는
-  // 골·스코어 표시와 시계를 맞춘다(시계가 데이터보다 앞서 "골이 늦게 뜨는" 느낌 방지).
-  const elapsed = Math.max(
-    0,
-    Math.floor((now - anchorMs) / 1000) - LIVE_CLOCK_LAG_SECONDS,
-  );
-  const minute = Math.floor(elapsed / 60);
-  const second = elapsed % 60;
-
   // 정규시간 끝(base, 전반45/후반90)은 FotMob 권위값(liveBasePeriod) 우선 — 라벨 추측 X(1차 스토피지 오판 방지).
   // 없으면(구버전) 라벨 선행 숫자로 폴백.
   let base = raw.liveBasePeriod;
@@ -63,6 +58,24 @@ export function LiveClock({ match }) {
       : halfCap != null && halfCap > 0
         ? halfCap
         : null;
+
+  // 시계를 LIVE_CLOCK_LAG_SECONDS 만큼 의도적으로 늦춰, 폴링+지연으로 늦게 들어오는 골·스코어와 맞춘다.
+  const rawElapsed = Math.max(
+    0,
+    Math.floor((now - anchorMs) / 1000) - LIVE_CLOCK_LAG_SECONDS,
+  );
+  // 스토피지 상한 — 시계가 부여 추가시간을 넘겨 무한정 흐르지 않도록 멈춘다(데이터 지연/스크래퍼 다운 안전장치).
+  // 부여 추가시간을 알면 base+N+GRACE, 모르면 base+MAX 에서 정지. (신선한 HT/FT가 오면 위에서 이미 정지함)
+  let elapsed = rawElapsed;
+  if (Math.floor(rawElapsed / 60) >= base) {
+    const capStoppage =
+      addedMinutes != null && addedMinutes > 0
+        ? addedMinutes * 60 + STOPPAGE_GRACE_SECONDS
+        : MAX_STOPPAGE_SECONDS;
+    elapsed = Math.min(rawElapsed, base * 60 + capStoppage);
+  }
+  const minute = Math.floor(elapsed / 60);
+  const second = elapsed % 60;
 
   const mmss = `${minute}:${String(second).padStart(2, "0")}`;
   let text;
