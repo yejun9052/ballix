@@ -3,7 +3,7 @@
 
 .comment-form { display: flex; gap: 8px; align-items: flex-start; }
 .comment-form textarea {
-  flex: 1; resize: vertical; min-height: 44px; max-height: 160px;
+  flex: 1; resize: none; height: 64px;
   padding: 10px 12px; border: var(--bd) solid var(--paper); border-radius: var(--r-sm);
   font: inherit; background: #ffffff10; color: inherit;
 }
