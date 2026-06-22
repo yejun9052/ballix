@@ -223,8 +223,8 @@ export function MainScreen({
           </div>
         </section>
 
-        {/* 히어로 ↔ 경기일정 사이 가로 광고 */}
-        <HorizontalAd slot={0} />
+        {/* 환영 메세지 ↔ 경기일정 사이 */}
+        <HorizontalAd gridArea="ad-top" />
 
         <section className="feed-panel" id="predictions">
           <NoticeBanner />
@@ -407,8 +407,8 @@ export function MainScreen({
           </section>
         </aside>
 
-        {/* 경기일정 ↔ 푸터 사이 가로 광고 */}
-        <HorizontalAd slot={1} />
+        {/* 경기일정 ↔ 푸터 사이 */}
+        <HorizontalAd gridArea="ad-bot" />
 
         <SiteFooter />
       </section>

@@ -197,15 +197,18 @@
   .main-screen {
     grid-template-columns: minmax(0, 1fr) 330px;
     grid-template-areas:
-      "topbar topbar"
-      "hero   hero"
-      "feed   side"
-      "footer footer";
+      "topbar  topbar"
+      "hero    hero"
+      "ad-top  ad-top"
+      "feed    side"
+      "ad-bot  ."
+      "footer  footer";
   }
   .main-topbar { grid-area: topbar; }
   .main-hero { grid-area: hero; }
   .main-screen > .feed-panel { grid-area: feed; }
   .side-feed { grid-area: side; position: sticky; top: 78px; }
+  /* ad-horizontal의 gridArea는 JSX에서 style prop으로 주입 */
   .site-footer { grid-area: footer; }
 }
 @media (min-width: 1440px) { .main-screen { grid-template-columns: minmax(0, 1fr) 372px; } }

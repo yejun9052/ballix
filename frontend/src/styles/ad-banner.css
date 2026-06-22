@@ -1,61 +1,73 @@
-/* ── 광고 배너 — 세로(상세 사이드바) / 가로(메인 인라인) ── */
+/* ── 광고 배너 — 가로(728×90) / 세로(300×600) ── */
 
-/* 공통 */
 .ad-label {
-  position: absolute; top: 6px; left: 6px;
-  padding: 2px 6px;
-  background: rgba(0, 0, 0, 0.45); color: #fff;
+  position: absolute; top: 5px; left: 5px;
+  padding: 2px 5px;
+  background: rgba(0,0,0,0.45); color: #fff;
   font-size: 9px; font-weight: 900; letter-spacing: 0.08em;
-  border-radius: 4px; pointer-events: none;
+  border-radius: 3px; pointer-events: none; z-index: 1;
 }
 
-/* ── 세로 사이드바 (상세 페이지 좌우) ── */
+/* ── 가로 728×90 ── */
+.ad-horizontal {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 90px;
+  border-radius: var(--r);
+  overflow: hidden;
+  border: var(--bd) solid var(--line);
+  box-shadow: 4px 4px 0 var(--shadow-col);
+  text-decoration: none;
+  background: var(--surface-2);
+  transition: transform 0.12s var(--ease), box-shadow 0.12s var(--ease);
+}
+.ad-horizontal:hover {
+  transform: translate(-2px,-2px);
+  box-shadow: 6px 6px 0 var(--shadow-col);
+}
+.ad-horizontal img {
+  display: block;
+  width: 728px;
+  max-width: 100%;
+  height: 90px;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* ── 세로 300×600 ── */
 .ad-sidebar {
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
   z-index: 40;
   display: block;
-  width: 150px;
+  width: 300px;
+  height: 600px;
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
-  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
   text-decoration: none;
+  transition: box-shadow 0.15s, transform 0.15s;
 }
 .ad-sidebar:hover {
   transform: translateY(calc(-50% - 3px));
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.28);
 }
 .ad-sidebar img {
-  display: block; width: 100%; height: auto;
-}
-
-/* 좌우 위치: 컨텐츠 최대폭(1020px) 기준으로 바깥에 배치 */
-.ad-sidebar-left  { right: calc(50% + 510px + 18px); }
-.ad-sidebar-right { left:  calc(50% + 510px + 18px); }
-
-/* 사이드바는 충분히 넓을 때만 표시 (1020 + 2*(150+18) = 1356px → 여유 두어 1400px) */
-@media (max-width: 1399px) {
-  .ad-sidebar { display: none !important; }
-}
-
-/* ── 가로 배너 (메인 페이지 인라인) ── */
-.ad-horizontal {
   display: block;
-  position: relative;
-  width: 100%;
-  border-radius: var(--r);
-  overflow: hidden;
-  box-shadow: 4px 4px 0 var(--shadow-col);
-  border: var(--bd) solid var(--line);
-  text-decoration: none;
-  transition: transform 0.12s var(--ease), box-shadow 0.12s var(--ease);
+  width: 300px;
+  height: 600px;
+  object-fit: cover;
 }
-.ad-horizontal:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 var(--shadow-col);
-}
-.ad-horizontal img {
-  display: block; width: 100%; height: auto;
+
+/* 좌우 위치: 컨텐츠 1020px 기준 바깥 */
+.ad-sidebar-left  { right: calc(50% + 510px + 20px); }
+.ad-sidebar-right { left:  calc(50% + 510px + 20px); }
+
+/* 1020(콘텐츠) + 2*(300+20) = 1660 → 여유 두어 1700px 이상에서만 표시 */
+@media (max-width: 1699px) {
+  .ad-sidebar { display: none !important; }
 }
