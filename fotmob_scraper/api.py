@@ -39,6 +39,7 @@ from scraper import (
     BROWSER_LAUNCH_ARGS,
     CONTEXT_OPTIONS,
     STEALTH_INIT_SCRIPT,
+    install_resource_blocking,
 )
 from search import search_matches
 
@@ -74,11 +75,32 @@ async def crawl_throttle():
 
 
 @asynccontextmanager
+async def crawl_page(navigate_home: bool = False):
+    """크롤용 페이지를 `_browser_sem` 보호 하에 열고 자동으로 닫는다.
+
+    무료 인스턴스(512MB)에서 Chromium 페이지가 동시에 여러 개 뜨면 OOM(502)으로 프로세스가 죽는다.
+    모든 크롤(경기·선수·일정·순위·커멘터리·유튜브)을 이 한 세마포어로 직렬화해 **동시에 떠 있는 페이지를 1개로** 묶는다.
+    (컨텍스트에 설치된 리소스 차단과 함께 작동 — 차단으로 페이지당 메모리를, 세마포어로 페이지 수를 제한.)
+
+    navigate_home=True 면 fotmob.com 으로 먼저 이동해 상대경로 `fetch('/api/data/*')` 를 쓸 수 있게 한다.
+    """
+    async with _browser_sem:
+        page = await _state["context"].new_page()
+        try:
+            if navigate_home:
+                await page.goto("https://www.fotmob.com", wait_until="domcontentloaded", timeout=30000)
+            yield page
+        finally:
+            await page.close()
+
+
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     pw = await async_playwright().start()
     browser = await pw.chromium.launch(headless=True, args=BROWSER_LAUNCH_ARGS)
     context = await browser.new_context(**CONTEXT_OPTIONS)
     await context.add_init_script(STEALTH_INIT_SCRIPT)
+    await install_resource_blocking(context)   # 렌더 전용 리소스·광고 차단 → 512MB OOM 방지
     _state["pw"] = pw
     _state["browser"] = browser
     _state["context"] = context
@@ -486,16 +508,13 @@ async def get_match(match_id: str):
     await crawl_throttle()
     print(f"[crawl] 경기 수집 시작 matchId={mid} url={page_url}", flush=True)
     t0 = time.perf_counter()
-    # 폴링 핫패스 — 동시 크롤을 1개로 직렬화해 Chromium 페이지가 겹쳐 뜨는 OOM(502)을 막는다.
-    async with _browser_sem:
-        page = await _state["context"].new_page()
-        try:
+    # 폴링 핫패스 — crawl_page 가 세마포어로 동시 페이지를 1개로 직렬화해 OOM(502)을 막는다.
+    try:
+        async with crawl_page() as page:
             raw = await extract_from_page(page, page_url, mid, verbose=False)
-        except Exception as e:
-            print(f"[crawl] 경기 수집 실패 matchId={mid} ({time.perf_counter() - t0:.1f}s): {e}", flush=True)
-            raise HTTPException(status_code=502, detail=f"FotMob 수집 실패: {e}")
-        finally:
-            await page.close()
+    except Exception as e:
+        print(f"[crawl] 경기 수집 실패 matchId={mid} ({time.perf_counter() - t0:.1f}s): {e}", flush=True)
+        raise HTTPException(status_code=502, detail=f"FotMob 수집 실패: {e}")
 
     resp = build_match_response(raw)
     print(f"[crawl] 경기 수집 완료 matchId={mid} status={resp['statusType']} "
@@ -625,14 +644,12 @@ async def get_player(player_id: int):
     await crawl_throttle()
     print(f"[crawl] 선수 수집 시작 playerId={player_id}", flush=True)
     t0 = time.perf_counter()
-    page = await _state["context"].new_page()
     try:
-        raw = await fetch_player_from_page(page, player_id)
+        async with crawl_page() as page:
+            raw = await fetch_player_from_page(page, player_id)
     except Exception as e:
         print(f"[crawl] 선수 수집 실패 playerId={player_id}: {e}", flush=True)
         raise HTTPException(status_code=502, detail=f"선수 수집 실패: {e}")
-    finally:
-        await page.close()
     if not raw:
         raise HTTPException(status_code=502, detail="선수 데이터를 가져오지 못했습니다.")
     resp = build_player_response(raw)
@@ -714,13 +731,6 @@ def build_league_table(raw: dict, league_id: int) -> dict:
     return {"leagueId": league_id, "groups": groups}
 
 
-async def _new_fotmob_page():
-    """fotmob.com 이 로드된 새 page (상대경로 fetch 가능)."""
-    page = await _state["context"].new_page()
-    await page.goto("https://www.fotmob.com", wait_until="domcontentloaded", timeout=30000)
-    return page
-
-
 @app.get("/schedule")
 async def schedule(date: str, tz: str = "Asia/Seoul", leagues: str = ""):
     """date=YYYYMMDD 의 경기 목록. leagues=쉼표구분 leagueName 부분매칭 필터."""
@@ -728,14 +738,12 @@ async def schedule(date: str, tz: str = "Asia/Seoul", leagues: str = ""):
     await crawl_throttle()
     print(f"[crawl] 일정 수집 시작 date={date} leagues={leagues or '전체'}", flush=True)
     t0 = time.perf_counter()
-    page = await _new_fotmob_page()
     try:
-        raw = await fetch_schedule_from_page(page, date, tz)
+        async with crawl_page(navigate_home=True) as page:
+            raw = await fetch_schedule_from_page(page, date, tz)
     except Exception as e:
         print(f"[crawl] 일정 수집 실패 date={date}: {e}", flush=True)
         raise HTTPException(status_code=502, detail=f"일정 수집 실패: {e}")
-    finally:
-        await page.close()
     if not raw:
         raise HTTPException(status_code=502, detail="일정 데이터를 가져오지 못했습니다.")
     result = build_schedule(raw, filters, date)
@@ -774,13 +782,11 @@ async def commentary(match_id: str):
     await crawl_throttle()
     print(f"[crawl] 커멘터리 수집 시작 matchId={match_id}", flush=True)
     t0 = time.perf_counter()
-    page = await _new_fotmob_page()
     try:
-        raw = await fetch_commentary_from_page(page, match_id)
+        async with crawl_page(navigate_home=True) as page:
+            raw = await fetch_commentary_from_page(page, match_id)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"커멘터리 수집 실패: {e}")
-    finally:
-        await page.close()
     goals = build_commentary_goals(raw)
     print(f"[crawl] 커멘터리 수집 완료 matchId={match_id} 골 {len(goals)}건 "
           f"({time.perf_counter() - t0:.1f}s)", flush=True)
@@ -832,14 +838,12 @@ async def league_fixtures(league_id: int):
     await crawl_throttle()
     print(f"[crawl] 리그 전체 일정 수집 시작 leagueId={league_id}", flush=True)
     t0 = time.perf_counter()
-    page = await _new_fotmob_page()
     try:
-        raw = await fetch_league_table_from_page(page, league_id)
+        async with crawl_page(navigate_home=True) as page:
+            raw = await fetch_league_table_from_page(page, league_id)
     except Exception as e:
         print(f"[crawl] 리그 전체 일정 수집 실패 leagueId={league_id}: {e}", flush=True)
         raise HTTPException(status_code=502, detail=f"리그 일정 수집 실패: {e}")
-    finally:
-        await page.close()
     if not raw:
         raise HTTPException(status_code=502, detail="리그 일정을 가져오지 못했습니다.")
     result = build_league_fixtures(raw, league_id)
@@ -853,14 +857,12 @@ async def league_table(league_id: int):
     await crawl_throttle()
     print(f"[crawl] 순위 수집 시작 leagueId={league_id}", flush=True)
     t0 = time.perf_counter()
-    page = await _new_fotmob_page()
     try:
-        raw = await fetch_league_table_from_page(page, league_id)
+        async with crawl_page(navigate_home=True) as page:
+            raw = await fetch_league_table_from_page(page, league_id)
     except Exception as e:
         print(f"[crawl] 순위 수집 실패 leagueId={league_id}: {e}", flush=True)
         raise HTTPException(status_code=502, detail=f"리그 순위 수집 실패: {e}")
-    finally:
-        await page.close()
     if not raw:
         raise HTTPException(status_code=502, detail="리그 순위를 가져오지 못했습니다.")
     result = build_league_table(raw, league_id)
@@ -881,14 +883,12 @@ async def youtube_search(q: str, limit: int = 8):
     await crawl_throttle()
     print(f"[crawl] 유튜브 검색 시작 q={q!r}", flush=True)
     t0 = time.perf_counter()
-    page = await _state["context"].new_page()
     try:
-        videos = await fetch_youtube_search(page, q.strip(), limit)
+        async with crawl_page() as page:
+            videos = await fetch_youtube_search(page, q.strip(), limit)
     except Exception as e:
         print(f"[crawl] 유튜브 검색 실패 q={q!r}: {e}", flush=True)
         raise HTTPException(status_code=502, detail=f"유튜브 검색 실패: {e}")
-    finally:
-        await page.close()
     print(f"[crawl] 유튜브 검색 완료 q={q!r} {len(videos)}건 ({time.perf_counter() - t0:.1f}s)", flush=True)
     return {"query": q, "videos": videos}
 
@@ -897,13 +897,11 @@ async def youtube_search(q: str, limit: int = 8):
 async def youtube_embeddable(video_id: str):
     """영상이 외부 사이트(iframe)에서 재생 가능한지 — FIFA 공식처럼 임베드 막힌 영상 거르기용."""
     await crawl_throttle()
-    page = await _state["context"].new_page()
     try:
-        ok = await fetch_youtube_embeddable(page, video_id)
+        async with crawl_page() as page:
+            ok = await fetch_youtube_embeddable(page, video_id)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"임베드 확인 실패: {e}")
-    finally:
-        await page.close()
     return {"videoId": video_id, "embeddable": bool(ok)}
 
 

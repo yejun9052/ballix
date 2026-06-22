@@ -3,6 +3,7 @@ import asyncio
 import json
 import re
 from typing import Optional
+from urllib.parse import urlparse
 from playwright.async_api import async_playwright, Page
 
 
@@ -198,6 +199,46 @@ STEALTH_INIT_SCRIPT = (
     "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
 )
 
+# ── 무거운 리소스 차단(메모리 절감) ──────────────────────────────────────
+# 우리가 쓰는 데이터는 전부 same-origin `fetch('/api/data/*')` + HTML에 내장된 `__NEXT_DATA__`/`ytInitialData`
+# 에서만 온다 — 페이지가 실제로 렌더될 필요가 없다. 그래서 이미지/폰트/CSS/미디어와 광고·트래커 요청을 abort하면
+# Chromium 피크 메모리가 크게 줄어 무료 인스턴스(512MB)의 OOM(502)을 막는다(속도도 빨라짐).
+# 스크립트·문서·XHR/fetch는 통과시켜 first-party JS(XHR-CAPTURE 신선경로)와 데이터 fetch를 보존한다.
+_BLOCKED_RESOURCE_TYPES = {"image", "media", "font", "stylesheet"}
+# 데이터와 무관한 광고/애널리틱스/동의배너 호스트(부분일치) — 순수 오버헤드라 차단해도 안전.
+_BLOCKED_HOST_SUBSTR = (
+    "doubleclick", "googlesyndication", "google-analytics", "googletagmanager",
+    "googletagservices", "adservice", "adsystem", "amazon-adsystem",
+    "scorecardresearch", "hotjar", "mixpanel", "criteo", "taboola", "outbrain",
+    "quantserve", "pubmatic", "rubiconproject", "onetrust", "cookielaw",
+    "sentry.io", "facebook.net",
+)
+
+
+async def _route_block_heavy(route):
+    """렌더 전용 리소스·광고/트래커는 abort, 데이터·문서·스크립트·XHR은 통과."""
+    req = route.request
+    try:
+        if req.resource_type in _BLOCKED_RESOURCE_TYPES:
+            await route.abort()
+            return
+        host = (urlparse(req.url).hostname or "").lower()
+        if any(s in host for s in _BLOCKED_HOST_SUBSTR):
+            await route.abort()
+            return
+        await route.continue_()
+    except Exception:
+        # 라우팅 처리 실패가 크롤 자체를 깨지 않도록 안전하게 통과 시도.
+        try:
+            await route.continue_()
+        except Exception:
+            pass
+
+
+async def install_resource_blocking(context) -> None:
+    """공유 브라우저 컨텍스트에 무거운 리소스 차단 라우트를 설치한다(모든 페이지에 자동 적용)."""
+    await context.route("**/*", _route_block_heavy)
+
 
 async def fetch_schedule_from_page(page: Page, date: str, tz: str = "Asia/Seoul", ccode: str = "KOR") -> Optional[dict]:
     """
@@ -377,6 +418,7 @@ async def fetch_match_data(url_or_id: str, headless: bool = True) -> dict:
         browser = await p.chromium.launch(headless=headless, args=BROWSER_LAUNCH_ARGS)
         context = await browser.new_context(**CONTEXT_OPTIONS)
         await context.add_init_script(STEALTH_INIT_SCRIPT)
+        await install_resource_blocking(context)   # 렌더 전용 리소스 차단(메모리 절감)
         page: Page = await context.new_page()
         try:
             return await extract_from_page(page, page_url, match_id)

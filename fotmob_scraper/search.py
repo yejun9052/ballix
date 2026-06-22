@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 from playwright.async_api import async_playwright, Page, Browser
+from scraper import install_resource_blocking
 
 
 @dataclass
@@ -254,6 +255,7 @@ async def search_matches(
         await ctx.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
         )
+        await install_resource_blocking(ctx)   # 렌더 전용 리소스 차단(메모리 절감)
         page = await ctx.new_page()
         await page.goto("https://www.fotmob.com", wait_until="domcontentloaded", timeout=30000)
         await asyncio.sleep(1)
