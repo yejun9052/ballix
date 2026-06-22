@@ -5,6 +5,16 @@ export const predictAi = (matchId, { force = false } = {}) => {
   return API.post(`/api/admin/ai/predict?matchId=${matchId}&force=${force}`);
 };
 
+// 실시간 AI 승률 갱신(15분 간격) 상태 조회 — { enabled, intervalMinutes, liveTargets }
+export const getLiveAi = () => {
+  return API.get(`/api/admin/ai/live-prediction`);
+};
+
+// 실시간 AI 승률 갱신 on/off 토글
+export const setLiveAi = (enabled) => {
+  return API.post(`/api/admin/ai/live-prediction?enabled=${enabled}`);
+};
+
 // ── 유저 관리 ──
 
 // 유저 목록 — q=이름 부분검색(선택)

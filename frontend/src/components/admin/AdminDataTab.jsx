@@ -8,18 +8,22 @@ import {
   syncScheduleByDate,
   syncMatch,
   syncStandings,
+  backfillDetails,
 } from "../../api/fotmobAdmin.js";
-import { predictAi } from "../../api/admin.js";
+import { predictAi, getLiveAi, setLiveAi } from "../../api/admin.js";
 import { setReplay, clearReplay } from "../../api/matchAdmin.js";
 import { formatDateInputValue } from "../../utils/format.js";
 
 export function AdminDataTab() {
   const [pollMin, setPollMin] = useState("");
   const [currentPoll, setCurrentPoll] = useState(null);
+  const [liveAi, setLiveAiState] = useState(null);   // { enabled, intervalMinutes, liveTargets }
   const [pastDays, setPastDays] = useState("7");
   const [futureDays, setFutureDays] = useState("14");
   const [syncDate, setSyncDate] = useState("");
   const [singleMatchId, setSingleMatchId] = useState("");
+  const [backfillSince, setBackfillSince] = useState("14");
+  const [backfillLimit, setBackfillLimit] = useState("8");
   const [standingsCompId, setStandingsCompId] = useState("");
   const [aiMatchId, setAiMatchId] = useState("");
   const [aiForce, setAiForce] = useState(false);
@@ -36,7 +40,18 @@ export function AdminDataTab() {
     getPollInterval()
       .then((d) => setCurrentPoll(typeof d === "number" ? d : d?.minutes ?? d))
       .catch(() => {});
+    getLiveAi()
+      .then((d) => setLiveAiState(d))
+      .catch(() => {});
   }, []);
+
+  async function toggleLiveAi(next) {
+    await run(`실시간 AI 예측 ${next ? "켜기" : "끄기"}`, async () => {
+      await setLiveAi(next);
+      const d = await getLiveAi();
+      setLiveAiState(d);
+    });
+  }
 
   async function run(label, fn) {
     setLoading(label);
@@ -54,6 +69,23 @@ export function AdminDataTab() {
   function today() {
     // KST 기준 오늘 날짜(YYYYMMDD). toISOString은 UTC라 한국 새벽에 하루 어긋난다.
     return formatDateInputValue(new Date()).replace(/-/g, "");
+  }
+
+  async function handleBackfill() {
+    setLoading("상세 일괄 보강");
+    setMsg("");
+    try {
+      const n = await backfillDetails({
+        sinceDays: Number(backfillSince),
+        limit: Number(backfillLimit),
+      });
+      const count = typeof n === "number" ? n : (n?.data ?? n ?? 0);
+      setMsg(`✅ 상세 ${count}경기 보강 완료 (남은 경기가 있으면 다시 눌러 이어서 처리)`);
+    } catch (err) {
+      setMsg(`❌ 상세 일괄 보강 실패: ${err.response?.data?.msg || err.message}`);
+    } finally {
+      setLoading("");
+    }
   }
 
   async function handleSearch() {
@@ -164,6 +196,38 @@ export function AdminDataTab() {
             )}
           >
             {loading === `경기 ${singleMatchId} 동기화` ? "진행 중…" : "동기화"}
+          </button>
+        </div>
+      </div>
+
+      {/* 상세(라인업·이벤트) 일괄 보강 */}
+      <div className="data-card">
+        <h3 className="data-card-title">🩹 상세 누락 일괄 보강</h3>
+        <p className="data-hint">
+          시작된(진행 중/종료) 경기 중 라인업·이벤트가 비어 있는 경기를 최근순으로 다시 크롤합니다.
+          크롤은 하나씩 순차 처리되어 시간이 걸립니다 — 건수를 나눠 여러 번 누르세요.
+        </p>
+        <div className="data-row">
+          <label>최근</label>
+          <input
+            type="number" min="1" max="60" value={backfillSince}
+            onChange={(e) => setBackfillSince(e.target.value)}
+            className="data-input short"
+          />
+          <span>일 / 최대</span>
+          <input
+            type="number" min="1" max="50" value={backfillLimit}
+            onChange={(e) => setBackfillLimit(e.target.value)}
+            className="data-input short"
+          />
+          <span>경기</span>
+          <button
+            type="button"
+            className="data-btn"
+            disabled={Boolean(loading) || !backfillSince || !backfillLimit}
+            onClick={handleBackfill}
+          >
+            {loading === "상세 일괄 보강" ? "보강 중…" : "보강"}
           </button>
         </div>
       </div>
@@ -339,6 +403,39 @@ export function AdminDataTab() {
           </button>
         </div>
         <p className="data-hint">※ 재시작 시 application.yml 값으로 초기화됩니다.</p>
+      </div>
+
+      {/* 실시간 AI 승률 갱신 토글 */}
+      <div className="data-card">
+        <h3 className="data-card-title">🤖 실시간 AI 승률 갱신</h3>
+        {liveAi && (
+          <p className="data-hint">
+            현재: <b>{liveAi.enabled ? "🟢 켜짐(ON)" : "⚪ 꺼짐(OFF)"}</b>
+            {" · "}{liveAi.intervalMinutes}분 간격 · 지금 대상 경기 {liveAi.liveTargets}개
+          </p>
+        )}
+        <div className="data-row">
+          <button
+            type="button"
+            className="data-btn"
+            disabled={Boolean(loading) || liveAi?.enabled === true}
+            onClick={() => toggleLiveAi(true)}
+          >
+            {loading === "실시간 AI 예측 켜기" ? "적용 중…" : "켜기"}
+          </button>
+          <button
+            type="button"
+            className="data-btn"
+            disabled={Boolean(loading) || liveAi?.enabled === false}
+            onClick={() => toggleLiveAi(false)}
+          >
+            {loading === "실시간 AI 예측 끄기" ? "적용 중…" : "끄기"}
+          </button>
+        </div>
+        <p className="data-hint">
+          진행 중(IN_PLAY) + 예측 켜진 경기를 경과 15·30·45·60·75·90분에 라이브 재예측합니다(HT 제외).
+          ※ 재시작 시 application.yml 값으로 초기화됩니다.
+        </p>
       </div>
     </div>
   );

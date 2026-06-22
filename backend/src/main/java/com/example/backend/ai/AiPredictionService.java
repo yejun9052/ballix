@@ -373,7 +373,7 @@ public class AiPredictionService {
     private int clampScore(int v) {
         return Math.max(0, Math.min(9, v));
     }
-
+    //씹새
     // ── 헬퍼 ────────────────────────────────────────────────────────────
     private String teamName(Team t) {
         return t == null ? "미정" : t.getName();

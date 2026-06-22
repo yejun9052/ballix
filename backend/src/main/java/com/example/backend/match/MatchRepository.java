@@ -97,4 +97,17 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             "AND m.matchTime BETWEEN :from AND :to")
     List<Match> findPollTargets(@Param("from") LocalDateTime from,
                                 @Param("to") LocalDateTime to);
+
+    /**
+     * 상세(라인업·이벤트) 일괄 보강 대상: 시작된(IN_PLAY/FINISHED) 경기 중 라인업이 아직 저장 안 된 것.
+     * 과거 일정 동기화 때 스코어만 들어오고 상세 크롤이 실패해 비어 있는 경기를 최근순으로 골라낸다.
+     * since 로 너무 오래된 경기는 제외하고, Pageable 로 한 번에 처리할 건수를 제한한다.
+     */
+    @Query("SELECT m FROM Match m " +
+            "WHERE m.fotmobMatchId IS NOT NULL " +
+            "AND m.lineupSynced = false " +
+            "AND m.status IN ('IN_PLAY', 'FINISHED') " +
+            "AND m.matchTime >= :since " +
+            "ORDER BY m.matchTime DESC")
+    List<Match> findDetailBackfillTargets(@Param("since") LocalDateTime since, Pageable pageable);
 }

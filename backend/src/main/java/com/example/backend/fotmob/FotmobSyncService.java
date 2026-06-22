@@ -19,9 +19,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -73,6 +75,38 @@ public class FotmobSyncService {
         static FinalizeOutcome none() {
             return new FinalizeOutcome(false, false, null, null, null, null, null);
         }
+    }
+
+    /**
+     * 상세(라인업·이벤트) 누락 경기 일괄 보강 — 시작된(IN_PLAY/FINISHED) 경기 중 lineupSynced=false 인 것을
+     * 최근순으로 limit건까지 다시 크롤한다. 과거 일정 동기화 때 스코어만 들어오고 상세 크롤이 실패해(스크래퍼 OOM 등)
+     * 비어 있던 경기를 관리자가 한 번에 보강하는 용도다.
+     *
+     * 스크래퍼가 크롤을 세마포어로 직렬화 + 300~500ms throttle 하므로 버스트 부하 없이 하나씩 처리된다.
+     * 트랜잭션 밖에서 {@link #syncMatch}(HTTP 크롤 + 독립 트랜잭션 저장)를 반복 호출한다(HTTP-in-transaction 방지).
+     * 처리 건수가 많으면 시간이 걸리므로 호출당 건수를 제한(limit)하고, 관리자가 다시 눌러 이어서 처리한다.
+     *
+     * @param sinceDays 최근 N일 내 경기만 대상(과도하게 오래된 경기 제외). 1~60로 클램프.
+     * @param limit     이번 호출에서 보강할 최대 경기 수. 1~50으로 클램프.
+     * @return 실제로 동기화를 시도한 경기 수
+     */
+    public int backfillMissingDetails(int sinceDays, int limit) {
+        int days = Math.max(1, Math.min(sinceDays, 60));
+        int max = Math.max(1, Math.min(limit, 50));
+        LocalDateTime since = LocalDateTime.now().minusDays(days);
+        List<Match> targets = matchRepository.findDetailBackfillTargets(since, PageRequest.of(0, max));
+        int done = 0;
+        for (Match m : targets) {
+            try {
+                syncMatch(m);   // HTTP 크롤(트랜잭션 밖) + 독립 트랜잭션 저장. 스크래퍼가 직렬화/throttle.
+                done++;
+            } catch (Exception e) {
+                log.warn("[fotmob-backfill] 상세 보강 실패 matchId={} : {}", m.getId(), e.getMessage());
+            }
+        }
+        log.info("[fotmob-backfill] 상세 보강 완료 {}건 / 대상 {}건 (최근 {}일, 최대 {}건)",
+                done, targets.size(), days, max);
+        return done;
     }
 
     /** HTTP 크롤 후 트랜잭션 경유 저장. 트랜잭션 없이 호출해야 HTTP-in-tx 커넥션 점유가 없다. */

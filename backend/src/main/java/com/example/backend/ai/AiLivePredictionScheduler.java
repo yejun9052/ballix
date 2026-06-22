@@ -35,11 +35,30 @@ public class AiLivePredictionScheduler {
     private final AiPredictionService predictionService;
 
     @Value("${ai.live-prediction.enabled:true}")
-    private boolean enabled;
+    private volatile boolean enabled;   // 관리자 런타임 on/off 가능(재시작 시 application.yml 값으로 초기화)
 
     /** 킥오프 기준 재예측 간격(분). 경과 15·30·45·60·75·90분에 재예측. */
     @Value("${ai.live-prediction.interval-minutes:15}")
     private int intervalMinutes;
+
+    /** 관리자: 실시간 AI 예측 on/off 런타임 토글. */
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+        log.info("[ai-live] 실시간 AI 예측 런타임 {} (재시작 시 설정값으로 초기화)", enabled ? "켜짐(ON)" : "꺼짐(OFF)");
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public int getIntervalMinutes() {
+        return intervalMinutes;
+    }
+
+    /** 현재 실시간 갱신 대상(진행 중 + 예측 켜진) 경기 수 — 동작 확인용 진단. */
+    public int countLiveTargets() {
+        return matchRepository.findByStatusAndPredictionEnabledTrue("IN_PLAY").size();
+    }
 
     /** 경기별 마지막으로 재예측한 경과분 버킷(=경과분/interval-minutes). 진행 중 경기만 보관. */
     private final Map<Long, Integer> lastBucketByMatch = new ConcurrentHashMap<>();

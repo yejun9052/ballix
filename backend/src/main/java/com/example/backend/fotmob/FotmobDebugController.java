@@ -24,6 +24,7 @@ public class FotmobDebugController {
 
     private final FotmobClient fotmobClient;
     private final FotmobScheduleService scheduleService;
+    private final FotmobSyncService syncService;
     private final FotmobStandingService standingService;
     private final FotmobPollScheduler pollScheduler;
     private final TeamRepository teamRepository;
@@ -86,6 +87,20 @@ public class FotmobDebugController {
     public ResponseEntity<CommonResponse<?>> translateTeams() {
         int n = scheduleService.translateMissingTeamNames();
         return ResponseEntity.ok(CommonResponse.success("팀 이름 " + n + "건 한국어 번역", n));
+    }
+
+    /**
+     * 상세(라인업·이벤트) 누락 경기 일괄 보강 (관리자).
+     * 최근 sinceDays 일 내 시작된 경기 중 라인업이 비어 있는(크롤 실패 등) 경기를 limit건까지 다시 크롤한다.
+     * 스크래퍼가 직렬화/throttle 하므로 안전. 건수가 많으면 시간이 걸리니 limit를 나눠 여러 번 눌러 이어서 처리한다.
+     */
+    @PreAuthorize("hasRole('ADMIN_USER')")
+    @PostMapping("/details/backfill")
+    public ResponseEntity<CommonResponse<?>> backfillDetails(
+            @RequestParam(defaultValue = "14") int sinceDays,
+            @RequestParam(defaultValue = "8") int limit) {
+        int n = syncService.backfillMissingDetails(sinceDays, limit);
+        return ResponseEntity.ok(CommonResponse.success("상세 " + n + "경기 보강", n));
     }
 
     /** 특정 날짜(YYYYMMDD) 일정 동기화. */

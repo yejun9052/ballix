@@ -17,6 +17,11 @@ export const syncMatch = (matchId) => {
   return API.post(`/api/match/${matchId}/fotmob/sync`);
 };
 
+// 상세(라인업·이벤트) 누락 경기 일괄 보강 — 최근 sinceDays일 내 시작된 경기 중 상세 미저장분을 limit건까지 재크롤
+export const backfillDetails = ({ sinceDays = 14, limit = 8 } = {}) => {
+  return API.post(`/api/fotmob/details/backfill?sinceDays=${sinceDays}&limit=${limit}`);
+};
+
 // 리그 순위 강제 갱신
 export const syncStandings = (competitionId) => {
   return API.post(`/api/fotmob/standings/${competitionId}/sync`);
