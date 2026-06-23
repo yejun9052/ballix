@@ -18,7 +18,7 @@ function getGradeConfig(grade) {
 }
 
 // 카드 단일 컴포넌트
-function SoccerCard({ card, index = 0, compact = false }) {
+function SoccerCard({ card, index = 0, compact = false, count = 1 }) {
   const cfg = getGradeConfig(card.grade);
   return (
     <div
@@ -34,6 +34,8 @@ function SoccerCard({ card, index = 0, compact = false }) {
           ? <img src={card.imageUrl} alt={card.playerName} loading="lazy" />
           : <div className="sc-no-img">⚽</div>
         }
+        {/* 중복 보유 수 — 2장 이상일 때만 표시 */}
+        {count > 1 && <span className="sc-count-badge">×{count}</span>}
       </div>
       <div className="sc-body">
         <div className="sc-name" title={card.playerName}>{card.playerName}</div>
@@ -100,11 +102,21 @@ function CollectionTab({ isLoggedIn }) {
   }
   if (cards.length === 0) return <p className="sc-empty">아직 뽑은 카드가 없습니다.</p>;
 
+  // 같은 선수(playerName 기준) 중복 제거 — 대표 카드 1장 + 보유 수 표시
+  const deduped = Object.values(
+    cards.reduce((acc, c) => {
+      const key = c.playerName;
+      if (!acc[key]) acc[key] = { ...c, count: 1 };
+      else acc[key].count += 1;
+      return acc;
+    }, {})
+  );
+
   return (
     <div>
-      <p className="sc-collection-count">총 {cards.length}장</p>
+      <p className="sc-collection-count">총 {deduped.length}종 · {cards.length}장 보유</p>
       <div className="sc-grid sc-grid-compact">
-        {cards.map((c) => <SoccerCard key={c.id} card={c} compact />)}
+        {deduped.map((c) => <SoccerCard key={c.id} card={c} compact count={c.count} />)}
       </div>
     </div>
   );
