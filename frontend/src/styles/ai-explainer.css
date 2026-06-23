@@ -1,0 +1,85 @@
+/* ── AI 승률 산출 설명(접고 펼 수 있는 박스) ── */
+.ai-explainer {
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: 3px 3px 0 var(--shadow-col);
+  overflow: hidden;
+}
+
+/* 헤더 토글 버튼 */
+.ai-explainer-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.ai-explainer.open .ai-explainer-toggle {
+  border-bottom: var(--bd) solid var(--line);
+}
+.ai-explainer-title {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.ai-explainer-caret {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+/* 본문 */
+.ai-explainer-body {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+/* 단계 항목 */
+.ai-explainer-step {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.ai-explainer-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: var(--bd) solid var(--line);
+  border-radius: 50%;
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 1px 1px 0 var(--shadow-col);
+}
+.ai-explainer-step strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.ai-explainer-step p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* 하단 참고 문구 */
+.ai-explainer-note {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}

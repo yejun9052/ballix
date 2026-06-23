@@ -1,5 +1,6 @@
 // AI 승률 카드 — 홈/무/원정 확률 막대 + 관리자 재예측
 import { TeamCrest } from "../common/TeamCrest.jsx";
+import { AiPredictionExplainer } from "./AiPredictionExplainer.jsx";
 
 export function AiProbabilityCard({ isAdmin, isLoading, match, onRegenerate }) {
   const homeValue = match.prediction.home;
@@ -43,6 +44,9 @@ export function AiProbabilityCard({ isAdmin, isLoading, match, onRegenerate }) {
           <strong>{match.raw.aiHomeScore} : {match.raw.aiAwayScore}</strong>
         </div>
       )}
+
+      {/* 산출 방식 설명 — 접고 펼 수 있는 박스(포트폴리오용) */}
+      <AiPredictionExplainer />
 
       {isAdmin && (
         <button

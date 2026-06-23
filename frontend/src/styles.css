@@ -7,6 +7,7 @@
 @import "./styles/detail.css";     /* 상세·보드 공통 */
 @import "./styles/lineup.css";     /* 라인업 피치 */
 @import "./styles/match.css";      /* 이벤트·AI·예측 */
+@import "./styles/ai-explainer.css"; /* AI 승률 산출 설명(접기/펼치기) */
 @import "./styles/board.css";      /* 랭킹·순위 */
 @import "./styles/admin.css";      /* 관리자 */
 @import "./styles/worldcup.css";   /* 월드컵 */
