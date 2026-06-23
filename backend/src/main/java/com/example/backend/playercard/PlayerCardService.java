@@ -130,9 +130,10 @@ public class PlayerCardService {
 
     @SuppressWarnings("unchecked")
     private List<SoccerPlayerDto> getPool() {
+        // MAX(lp.position): Player.position이 null인 선수의 포지션을 LineupPlayer에서 보완
         List<Object[]> rows = em.createQuery("""
                 SELECT p.fotmobPlayerId, p.name, p.teamName, p.position,
-                       p.statsJson, AVG(lp.rating)
+                       p.statsJson, AVG(lp.rating), MAX(lp.position)
                 FROM Player p
                 LEFT JOIN LineupPlayer lp ON lp.player = p
                 WHERE p.name IS NOT NULL
@@ -147,10 +148,14 @@ public class PlayerCardService {
             String pos      = (String) row[3];
             String statsJs  = (String) row[4];
             Double avgRat   = row[5] != null ? ((Number) row[5]).doubleValue() : null;
+            // Player.position이 없으면 LineupPlayer 포지션으로 보완
+            String lpPos    = row[6] != null ? (String) row[6] : null;
+            String resolvedPos = (pos != null && !pos.isBlank()) ? pos
+                              : (lpPos != null ? lpPos : "");
 
             if (name == null || name.isBlank()) continue;
 
-            int overall = computeOverall(pos, statsJs, avgRat);
+            int overall = computeOverall(resolvedPos, statsJs, avgRat);
             String imageUrl = fotmobId != null
                     ? "https://images.fotmob.com/image_resources/playerimages/" + fotmobId + ".png"
                     : null;
@@ -159,7 +164,7 @@ public class PlayerCardService {
                     fotmobId != null ? fotmobId.toString() : name,
                     name,
                     team != null ? team : "",
-                    pos  != null ? pos  : "",
+                    resolvedPos,
                     "",
                     imageUrl,
                     overall

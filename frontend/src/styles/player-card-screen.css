@@ -236,14 +236,124 @@
 .sc-compact .sc-name { font-size: 11px; }
 .sc-compact .sc-body { padding: 6px; }
 
-/* 컬렉션 */
+/* 컬렉션 요약 */
 .sc-collection-count { font-size: 12px; color: var(--muted); font-weight: 800; margin: 0 0 12px; }
+.sc-filter-hint { color: var(--blue); }
 .sc-collection-load { display: flex; justify-content: center; padding: 40px 0; }
 .sc-empty { text-align: center; color: var(--muted); font-size: 14px; padding: 40px 0; }
 
-/* 모바일 */
+/* ── 필터 영역 ───────────────────────────────────────────────────────────── */
+.sc-filters {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.sc-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sc-filter-label {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--muted);
+  min-width: 40px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sc-filter-select {
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+/* 칩 버튼 */
+.sc-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.sc-chip {
+  border: var(--bd) solid var(--line);
+  border-radius: 99px;
+  padding: 4px 11px;
+  font-size: 11px;
+  font-weight: 900;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.sc-chip.active {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+.sc-chip:hover:not(.active) { background: var(--surface); color: var(--ink); }
+
+/* ── 6열 그리드 (PC 기준 12개 = 2줄) ────────────────────────────────────── */
+.sc-grid-col6 { grid-template-columns: repeat(6, 1fr); }
+
+/* ── 페이지네이션 ─────────────────────────────────────────────────────────── */
+.sc-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px 0 8px;
+  flex-wrap: wrap;
+}
+.sc-page-btn {
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r);
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 900;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--shadow-col);
+}
+.sc-page-btn:disabled { opacity: 0.38; cursor: not-allowed; box-shadow: none; }
+.sc-page-btn:not(:disabled):hover { background: var(--surface-2); }
+.sc-page-num {
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r);
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 900;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  min-width: 34px;
+  text-align: center;
+}
+.sc-page-num.active {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+  box-shadow: 2px 2px 0 var(--shadow-col);
+}
+.sc-page-num:not(.active):hover { background: var(--surface-2); color: var(--ink); }
+.sc-page-ellipsis { font-size: 12px; color: var(--muted); font-weight: 700; padding: 0 4px; }
+
+/* ── 반응형 ──────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .sc-grid-col6 { grid-template-columns: repeat(4, 1fr); }
+}
 @media (max-width: 640px) {
   .sc-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+  .sc-grid-col6 { grid-template-columns: repeat(3, 1fr); }
   .sc-pack-art { padding: 28px 16px; }
   .sc-btn-lg { padding: 12px 24px; font-size: 14px; }
+  .sc-filter-label { min-width: 36px; }
+}
+@media (max-width: 400px) {
+  .sc-grid-col6 { grid-template-columns: repeat(2, 1fr); }
 }
