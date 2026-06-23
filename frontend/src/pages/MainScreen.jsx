@@ -24,6 +24,7 @@ export function MainScreen({
   onOpenMyPredictions,
   onOpenPlayerStats,
   onOpenWorldCup,
+  onOpenPlayerCard,
   onOpenAdmin,
   onOpenMyPage,
   onRetryMatches,
@@ -132,6 +133,9 @@ export function MainScreen({
             <button type="button" className="nav-link" onClick={onOpenLeaderboard}>
               랭킹
             </button>
+            <button type="button" className="nav-link" onClick={onOpenPlayerCard}>
+              카드뽑기
+            </button>
             {isAdmin && (
               <button type="button" className="nav-link admin-nav" onClick={onOpenAdmin}>
                 관리자
@@ -186,6 +190,7 @@ export function MainScreen({
               <button type="button" onClick={() => handleMobileNav(onOpenPlayerStats)}>개인성적</button>
               <button type="button" onClick={() => handleMobileNav(onOpenMyPredictions)}>내 예측</button>
               <button type="button" onClick={() => handleMobileNav(onOpenLeaderboard)}>랭킹</button>
+              <button type="button" onClick={() => handleMobileNav(onOpenPlayerCard)}>카드뽑기</button>
               {isAdmin && (
                 <button type="button" className="mobile-menu-admin" onClick={() => handleMobileNav(onOpenAdmin)}>관리자</button>
               )}

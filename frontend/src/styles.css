@@ -16,4 +16,5 @@
 @import "./styles/replay.css";     /* 다시보기 */
 @import "./styles/player.css";     /* 선수 상세 모달 */
 @import "./styles/comment.css";    /* 경기 댓글 */
+@import "./styles/player-card-screen.css"; /* 선수 카드 뽑기 화면 */
 @import "./styles/player-stats.css"; /* 개인성적(득점왕·도움왕) */

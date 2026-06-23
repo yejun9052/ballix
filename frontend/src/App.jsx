@@ -19,6 +19,7 @@ const PlayerStatsScreen = lazy(() => import("./pages/PlayerStatsScreen.jsx").the
 const AdminScreen = lazy(() => import("./pages/AdminScreen.jsx").then((m) => ({ default: m.AdminScreen })));
 const MyPageScreen = lazy(() => import("./pages/MyPageScreen.jsx").then((m) => ({ default: m.MyPageScreen })));
 const WorldCupScreen = lazy(() => import("./components/worldcup/WorldCupScreen.jsx").then((m) => ({ default: m.WorldCupScreen })));
+const PlayerCardScreen = lazy(() => import("./pages/PlayerCardScreen.jsx").then((m) => ({ default: m.PlayerCardScreen })));
 
 // 온보딩(첫 로그인 닉네임 설정) 완료 플래그 키 — 유저별 1회
 const onboardKey = (userId) => `ballix-onboarded-${userId}`;
@@ -219,6 +220,13 @@ export default function App() {
         }}
       />
     );
+  } else if (screen === "playerCard") {
+    view = (
+      <PlayerCardScreen
+        isLoggedIn={isLoggedIn}
+        onBack={() => setScreen("main")}
+      />
+    );
   } else if (screen === "admin" && isAdmin) {
     view = <AdminScreen user={currentUser} onBack={() => setScreen("main")} />;
   } else if (screen === "mypage" && isLoggedIn) {
@@ -262,6 +270,7 @@ export default function App() {
         onOpenMyPredictions={() => (isLoggedIn ? setScreen("myPredictions") : setScreen("login"))}
         onOpenPlayerStats={() => setScreen("playerStats")}
         onOpenWorldCup={() => setScreen("worldcup")}
+        onOpenPlayerCard={() => setScreen("playerCard")}
         onOpenAdmin={() => (isAdmin ? setScreen("admin") : null)}
         onOpenMyPage={() => setScreen("mypage")}
         onSelectMatch={(match) => {
