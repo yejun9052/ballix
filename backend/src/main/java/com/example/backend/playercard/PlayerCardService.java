@@ -2,8 +2,6 @@ package com.example.backend.playercard;
 
 import com.example.backend.global.exceptopn.BadRequestException;
 import com.example.backend.global.exceptopn.UnauthorizedException;
-import com.example.backend.fotmob.player.Player;
-import com.example.backend.fotmob.player.PlayerRepository;
 import com.example.backend.user.User;
 import com.example.backend.user.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -16,47 +14,83 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
+/**
+ * 선수 카드 뽑기 서비스.
+ *
+ * ── 오버롤 산출 공식 ──────────────────────────────────────────────────────────
+ *
+ * 모든 볼륨 스탯은 90분 환산 후 참조 최대치(REF_*)로 나눠 0~1 정규화.
+ * 비율 스탯(%, rating)은 선형 정규화.
+ * 최종: overall = 60 + round(가중합 × 39)   → 60~99
+ *
+ * [GK]
+ *   Rating(평균)×0.25 + 선방률(%)×0.25 + 무실점비율×0.20
+ *   + 기대실점방어(시즌)×0.10 + 선방수/90×0.10
+ *   + 패스정확도(%)×0.05 + 페널티선방률(%)×0.05
+ *   페널티: 레드카드 1장당 -0.04
+ *
+ * [CB]
+ *   Rating×0.20 + 클리어링/90×0.18 + 공중볼승률(%)×0.15
+ *   + 태클/90×0.12 + 인터셉트/90×0.12 + 패스정확도(%)×0.10
+ *   + 듀얼승률(%)×0.08 + (골+어시)/90×0.05
+ *   페널티: 레드카드 1장당 -0.04
+ *
+ * [LB/RB]
+ *   Rating×0.18 + 태클/90×0.14 + 클리어링/90×0.12
+ *   + 인터셉트/90×0.10 + 어시/90×0.10 + 찬스창출/90×0.10
+ *   + 크로스성공/90×0.08 + 패스정확도(%)×0.08
+ *   + 드리블성공률(%)×0.06 + 듀얼승률(%)×0.04
+ *   페널티: 레드카드 1장당 -0.04
+ *
+ * [DM]
+ *   Rating×0.22 + 태클/90×0.18 + 인터셉트/90×0.16
+ *   + 듀얼승률(%)×0.14 + 패스정확도(%)×0.14
+ *   + 수비액션/90×0.08 + 리커버리/90×0.08
+ *   페널티: 레드카드 1장당 -0.04
+ *
+ * [CM]
+ *   Rating×0.18 + 패스정확도(%)×0.18 + 어시/90×0.14
+ *   + 찬스창출/90×0.12 + xA/90×0.10 + 골/90×0.08
+ *   + 듀얼승률(%)×0.08 + 태클/90×0.07 + 드리블성공률(%)×0.05
+ *   페널티: 레드카드 1장당 -0.04
+ *
+ * [AM]
+ *   Rating×0.18 + 골/90×0.18 + 어시/90×0.14
+ *   + xG/90×0.12 + xA/90×0.10 + 찬스창출/90×0.10
+ *   + 슈팅정확도(%)×0.08 + 드리블성공률(%)×0.06 + 패스정확도(%)×0.04
+ *   페널티: 레드카드 1장당 -0.04
+ *
+ * [FWD - 윙어(LW/RW)]
+ *   Rating×0.18 + 골/90×0.18 + 어시/90×0.14
+ *   + xG/90×0.10 + xA/90×0.10 + 찬스창출/90×0.10
+ *   + 드리블성공률(%)×0.10 + 크로스성공/90×0.06 + 슈팅정확도(%)×0.04
+ *   페널티: 레드카드 1장당 -0.04
+ *
+ * [ST]
+ *   Rating×0.18 + 골/90×0.28 + xG/90×0.14
+ *   + 슈팅정확도(%)×0.10 + 어시/90×0.08
+ *   + 박스터치/90×0.08 + 공중볼승률(%)×0.07 + 헤더/90×0.07
+ *   페널티: 레드카드 1장당 -0.04
+ *
+ * ── 90분 환산 기준치(REF) ─────────────────────────────────────────────────────
+ *   골/90 : 0.70 (월클ST), 어시/90 : 0.45, xG/90 : 0.65, xA/90 : 0.40
+ *   태클/90 : 4.5, 인터셉트/90 : 2.8, 클리어링/90 : 7.0, 수비액션/90 : 9.0
+ *   리커버리/90 : 10.0, 선방/90 : 5.5, 찬스창출/90 : 3.5
+ *   크로스성공/90 : 3.0, 헤더/90 : 3.0, 박스터치/90 : 6.0
+ *   기대실점방어(시즌) : 15.0
+ *   (골+어시)/90 DEF : 0.20
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PlayerCardService {
 
     private final PlayerCardRepository playerCardRepository;
-    private final PlayerRepository playerRepository;
     private final UserRepository userRepository;
     private final EntityManager em;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // ── 오버롤 산출 기준값 (정규화 분모) ───────────────────────────────────
-    // 모든 스탯은 90분 환산 후 0~1로 정규화 → 포지션별 가중합 → overall = 60 + score×39
-    // Rating: 5.5(하한) ~ 8.5(상한)
-    private static final double R_MIN = 5.5, R_MAX = 8.5;
-    // 공격 스탯 (top-flight 시즌 기준 최대치)
-    private static final double GOALS_MAX       = 0.80; // 골/90
-    private static final double XG_MAX          = 0.70; // xG/90
-    private static final double ASSISTS_MAX     = 0.40; // 어시/90
-    private static final double XA_MAX          = 0.40; // xA/90
-    private static final double SHOTS_ON_MAX    = 60.0; // 슈팅 정확도 %
-    private static final double CHANCES_MAX     = 3.00; // 찬스 창출/90
-    // 패스/드리블/듀얼
-    private static final double PASS_MIN        = 60.0; // 패스 정확도 하한 %
-    private static final double PASS_MAX        = 96.0; // 패스 정확도 상한 %
-    private static final double DRIBBLE_MAX     = 80.0; // 드리블 성공률 %
-    private static final double DUEL_MIN        = 30.0; // 듀얼 승률 하한 %
-    private static final double DUEL_MAX        = 70.0; // 듀얼 승률 상한 %
-    private static final double AERIAL_MIN      = 20.0; // 공중볼 승률 하한 %
-    private static final double AERIAL_MAX      = 80.0; // 공중볼 승률 상한 %
-    // 수비 스탯
-    private static final double TACKLE_MAX      = 4.00; // 태클/90
-    private static final double INTERCEPT_MAX   = 2.50; // 인터셉트/90
-    private static final double CLEARANCE_MAX   = 6.00; // 클리어링/90
-    // GK 스탯
-    private static final double SAVE_PCT_MIN    = 50.0; // 선방률 하한 %
-    private static final double SAVE_PCT_MAX    = 90.0; // 선방률 상한 %
-    private static final double CLEAN_SHEET_MAX = 0.50; // 무실점/경기
-    private static final double GOAL_PREV_MAX   = 15.0; // 기대실점 방어 (시즌)
-
-    // 스탯 없는 선수 기본 오버롤
     private static final int DEFAULT_OVERALL = 65;
 
     // ── 뽑기 ───────────────────────────────────────────────────────────────
@@ -85,7 +119,6 @@ public class PlayerCardService {
         return result;
     }
 
-    // 내 카드 목록
     @Transactional(readOnly = true)
     public List<PlayerCardView> myCards(Long userId) {
         if (userId == null) throw new UnauthorizedException("로그인이 필요합니다.");
@@ -95,12 +128,8 @@ public class PlayerCardService {
 
     // ── 선수 풀 빌드 ────────────────────────────────────────────────────────
 
-    // Player 테이블 전체 + 라인업 평균 rating 조인
-    // [fotmobPlayerId, name, teamName, position, imageUrl, nationality,
-    //  avgRating(Double or null), statsJson(String or null)]
     @SuppressWarnings("unchecked")
     private List<SoccerPlayerDto> getPool() {
-        // JPQL: Player 테이블 LEFT JOIN lineup_player 평균 rating
         List<Object[]> rows = em.createQuery("""
                 SELECT p.fotmobPlayerId, p.name, p.teamName, p.position,
                        p.statsJson, AVG(lp.rating)
@@ -112,25 +141,28 @@ public class PlayerCardService {
 
         List<SoccerPlayerDto> pool = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
-            Long fotmobId  = (Long)   row[0];
-            String name    = (String) row[1];
-            String team    = (String) row[2];
-            String pos     = (String) row[3];
-            String statsJs = (String) row[4];
-            Double avgRat  = row[5] != null ? ((Number) row[5]).doubleValue() : null;
+            Long   fotmobId = (Long)   row[0];
+            String name     = (String) row[1];
+            String team     = (String) row[2];
+            String pos      = (String) row[3];
+            String statsJs  = (String) row[4];
+            Double avgRat   = row[5] != null ? ((Number) row[5]).doubleValue() : null;
 
             if (name == null || name.isBlank()) continue;
 
             int overall = computeOverall(pos, statsJs, avgRat);
-            // FotMob 선수 이미지 URL — 프론트와 동일하게 구성
             String imageUrl = fotmobId != null
                     ? "https://images.fotmob.com/image_resources/playerimages/" + fotmobId + ".png"
                     : null;
 
             pool.add(new SoccerPlayerDto(
                     fotmobId != null ? fotmobId.toString() : name,
-                    name, team != null ? team : "", pos != null ? pos : "",
-                    "", imageUrl, overall
+                    name,
+                    team != null ? team : "",
+                    pos  != null ? pos  : "",
+                    "",
+                    imageUrl,
+                    overall
             ));
         }
         return pool;
@@ -138,187 +170,317 @@ public class PlayerCardService {
 
     // ── 오버롤 계산 ─────────────────────────────────────────────────────────
 
-    /**
-     * 선수 오버롤 산출.
-     * 1순위: stats_json(시즌 스탯) → 포지션별 가중합
-     * 2순위: 라인업 평균 rating → 스케일 변환
-     * 3순위: 기본값 65
-     */
     private int computeOverall(String position, String statsJson, Double avgRating) {
-        // 1순위: 시즌 스탯
+        // 1순위: 시즌 스탯 JSON
         if (statsJson != null && !statsJson.isBlank()) {
             try {
-                List<Map<String, Object>> stats = objectMapper.readValue(
+                List<Map<String, Object>> raw = objectMapper.readValue(
                         statsJson, new TypeReference<>() {});
-                Map<String, Double> s = parseStats(stats);
-                double score = scoreByPosition(position, s);
-                return clampOverall(60 + (int) Math.round(score * 39));
+                Map<String, Double> s = parseStats(raw);
+                double score = scoreByPosition(positionGroup(position), s);
+                return clamp(60 + (int) Math.round(score * 39));
             } catch (Exception e) {
                 log.debug("stats_json 파싱 실패({}): {}", position, e.getMessage());
             }
         }
-
-        // 2순위: 라인업 평균 평점
+        // 2순위: 라인업 평균 FotMob rating
         if (avgRating != null) {
-            double score = norm(avgRating, R_MIN, R_MAX);
-            return clampOverall(60 + (int) Math.round(score * 39));
+            double score = norm(avgRating, 5.5, 8.5);
+            return clamp(60 + (int) Math.round(score * 39));
         }
-
         // 3순위: 기본값
         return DEFAULT_OVERALL;
     }
 
     /**
-     * 포지션 그룹 판별 후 가중합 계산.
-     *
-     * GK:
-     *   score = Rating×0.35 + 선방률×0.25 + 무실점비율×0.15
-     *           + 기대실점방어×0.10 + 선방수/경기×0.10 + 페널티선방률×0.05
-     *
-     * DEF (CB, LB, RB, Defender):
-     *   score = Rating×0.30 + 듀얼승률×0.20 + 태클/90×0.15 + 인터셉트/90×0.12
-     *           + 공중볼승률×0.10 + 패스정확도×0.08 + 클리어링/90×0.05
-     *
-     * MID_DEF (DM, Defensive):
-     *   score = Rating×0.25 + 태클/90×0.20 + 인터셉트/90×0.15 + 듀얼승률×0.15
-     *           + 패스정확도×0.15 + xA/90×0.10
-     *
-     * MID (CM, AM, CAM, Midfielder):
-     *   score = Rating×0.25 + 패스정확도×0.20 + xA/90×0.15 + xG/90×0.10
-     *           + 찬스창출/90×0.10 + 드리블성공률×0.08 + 듀얼승률×0.07 + 태클/90×0.05
-     *
-     * FWD (ST, LW, RW, Winger, Attacker, Forward):
-     *   score = Rating×0.25 + 골/90×0.25 + xG/90×0.15 + 어시/90×0.10
-     *           + xA/90×0.08 + 슈팅정확도%×0.08 + 드리블성공률×0.05 + 찬스창출/90×0.04
+     * 포지션 그룹별 가중합 산출.
+     * 볼륨 스탯은 90분 환산, 비율 스탯은 그대로 정규화.
+     * 레드카드 페널티: 1장 당 -0.04 (최대 -0.12 캡).
      */
-    private double scoreByPosition(String position, Map<String, Double> s) {
-        String pg = positionGroup(position);
-
-        double rating = norm(s.getOrDefault("Rating", 6.8), R_MIN, R_MAX);
-        double minutes = Math.max(s.getOrDefault("Minutes played", 0.0), 1.0);
+    private double scoreByPosition(String pg, Map<String, Double> s) {
+        double mins    = Math.max(s.getOrDefault("Minutes played", 90.0), 90.0);
         double matches = Math.max(s.getOrDefault("Matches", 1.0), 1.0);
         // 90분 환산 계수
-        double p90 = 90.0 / (minutes / matches);
+        double f90 = 90.0 / (mins / matches);
 
-        switch (pg) {
-            case "GK" -> {
-                double saves       = s.getOrDefault("Saves", 0.0) / matches;
-                double savePct     = s.getOrDefault("Save percentage", 65.0);
-                double cleanSheet  = s.getOrDefault("Clean sheets", 0.0) / matches;
-                double goalPrev    = s.getOrDefault("Goals prevented", 0.0);
-                double penSavePct  = s.getOrDefault("Penalty save %", 30.0) / 100.0;
-                return rating * 0.35
-                        + norm(savePct, SAVE_PCT_MIN, SAVE_PCT_MAX) * 0.25
-                        + norm(cleanSheet, 0, CLEAN_SHEET_MAX) * 0.15
-                        + norm(goalPrev, 0, GOAL_PREV_MAX) * 0.10
-                        + norm(saves, 0, 5.0) * 0.10    // 경기당 선방 5개 = 최대
-                        + Math.min(penSavePct, 1.0) * 0.05;
-            }
-            case "DEF" -> {
-                double duelPct    = s.getOrDefault("Duels won %", 45.0);
-                double tackle     = s.getOrDefault("Tackles", 0.0) * p90;
-                double intercept  = s.getOrDefault("Interceptions", 0.0) * p90;
-                double aerialPct  = s.getOrDefault("Aerials won %", 40.0);
-                double passAcc    = s.getOrDefault("Pass accuracy", 70.0);
-                double clearance  = s.getOrDefault("Clearances", 0.0) * p90;
-                return rating * 0.30
-                        + norm(duelPct, DUEL_MIN, DUEL_MAX) * 0.20
-                        + norm(tackle, 0, TACKLE_MAX) * 0.15
-                        + norm(intercept, 0, INTERCEPT_MAX) * 0.12
-                        + norm(aerialPct, AERIAL_MIN, AERIAL_MAX) * 0.10
-                        + norm(passAcc, PASS_MIN, PASS_MAX) * 0.08
-                        + norm(clearance, 0, CLEARANCE_MAX) * 0.05;
-            }
-            case "MID_DEF" -> {
-                double tackle    = s.getOrDefault("Tackles", 0.0) * p90;
-                double intercept = s.getOrDefault("Interceptions", 0.0) * p90;
-                double duelPct   = s.getOrDefault("Duels won %", 45.0);
-                double passAcc   = s.getOrDefault("Pass accuracy", 75.0);
-                double xA        = s.getOrDefault("xA", 0.0) * p90;
-                return rating * 0.25
-                        + norm(tackle, 0, TACKLE_MAX) * 0.20
-                        + norm(intercept, 0, INTERCEPT_MAX) * 0.15
-                        + norm(duelPct, DUEL_MIN, DUEL_MAX) * 0.15
-                        + norm(passAcc, PASS_MIN, PASS_MAX) * 0.15
-                        + norm(xA, 0, XA_MAX) * 0.10;
-            }
-            case "FWD" -> {
-                double goals     = s.getOrDefault("Goals", 0.0) * p90;
-                double xg        = s.getOrDefault("xG", 0.0) * p90;
-                double assists   = s.getOrDefault("Assists", 0.0) * p90;
-                double xa        = s.getOrDefault("xA", 0.0) * p90;
-                double shotAcc   = s.getOrDefault("Shots on target", 0.0)
-                        / Math.max(s.getOrDefault("Shots", 1.0), 1) * 100.0;
-                double dribble   = s.getOrDefault("Dribbles success rate", 40.0);
-                double chances   = s.getOrDefault("Chances created", 0.0) * p90;
-                return rating * 0.25
-                        + norm(goals, 0, GOALS_MAX) * 0.25
-                        + norm(xg, 0, XG_MAX) * 0.15
-                        + norm(assists, 0, ASSISTS_MAX) * 0.10
-                        + norm(xa, 0, XA_MAX) * 0.08
-                        + norm(shotAcc, 0, SHOTS_ON_MAX) * 0.08
-                        + norm(dribble, 0, DRIBBLE_MAX) * 0.05
-                        + norm(chances, 0, CHANCES_MAX) * 0.04;
-            }
-            default -> { // MID (CM, AM, 기타)
-                double passAcc = s.getOrDefault("Pass accuracy", 75.0);
-                double xa      = s.getOrDefault("xA", 0.0) * p90;
-                double xg      = s.getOrDefault("xG", 0.0) * p90;
-                double chances = s.getOrDefault("Chances created", 0.0) * p90;
-                double dribble = s.getOrDefault("Dribbles success rate", 40.0);
-                double duelPct = s.getOrDefault("Duels won %", 45.0);
-                double tackle  = s.getOrDefault("Tackles", 0.0) * p90;
-                return rating * 0.25
-                        + norm(passAcc, PASS_MIN, PASS_MAX) * 0.20
-                        + norm(xa, 0, XA_MAX) * 0.15
-                        + norm(xg, 0, XG_MAX) * 0.10
-                        + norm(chances, 0, CHANCES_MAX) * 0.10
-                        + norm(dribble, 0, DRIBBLE_MAX) * 0.08
-                        + norm(duelPct, DUEL_MIN, DUEL_MAX) * 0.07
-                        + norm(tackle, 0, TACKLE_MAX) * 0.05;
-            }
-        }
+        // 공통 수비 패널티: 레드카드 1장당 -0.04, 최대 3장까지 반영
+        double redPenalty = Math.min(s.getOrDefault("Red cards", 0.0), 3.0) * 0.04;
+
+        double score = switch (pg) {
+            case "GK"      -> calcGK(s, matches);
+            case "CB"      -> calcCB(s, f90);
+            case "FB"      -> calcFB(s, f90);
+            case "DM"      -> calcDM(s, f90);
+            case "CM"      -> calcCM(s, f90);
+            case "AM"      -> calcAM(s, f90);
+            case "WINGER"  -> calcWinger(s, f90);
+            case "ST"      -> calcST(s, f90);
+            default        -> calcCM(s, f90); // 알 수 없는 포지션 → CM 공식 적용
+        };
+
+        return Math.max(0.0, Math.min(1.0, score - redPenalty));
     }
 
-    /** FotMob stats_json [{title, value}] → title 키 Map<String, Double> */
+    // GK ─────────────────────────────────────────────────────────────────────
+    private double calcGK(Map<String, Double> s, double matches) {
+        double rating      = norm(s.getOrDefault("Rating", 6.5),    5.5, 8.5);
+        double savePct     = norm(s.getOrDefault("Save percentage", 65.0), 55.0, 90.0);
+        double cleanRatio  = norm(s.getOrDefault("Clean sheets", 0.0) / matches, 0.0, 0.50);
+        double goalPrev    = norm(s.getOrDefault("Goals prevented", 0.0), 0.0, 15.0);
+        double savesP90    = norm(s.getOrDefault("Saves", 0.0) / matches, 0.0, 5.5);
+        double passAcc     = norm(s.getOrDefault("Pass accuracy", 55.0), 40.0, 80.0);
+        // "Penalty save %" 또는 "Saved penalties" 값 사용
+        double penSavePct  = s.containsKey("Penalty save %")
+                ? norm(s.get("Penalty save %"), 0.0, 100.0)
+                : norm(s.getOrDefault("Penalty saves", 0.0), 0.0, 5.0);
+
+        return rating   * 0.25
+             + savePct  * 0.25
+             + cleanRatio * 0.20
+             + goalPrev * 0.10
+             + savesP90 * 0.10
+             + passAcc  * 0.05
+             + penSavePct * 0.05;
+    }
+
+    // CB ─────────────────────────────────────────────────────────────────────
+    private double calcCB(Map<String, Double> s, double f90) {
+        double rating      = norm(s.getOrDefault("Rating", 6.5),     5.5, 8.5);
+        double clearance   = norm(s.getOrDefault("Clearances", 0.0) * f90,  0.0, 7.0);
+        double aerialPct   = norm(s.getOrDefault("Aerials won %", 40.0),    30.0, 80.0);
+        double tackle      = norm(s.getOrDefault("Tackles", 0.0)      * f90, 0.0, 4.5);
+        double intercept   = norm(s.getOrDefault("Interceptions", 0.0)* f90, 0.0, 2.8);
+        double passAcc     = norm(s.getOrDefault("Pass accuracy", 70.0),    60.0, 95.0);
+        double duelPct     = norm(s.getOrDefault("Duels won %", 45.0),      30.0, 70.0);
+        double gaP90       = norm((s.getOrDefault("Goals", 0.0) + s.getOrDefault("Assists", 0.0)) * f90,
+                                   0.0, 0.20);
+
+        return rating    * 0.20
+             + clearance * 0.18
+             + aerialPct * 0.15
+             + tackle    * 0.12
+             + intercept * 0.12
+             + passAcc   * 0.10
+             + duelPct   * 0.08
+             + gaP90     * 0.05;
+    }
+
+    // LB / RB ─────────────────────────────────────────────────────────────────
+    private double calcFB(Map<String, Double> s, double f90) {
+        double rating      = norm(s.getOrDefault("Rating", 6.5),         5.5, 8.5);
+        double tackle      = norm(s.getOrDefault("Tackles", 0.0)      * f90, 0.0, 4.5);
+        double clearance   = norm(s.getOrDefault("Clearances", 0.0)   * f90, 0.0, 5.0);
+        double intercept   = norm(s.getOrDefault("Interceptions", 0.0)* f90, 0.0, 2.8);
+        double assist      = norm(s.getOrDefault("Assists", 0.0)       * f90, 0.0, 0.45);
+        double chances     = norm(s.getOrDefault("Chances created", 0.0)*f90, 0.0, 3.5);
+        double crosses     = norm(s.getOrDefault("Successful crosses", 0.0)*f90, 0.0, 3.0);
+        double passAcc     = norm(s.getOrDefault("Pass accuracy", 72.0),      60.0, 93.0);
+        double dribble     = norm(s.getOrDefault("Dribbles success rate", 40.0), 20.0, 80.0);
+        double duelPct     = norm(s.getOrDefault("Duels won %", 45.0),        30.0, 70.0);
+
+        return rating    * 0.18
+             + tackle    * 0.14
+             + clearance * 0.12
+             + intercept * 0.10
+             + assist    * 0.10
+             + chances   * 0.10
+             + crosses   * 0.08
+             + passAcc   * 0.08
+             + dribble   * 0.06
+             + duelPct   * 0.04;
+    }
+
+    // DM ─────────────────────────────────────────────────────────────────────
+    private double calcDM(Map<String, Double> s, double f90) {
+        double rating      = norm(s.getOrDefault("Rating", 6.5),          5.5, 8.5);
+        double tackle      = norm(s.getOrDefault("Tackles", 0.0)      * f90, 0.0, 4.5);
+        double intercept   = norm(s.getOrDefault("Interceptions", 0.0)* f90, 0.0, 2.8);
+        double duelPct     = norm(s.getOrDefault("Duels won %", 45.0),       30.0, 70.0);
+        double passAcc     = norm(s.getOrDefault("Pass accuracy", 78.0),     65.0, 95.0);
+        double defActions  = norm(s.getOrDefault("Defensive actions", 0.0)*f90, 0.0, 9.0);
+        double recovery    = norm(s.getOrDefault("Recoveries", 0.0)   * f90, 0.0, 10.0);
+
+        return rating     * 0.22
+             + tackle     * 0.18
+             + intercept  * 0.16
+             + duelPct    * 0.14
+             + passAcc    * 0.14
+             + defActions * 0.08
+             + recovery   * 0.08;
+    }
+
+    // CM ─────────────────────────────────────────────────────────────────────
+    private double calcCM(Map<String, Double> s, double f90) {
+        double rating      = norm(s.getOrDefault("Rating", 6.5),          5.5, 8.5);
+        double passAcc     = norm(s.getOrDefault("Pass accuracy", 78.0),     65.0, 95.0);
+        double assist      = norm(s.getOrDefault("Assists", 0.0)       * f90, 0.0, 0.45);
+        double chances     = norm(s.getOrDefault("Chances created", 0.0)*f90, 0.0, 3.5);
+        double xA          = norm(s.getOrDefault("xA", 0.0)            * f90, 0.0, 0.40);
+        double goals       = norm(s.getOrDefault("Goals", 0.0)         * f90, 0.0, 0.35);
+        double duelPct     = norm(s.getOrDefault("Duels won %", 45.0),       30.0, 70.0);
+        double tackle      = norm(s.getOrDefault("Tackles", 0.0)       * f90, 0.0, 4.5);
+        double dribble     = norm(s.getOrDefault("Dribbles success rate", 45.0), 20.0, 80.0);
+
+        return rating   * 0.18
+             + passAcc  * 0.18
+             + assist   * 0.14
+             + chances  * 0.12
+             + xA       * 0.10
+             + goals    * 0.08
+             + duelPct  * 0.08
+             + tackle   * 0.07
+             + dribble  * 0.05;
+    }
+
+    // AM ─────────────────────────────────────────────────────────────────────
+    private double calcAM(Map<String, Double> s, double f90) {
+        double rating      = norm(s.getOrDefault("Rating", 6.5),          5.5, 8.5);
+        double goals       = norm(s.getOrDefault("Goals", 0.0)         * f90, 0.0, 0.55);
+        double assist      = norm(s.getOrDefault("Assists", 0.0)       * f90, 0.0, 0.45);
+        double xG          = norm(s.getOrDefault("xG", 0.0)            * f90, 0.0, 0.50);
+        double xA          = norm(s.getOrDefault("xA", 0.0)            * f90, 0.0, 0.40);
+        double chances     = norm(s.getOrDefault("Chances created", 0.0)*f90, 0.0, 3.5);
+        // 슈팅 정확도 = shots on target / shots × 100
+        double shotAcc     = norm(shotAccuracy(s),                             0.0, 60.0);
+        double dribble     = norm(s.getOrDefault("Dribbles success rate", 40.0), 20.0, 80.0);
+        double passAcc     = norm(s.getOrDefault("Pass accuracy", 75.0),     60.0, 92.0);
+
+        return rating   * 0.18
+             + goals    * 0.18
+             + assist   * 0.14
+             + xG       * 0.12
+             + xA       * 0.10
+             + chances  * 0.10
+             + shotAcc  * 0.08
+             + dribble  * 0.06
+             + passAcc  * 0.04;
+    }
+
+    // Winger (LW/RW) ─────────────────────────────────────────────────────────
+    private double calcWinger(Map<String, Double> s, double f90) {
+        double rating      = norm(s.getOrDefault("Rating", 6.5),          5.5, 8.5);
+        double goals       = norm(s.getOrDefault("Goals", 0.0)         * f90, 0.0, 0.60);
+        double assist      = norm(s.getOrDefault("Assists", 0.0)       * f90, 0.0, 0.45);
+        double xG          = norm(s.getOrDefault("xG", 0.0)            * f90, 0.0, 0.55);
+        double xA          = norm(s.getOrDefault("xA", 0.0)            * f90, 0.0, 0.40);
+        double chances     = norm(s.getOrDefault("Chances created", 0.0)*f90, 0.0, 3.5);
+        double dribble     = norm(s.getOrDefault("Dribbles success rate", 40.0), 20.0, 80.0);
+        double crosses     = norm(s.getOrDefault("Successful crosses", 0.0)*f90, 0.0, 3.0);
+        double shotAcc     = norm(shotAccuracy(s),                             0.0, 60.0);
+
+        return rating  * 0.18
+             + goals   * 0.18
+             + assist  * 0.14
+             + xG      * 0.10
+             + xA      * 0.10
+             + chances * 0.10
+             + dribble * 0.10
+             + crosses * 0.06
+             + shotAcc * 0.04;
+    }
+
+    // ST ─────────────────────────────────────────────────────────────────────
+    private double calcST(Map<String, Double> s, double f90) {
+        double rating      = norm(s.getOrDefault("Rating", 6.5),          5.5, 8.5);
+        double goals       = norm(s.getOrDefault("Goals", 0.0)         * f90, 0.0, 0.70);
+        double xG          = norm(s.getOrDefault("xG", 0.0)            * f90, 0.0, 0.65);
+        double shotAcc     = norm(shotAccuracy(s),                             0.0, 65.0);
+        double assist      = norm(s.getOrDefault("Assists", 0.0)       * f90, 0.0, 0.35);
+        double boxTouch    = norm(s.getOrDefault("Touches in opposition box", 0.0)*f90, 0.0, 6.0);
+        double aerialPct   = norm(s.getOrDefault("Aerials won %", 35.0),       20.0, 75.0);
+        double headers     = norm(s.getOrDefault("Headed shots", 0.0)  * f90, 0.0, 3.0);
+
+        return rating   * 0.18
+             + goals    * 0.28
+             + xG       * 0.14
+             + shotAcc  * 0.10
+             + assist   * 0.08
+             + boxTouch * 0.08
+             + aerialPct* 0.07
+             + headers  * 0.07;
+    }
+
+    // ── 유틸 ────────────────────────────────────────────────────────────────
+
+    /** stats_json [{title, value}] → Map<title, Double> */
     private Map<String, Double> parseStats(List<Map<String, Object>> stats) {
         Map<String, Double> result = new HashMap<>();
         for (Map<String, Object> entry : stats) {
-            Object titleObj = entry.get("title");
-            Object valueObj = entry.get("value");
-            if (titleObj == null || valueObj == null) continue;
-            String title = titleObj.toString();
+            if (entry.get("title") == null || entry.get("value") == null) continue;
+            String title = entry.get("title").toString();
             try {
-                // "3/6" 형태(페널티 선방) → 첫 번째 숫자
-                String valStr = valueObj.toString().split("/")[0].trim();
+                // "3/6" 형태(페널티 선방) → 분자만 사용
+                String valStr = entry.get("value").toString().split("/")[0].trim();
                 result.put(title, Double.parseDouble(valStr));
             } catch (NumberFormatException ignored) {}
         }
         return result;
     }
 
-    /** 포지션 문자열 → 그룹 키 */
+    /** 슈팅 정확도(%) = shots on target / shots × 100. 슈팅 0이면 0. */
+    private double shotAccuracy(Map<String, Double> s) {
+        double shots = s.getOrDefault("Shots", 0.0);
+        double sot   = s.getOrDefault("Shots on target", 0.0);
+        return shots > 0 ? (sot / shots) * 100.0 : 0.0;
+    }
+
+    /** 선형 정규화 [min, max] → [0, 1], 범위 밖은 클램프 */
+    private double norm(double v, double min, double max) {
+        if (max <= min) return 0.0;
+        return Math.max(0.0, Math.min(1.0, (v - min) / (max - min)));
+    }
+
+    private int clamp(int v) {
+        return Math.max(60, Math.min(99, v));
+    }
+
+    /**
+     * FotMob 포지션 문자열 → 8개 그룹으로 분류.
+     * GK / CB / FB(풀백) / DM / CM / AM / WINGER / ST
+     */
     private String positionGroup(String pos) {
-        if (pos == null || pos.isBlank()) return "MID";
+        if (pos == null || pos.isBlank()) return "CM";
         String p = pos.toLowerCase();
+
         if (p.contains("keeper") || p.contains("goalkeeper") || p.equals("gk")) return "GK";
-        if (p.contains("defensive mid") || p.contains("defensive midfielder")) return "MID_DEF";
-        if (p.contains("back") || p.contains("defender") || p.contains("center back")
-                || p.contains("centre back")) return "DEF";
-        if (p.contains("forward") || p.contains("striker") || p.contains("winger")
-                || p.contains("wing") || p.contains("left wing") || p.contains("right wing")
-                || p.contains("attacking")) return "FWD";
-        return "MID";
+
+        if (p.contains("center back") || p.contains("centre back")
+                || p.equals("cb")) return "CB";
+
+        if (p.contains("back") || p.contains("fullback") || p.contains("full-back")
+                || p.contains("left back") || p.contains("right back")
+                || p.equals("lb") || p.equals("rb")) return "FB";
+
+        if (p.contains("defensive mid") || p.contains("holding")
+                || p.equals("dm") || p.equals("cdm")) return "DM";
+
+        if (p.contains("right wing") || p.contains("left wing")
+                || p.contains("winger") || p.equals("lw") || p.equals("rw")) return "WINGER";
+
+        if (p.contains("attacking mid") || p.contains("attacking midfielder")
+                || p.contains("second striker") || p.equals("am") || p.equals("cam")) return "AM";
+
+        if (p.contains("striker") || p.contains("forward") || p.contains("centre-forward")
+                || p.contains("center forward") || p.equals("st") || p.equals("cf")) return "ST";
+
+        // Central Midfielder, Midfielder 등 나머지
+        return "CM";
     }
 
     // ── 가중치 뽑기 ─────────────────────────────────────────────────────────
 
-    // 오버롤 높을수록 드물게(가중치 반비례)
+    /**
+     * 오버롤 높을수록 드물게(가중치 반비례).
+     * 레전드(95+)=1, 월드클래스(90~94)=2, 탑클래스(80~89)=4, 프로(70~79)=7, 하위=10
+     */
     private List<SoccerPlayerDto> weightedDraw(List<SoccerPlayerDto> pool, int count) {
         List<SoccerPlayerDto> weighted = new ArrayList<>();
         for (SoccerPlayerDto p : pool) {
-            // 레전드(95+)=1, 월드클래스(90+)=2, 탑클래스(80+)=4, 하위=8
-            int w = p.overall() >= 95 ? 1 : p.overall() >= 90 ? 2 : p.overall() >= 80 ? 4 : 8;
+            int w = p.overall() >= 95 ? 1
+                  : p.overall() >= 90 ? 2
+                  : p.overall() >= 80 ? 4
+                  : p.overall() >= 70 ? 7
+                  : 10;
             for (int i = 0; i < w; i++) weighted.add(p);
         }
 
@@ -338,19 +500,6 @@ public class PlayerCardService {
         return result;
     }
 
-    // ── 유틸 ────────────────────────────────────────────────────────────────
-
-    /** 0~1 정규화 (범위 밖은 클램프) */
-    private double norm(double v, double min, double max) {
-        if (max <= min) return 0.0;
-        return Math.max(0.0, Math.min(1.0, (v - min) / (max - min)));
-    }
-
-    private int clampOverall(int v) {
-        return Math.max(60, Math.min(99, v));
-    }
-
-    // 내부 DTO
     record SoccerPlayerDto(
             String id, String name, String team, String position,
             String nationality, String imageUrl, int overall) {}
