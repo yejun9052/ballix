@@ -48,6 +48,7 @@ public class AiPredictionService {
     private final GeminiClient geminiClient;
     private final LineupPlayerRepository lineupPlayerRepository;
     private final PlayerService playerService;
+    private final com.example.backend.prediction.AiPlayerService aiPlayerService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -70,6 +71,9 @@ public class AiPredictionService {
         Parsed p = parseAndNormalize(json);
         match.applyPrediction(p.homePct, p.drawPct, p.awayPct, p.homeScore, p.awayScore);
         matchRepository.save(match);
+
+        // AI 유저가 이 승률에서 최고 결과를 찍은 것으로 리더보드 참가(킥오프 전 1회 고정, 멱등).
+        aiPlayerService.participate(matchId);
 
         log.info("[ai-predict] matchId={} {} {}%/{}%/{}% 예상스코어 {}:{}", matchId,
                 teamName(match.getHomeTeam()) + " vs " + teamName(match.getAwayTeam()),

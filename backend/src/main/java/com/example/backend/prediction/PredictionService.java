@@ -134,13 +134,16 @@ public class PredictionService {
             int points = computePoints(match, prediction.getPredictedWinner(), correct);
             prediction.grade(correct, points);
             prediction.getUser().scorePrediction(correct, points); // 유저 전적·포인트 갱신
-            ntfy.send(correct ? "Prediction WIN" : "Prediction LOSE",
-                    String.format("%s — %s vs %s%n예측 %s%s",
-                            prediction.getUser().getName(),
-                            teamName(match.getHomeTeam()), teamName(match.getAwayTeam()),
-                            correct ? "적중 ✅" : "실패 ❌",
-                            correct ? " (+" + points + "점)" : ""),
-                    correct ? "white_check_mark" : "x");
+            // AI 시스템 계정은 로그인 유저가 아니므로 푸시 알림 생략(나머지 채점·집계는 동일).
+            if (!com.example.backend.user.AiAccount.is(prediction.getUser())) {
+                ntfy.send(correct ? "Prediction WIN" : "Prediction LOSE",
+                        String.format("%s — %s vs %s%n예측 %s%s",
+                                prediction.getUser().getName(),
+                                teamName(match.getHomeTeam()), teamName(match.getAwayTeam()),
+                                correct ? "적중 ✅" : "실패 ❌",
+                                correct ? " (+" + points + "점)" : ""),
+                        correct ? "white_check_mark" : "x");
+            }
         }
         predictionRepository.saveAll(predictions);
     }

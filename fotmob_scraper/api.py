@@ -935,6 +935,85 @@ async def league_table(league_id: int):
     return result
 
 
+async def _full_stat_list(page, category: dict, limit: int) -> list[dict]:
+    """리그 stats 카테고리(goals/goal_assist)의 fetchAllUrl(전체 랭킹 JSON)을 받아 상위 limit명 정규화.
+    실패하면 리그 overview에 인라인된 topThree(상위 3명)로 폴백한다."""
+    url = (category or {}).get("fetchAllUrl")
+    raw = None
+    if url:
+        raw = await page.evaluate("""async (u) => {
+            try { const r = await fetch(u); const t = await r.text();
+              if (t.trim().startsWith('{') || t.trim().startsWith('[')) return JSON.parse(t); }
+            catch(e) {} return null;
+        }""", url)
+    stat_list = None
+    if isinstance(raw, dict):
+        top_lists = raw.get("TopLists") or []
+        if isinstance(top_lists, list) and top_lists:
+            stat_list = (top_lists[0] or {}).get("StatList") or []
+    items = []
+    if stat_list:
+        for r in stat_list[:limit]:
+            items.append({
+                "rank": r.get("Rank"),
+                "playerId": r.get("ParticiantId") or r.get("ParticipantId"),  # FotMob 원본 오타(ParticiantId)
+                "name": r.get("ParticipantName"),
+                "teamId": r.get("TeamId"),
+                "teamName": r.get("TeamName"),
+                "countryCode": r.get("ParticipantCountryCode"),
+                "value": r.get("StatValue"),
+                "matchesPlayed": r.get("MatchesPlayed"),
+            })
+        return items
+    # 폴백: 리그 overview의 topThree(상위 3)
+    for r in (category or {}).get("topThree", []) or []:
+        items.append({
+            "rank": r.get("rank"),
+            "playerId": r.get("id"),
+            "name": r.get("name"),
+            "teamId": r.get("teamId"),
+            "teamName": r.get("teamName"),
+            "countryCode": r.get("ccode"),
+            "value": r.get("value"),
+            "matchesPlayed": None,
+        })
+    return items
+
+
+@app.get("/league/{league_id}/player-stats")
+async def league_player_stats(league_id: int, limit: int = 20):
+    """리그 득점왕/도움왕 랭킹 — /api/data/leagues 의 stats.players 에서 goals·goal_assist 카테고리를
+    찾아 각 fetchAllUrl(전체 랭킹 JSON)을 받아 상위 limit명씩 반환. 개인성적 탭용."""
+    await crawl_throttle()
+    print(f"[crawl] 개인기록 수집 시작 leagueId={league_id}", flush=True)
+    t0 = time.perf_counter()
+    try:
+        async with crawl_page(navigate_home=True) as page:
+            raw = await fetch_league_table_from_page(page, league_id)
+            if not raw:
+                raise HTTPException(status_code=502, detail="리그 데이터를 가져오지 못했습니다.")
+            players = ((raw.get("stats") or {}).get("players")) or []
+
+            def find(*names):
+                for c in players:
+                    if c.get("name") in names:
+                        return c
+                return None
+
+            goals = find("goals")
+            assists = find("goal_assist", "assists")
+            scorers = await _full_stat_list(page, goals, limit) if goals else []
+            assists_list = await _full_stat_list(page, assists, limit) if assists else []
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[crawl] 개인기록 수집 실패 leagueId={league_id}: {e}", flush=True)
+        raise HTTPException(status_code=502, detail=f"개인기록 수집 실패: {e}")
+    print(f"[crawl] 개인기록 수집 완료 leagueId={league_id} 득점왕 {len(scorers)} 도움왕 {len(assists_list)} "
+          f"({time.perf_counter() - t0:.1f}s)", flush=True)
+    return {"leagueId": league_id, "scorers": scorers, "assists": assists_list}
+
+
 @app.get("/youtube/search")
 async def youtube_search(q: str, limit: int = 8):
     """유튜브에서 q로 동영상을 검색해 후보 목록 반환(경기 하이라이트 찾기용).

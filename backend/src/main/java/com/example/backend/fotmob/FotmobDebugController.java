@@ -26,6 +26,7 @@ public class FotmobDebugController {
     private final FotmobScheduleService scheduleService;
     private final FotmobSyncService syncService;
     private final FotmobStandingService standingService;
+    private final FotmobPlayerStatService playerStatService;
     private final FotmobPollScheduler pollScheduler;
     private final TeamRepository teamRepository;
 
@@ -47,6 +48,22 @@ public class FotmobDebugController {
         standingService.syncStandings(competitionId);
         return ResponseEntity.ok(
                 CommonResponse.success("순위 갱신 완료", standingService.getStandings(competitionId, pageable)));
+    }
+
+    /** 리그 개인 기록(득점왕/도움왕) 조회 — leagueId = FotMob 리그 ID(예: 77=월드컵). 공개, DB-first lazy+TTL. */
+    @GetMapping("/player-stats/{leagueId}")
+    public ResponseEntity<CommonResponse<?>> playerStats(@PathVariable Long leagueId) {
+        return ResponseEntity.ok(
+                CommonResponse.success("개인 기록 조회 성공", playerStatService.getBoard(leagueId)));
+    }
+
+    /** 리그 개인 기록 강제 갱신. */
+    @PreAuthorize("hasRole('ADMIN_USER')")
+    @PostMapping("/player-stats/{leagueId}/sync")
+    public ResponseEntity<CommonResponse<?>> syncPlayerStats(@PathVariable Long leagueId) {
+        playerStatService.syncPlayerStats(leagueId);
+        return ResponseEntity.ok(
+                CommonResponse.success("개인 기록 갱신 완료", playerStatService.getBoard(leagueId)));
     }
 
     /** 폴링 주기(분) 조회. */

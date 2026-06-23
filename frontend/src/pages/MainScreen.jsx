@@ -22,7 +22,7 @@ export function MainScreen({
   onLogin,
   onOpenLeaderboard,
   onOpenMyPredictions,
-  onOpenStandings,
+  onOpenPlayerStats,
   onOpenWorldCup,
   onOpenAdmin,
   onOpenMyPage,
@@ -123,8 +123,8 @@ export function MainScreen({
             <button type="button" className="nav-link wc-nav-btn" onClick={onOpenWorldCup}>
               월드컵
             </button>
-            <button type="button" className="nav-link" onClick={onOpenStandings}>
-              순위
+            <button type="button" className="nav-link" onClick={onOpenPlayerStats}>
+              개인성적
             </button>
             <button type="button" className="nav-link" onClick={onOpenMyPredictions}>
               내 예측
@@ -183,7 +183,7 @@ export function MainScreen({
             )}
             <nav className="mobile-menu-nav" aria-label="모바일 메뉴">
               <button type="button" onClick={() => handleMobileNav(null)} data-scroll="#matches">경기 일정</button>
-              <button type="button" onClick={() => handleMobileNav(onOpenStandings)}>순위</button>
+              <button type="button" onClick={() => handleMobileNav(onOpenPlayerStats)}>개인성적</button>
               <button type="button" onClick={() => handleMobileNav(onOpenMyPredictions)}>내 예측</button>
               <button type="button" onClick={() => handleMobileNav(onOpenLeaderboard)}>랭킹</button>
               {isAdmin && (

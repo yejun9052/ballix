@@ -1,0 +1,32 @@
+/* 개인성적 — 득점왕/도움왕 */
+.playerstat-panel { padding: 16px; }
+.playerstat-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+}
+@media (max-width: 760px) {
+  .playerstat-grid { grid-template-columns: 1fr; }
+}
+
+.playerstat-title {
+  font-size: 16px; font-weight: 800; margin: 0 0 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+
+.playerstat-table { width: 100%; }
+.playerstat-table .player-col { text-align: left; }
+
+.player-col {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0;
+}
+.playerstat-photo {
+  width: 30px; height: 30px; border-radius: 50%; object-fit: cover;
+  background: var(--paper); flex-shrink: 0;
+}
+.playerstat-crest { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+.playerstat-name {
+  font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.playerstat-team { color: var(--faint); font-size: 12px; white-space: nowrap; }
+
+.playerstat-block + .playerstat-block { margin-top: 0; }

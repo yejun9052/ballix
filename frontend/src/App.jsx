@@ -15,7 +15,7 @@ const LoginScreen = lazy(() => import("./pages/LoginScreen.jsx").then((m) => ({ 
 const DetailScreen = lazy(() => import("./pages/DetailScreen.jsx").then((m) => ({ default: m.DetailScreen })));
 const LeaderboardScreen = lazy(() => import("./pages/LeaderboardScreen.jsx").then((m) => ({ default: m.LeaderboardScreen })));
 const MyPredictionsScreen = lazy(() => import("./pages/MyPredictionsScreen.jsx").then((m) => ({ default: m.MyPredictionsScreen })));
-const StandingsScreen = lazy(() => import("./pages/StandingsScreen.jsx").then((m) => ({ default: m.StandingsScreen })));
+const PlayerStatsScreen = lazy(() => import("./pages/PlayerStatsScreen.jsx").then((m) => ({ default: m.PlayerStatsScreen })));
 const AdminScreen = lazy(() => import("./pages/AdminScreen.jsx").then((m) => ({ default: m.AdminScreen })));
 const MyPageScreen = lazy(() => import("./pages/MyPageScreen.jsx").then((m) => ({ default: m.MyPageScreen })));
 const WorldCupScreen = lazy(() => import("./components/worldcup/WorldCupScreen.jsx").then((m) => ({ default: m.WorldCupScreen })));
@@ -206,8 +206,8 @@ export default function App() {
     view = <LeaderboardScreen user={currentUser} onBack={() => setScreen("main")} />;
   } else if (screen === "myPredictions") {
     view = <MyPredictionsScreen onBack={() => setScreen("main")} />;
-  } else if (screen === "standings") {
-    view = <StandingsScreen user={currentUser} onBack={() => setScreen("main")} />;
+  } else if (screen === "playerStats") {
+    view = <PlayerStatsScreen user={currentUser} onBack={() => setScreen("main")} />;
   } else if (screen === "worldcup") {
     view = (
       <WorldCupScreen
@@ -260,7 +260,7 @@ export default function App() {
         onGenerateAi={handleGenerateAi}
         onOpenLeaderboard={() => setScreen("leaderboard")}
         onOpenMyPredictions={() => (isLoggedIn ? setScreen("myPredictions") : setScreen("login"))}
-        onOpenStandings={() => setScreen("standings")}
+        onOpenPlayerStats={() => setScreen("playerStats")}
         onOpenWorldCup={() => setScreen("worldcup")}
         onOpenAdmin={() => (isAdmin ? setScreen("admin") : null)}
         onOpenMyPage={() => setScreen("mypage")}

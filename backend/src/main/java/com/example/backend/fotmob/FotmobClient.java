@@ -3,6 +3,7 @@ package com.example.backend.fotmob;
 import com.example.backend.fotmob.dto.FotmobCommentaryResponse;
 import com.example.backend.fotmob.dto.FotmobMatchResponse;
 import com.example.backend.fotmob.dto.FotmobPlayerResponse;
+import com.example.backend.fotmob.dto.FotmobPlayerStatsResponse;
 import com.example.backend.fotmob.dto.FotmobPlayoffResponse;
 import com.example.backend.fotmob.dto.FotmobScheduleResponse;
 import com.example.backend.fotmob.dto.FotmobSearchResponse;
@@ -95,6 +96,14 @@ public class FotmobClient {
                 .uri("/league/{id}/table", leagueId)
                 .retrieve()
                 .body(FotmobTableResponse.class);
+    }
+
+    /** 리그 개인 기록 (득점왕/도움왕). */
+    public FotmobPlayerStatsResponse getPlayerStats(Long leagueId) {
+        return restClient.get()
+                .uri("/league/{id}/player-stats", leagueId)
+                .retrieve()
+                .body(FotmobPlayerStatsResponse.class);
     }
 
     /** 팀명/대회로 경기를 검색해 matchId 후보를 얻는다. */

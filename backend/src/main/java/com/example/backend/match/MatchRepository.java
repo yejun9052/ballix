@@ -82,6 +82,9 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
     /** 실시간 AI 승률 갱신 대상: AI 예측 켜진 + 진행 중 경기. */
     List<Match> findByStatusAndPredictionEnabledTrue(String status);
 
+    /** AI 유저 참가 백필 대상: AI 승률 켜진 + 아직 시작 안 한(킥오프 미래) 경기. */
+    List<Match> findByPredictionEnabledTrueAndMatchTimeAfter(LocalDateTime now);
+
     /** 특정 상태 + 킥오프가 [from, to] 사이인 경기 (ntfy 시작 임박 알림용). */
     List<Match> findByStatusAndMatchTimeBetween(String status, LocalDateTime from, LocalDateTime to);
 
