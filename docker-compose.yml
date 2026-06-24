@@ -11,13 +11,10 @@ services:
     image: mysql:8.0
     container_name: ballix-mysql
     restart: unless-stopped
-    ports:
-      # 호스트 포트는 3307로 노출(컨테이너 내부는 3306 그대로) — 호스트 3306이 Docker/WSL stale 바인딩이나
-      # 로컬 MySQL에 점유되면 컨테이너 네트워크 연결까지 깨져 backend가 'mysql' 호스트를 못 찾는 문제가 있었다.
-      # backend는 컨테이너 네트워크의 mysql:3306으로 붙으므로 영향 없음. DB 툴로 직접 볼 땐 127.0.0.1:3307.
-      - "3307:3306"
+    # [셀프호스트 보안] 호스트 포트 미노출 — backend는 컨테이너 네트워크 이름(mysql:3306)으로 붙으므로 불필요.
+    # DB 직접 조회: docker exec ballix-mysql mysql -uroot -p<비번> backend
     environment:
-      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}    # .env에서 주입(시크릿은 git에 안 올라감)
       MYSQL_DATABASE: backend
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
@@ -25,17 +22,20 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p1234"]
+      # 인증까지 실제로 확인(mysqladmin ping은 인증 실패해도 alive로 통과하므로 SELECT로 검증).
+      test: ["CMD", "mysql", "-uroot", "-p${DB_PASSWORD}", "-e", "SELECT 1"]
       interval: 5s
       timeout: 5s
       retries: 20
+      # 첫 부팅 시 InnoDB 초기화 + root 비번 설정에 시간이 걸린다(이 PC에선 ~2분).
+      # start_period 동안의 실패는 unhealthy로 치지 않아 backend가 성급히 중단되지 않게 함.
+      start_period: 180s
 
   fotmob:
     build: ./fotmob_scraper
     container_name: ballix-fotmob
     restart: unless-stopped
-    ports:
-      - "8800:8800"
+    # [셀프호스트 보안] 호스트 포트 미노출 — backend가 컨테이너 네트워크(fotmob:8800)로만 접근.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8800/health').status==200 else 1)"]
       interval: 10s
@@ -48,7 +48,8 @@ services:
     container_name: ballix-backend
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      # [셀프호스트 보안] localhost에만 바인딩 — Tailscale Funnel이 localhost:8080으로 붙어 외부 공개. LAN 직접 노출 차단.
+      - "127.0.0.1:8080:8080"
     environment:
       # 컨테이너 타임존을 KST로 — 앱은 모든 시각을 KST로 저장/비교(matchTime·공지예약·ntfy·폴링윈도우·createAt)하는데
       # 도커 기본 UTC면 LocalDateTime.now()가 9시간 어긋나 라이브 시계·공지·알림이 전부 틀어진다. JVM 기본 TZ도 이 값을 따른다.
@@ -56,9 +57,16 @@ services:
       # 환경변수는 application.yml 값을 덮어쓴다(컨테이너 네트워크의 서비스 이름으로 접속).
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/backend?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
       SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: 1234
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       FOTMOB_API_BASE_URL: http://fotmob:8800
       NTFY_ENABLED: "false"          # 셀프호스트 ntfy를 안 띄우므로 기본 끔(쓰려면 true + NTFY_BASE_URL 지정)
+      # Tailscale Funnel이 TLS를 종단하고 백엔드엔 http로 넘긴다. 이게 없으면 Spring이 X-Forwarded-Proto를
+      # 무시해 OAuth redirect_uri를 http://...로 만들어 구글 로그인이 redirect_uri_mismatch로 깨진다(https로 교정).
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      # ── 외부 공개(로그인·AI)용 시크릿 — .env에서 주입(application.yml의 플레이스홀더를 런타임에 덮어씀) ──
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      AI_GEMINI_API_KEY: ${GEMINI_API_KEY}
     depends_on:
       mysql:
         condition: service_healthy
