@@ -2,6 +2,7 @@ package com.example.backend.comment;
 
 import com.example.backend.comment.dto.CreateCommentRequest;
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -28,7 +29,7 @@ public class CommentController {
             @AuthenticationPrincipal Long userId,
             @PageableDefault(size = 10) Pageable pageable) {
         return ResponseEntity.ok(
-                CommonResponse.success("조회 성공", commentService.list(matchId, userId, pageable)));
+                CommonResponse.success(ResponseMessage.READ_SUCCESS, commentService.list(matchId, userId, pageable)));
     }
 
     // 댓글 작성 (로그인 필요)
@@ -38,7 +39,7 @@ public class CommentController {
             @PathVariable Long matchId,
             @RequestBody CreateCommentRequest request) {
         return ResponseEntity.ok(
-                CommonResponse.success("댓글 작성 성공", commentService.create(userId, matchId, request.content())));
+                CommonResponse.success(ResponseMessage.COMMENT_CREATE_SUCCESS, commentService.create(userId, matchId, request.content())));
     }
 
     // 댓글 삭제 (본인 또는 관리자)
@@ -47,6 +48,6 @@ public class CommentController {
             @AuthenticationPrincipal Long userId,
             @PathVariable Long commentId) {
         commentService.delete(userId, commentId);
-        return ResponseEntity.ok(CommonResponse.success("댓글 삭제 성공", null));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.COMMENT_DELETE_SUCCESS, null));
     }
 }

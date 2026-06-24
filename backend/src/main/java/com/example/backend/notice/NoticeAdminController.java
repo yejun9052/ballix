@@ -1,6 +1,7 @@
 package com.example.backend.notice;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import com.example.backend.notice.dto.NoticeRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -32,7 +33,7 @@ public class NoticeAdminController {
     @PreAuthorize("hasRole('ADMIN_USER')")
     @GetMapping
     public ResponseEntity<CommonResponse<?>> list(@PageableDefault(size = 8) Pageable pageable) {
-        return ResponseEntity.ok(CommonResponse.success("조회 성공", noticeService.adminList(pageable)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.READ_SUCCESS, noticeService.adminList(pageable)));
     }
 
     /** 공지 등록(공지 때리기). 본문 {title, content, publishAt?, expireAt?} — 시각은 ISO-8601, null=즉시/무기한. */
@@ -41,7 +42,7 @@ public class NoticeAdminController {
     public ResponseEntity<CommonResponse<?>> create(
             @AuthenticationPrincipal Long userId,
             @RequestBody NoticeRequest req) {
-        return ResponseEntity.ok(CommonResponse.success("공지 등록", noticeService.create(userId, req)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.NOTICE_CREATED, noticeService.create(userId, req)));
     }
 
     /** 공지 수정. publishAt/expireAt 는 보낸 값으로 교체(null=즉시/무기한) — expireAt을 현재로 보내면 즉시 내림. */
@@ -50,7 +51,7 @@ public class NoticeAdminController {
     public ResponseEntity<CommonResponse<?>> update(
             @PathVariable Long id,
             @RequestBody NoticeRequest req) {
-        return ResponseEntity.ok(CommonResponse.success("공지 수정", noticeService.update(id, req)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.NOTICE_UPDATED, noticeService.update(id, req)));
     }
 
     /** 공지 삭제. */
@@ -58,6 +59,6 @@ public class NoticeAdminController {
     @DeleteMapping("/{id}")
     public ResponseEntity<CommonResponse<?>> delete(@PathVariable Long id) {
         noticeService.delete(id);
-        return ResponseEntity.ok(CommonResponse.success("공지 삭제", id));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.NOTICE_DELETED, id));
     }
 }

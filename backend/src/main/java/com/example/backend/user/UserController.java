@@ -1,6 +1,7 @@
 package com.example.backend.user;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -24,7 +25,7 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<CommonResponse<?>> me(@AuthenticationPrincipal Long userId) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", userService.me(userId)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, userService.me(userId)));
     }
 
     // 본인 닉네임 변경 (로그인 필요): ?name=새닉네임
@@ -33,13 +34,13 @@ public class UserController {
             @AuthenticationPrincipal Long userId,
             @RequestParam String name) {
         return ResponseEntity
-                .ok(CommonResponse.success("닉네임 변경 성공", userService.changeName(userId, name)));
+                .ok(CommonResponse.success(ResponseMessage.NICKNAME_CHANGE_SUCCESS, userService.changeName(userId, name)));
     }
 
     // 리더보드 (적중순) - 공개 (페이지당 8개)
     @GetMapping("/leaderboard")
     public ResponseEntity<CommonResponse<?>> leaderboard(@PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", userService.leaderboard(pageable)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, userService.leaderboard(pageable)));
     }
 }

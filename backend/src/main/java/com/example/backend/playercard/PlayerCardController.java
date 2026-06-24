@@ -1,6 +1,7 @@
 package com.example.backend.playercard;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,7 +23,7 @@ public class PlayerCardController {
             @RequestParam(defaultValue = "1") int count
     ) {
         List<PlayerCardView> cards = playerCardService.draw(userId, count);
-        return ResponseEntity.ok(CommonResponse.success("뽑기 성공", cards));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.DRAW_SUCCESS, cards));
     }
 
     // 내 카드 목록 (로그인 필요)
@@ -31,6 +32,6 @@ public class PlayerCardController {
             @AuthenticationPrincipal Long userId
     ) {
         List<PlayerCardView> cards = playerCardService.myCards(userId);
-        return ResponseEntity.ok(CommonResponse.success("내 카드 조회 성공", cards));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.MY_CARDS_READ_SUCCESS, cards));
     }
 }

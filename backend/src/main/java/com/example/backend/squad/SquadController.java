@@ -1,6 +1,7 @@
 package com.example.backend.squad;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,7 +23,7 @@ public class SquadController {
     @GetMapping
     public ResponseEntity<CommonResponse<?>> mySquad(@AuthenticationPrincipal Long userId) {
         return ResponseEntity.ok(
-                CommonResponse.success("스쿼드 조회 성공", squadService.getMySquad(userId)));
+                CommonResponse.success(ResponseMessage.SQUAD_READ_SUCCESS, squadService.getMySquad(userId)));
     }
 
     /** 내 스쿼드 저장(통째 교체). 본문: { "slots": { "GK": 12, "ST": 34, ... } }. */
@@ -31,7 +32,7 @@ public class SquadController {
             @AuthenticationPrincipal Long userId,
             @RequestBody SquadSaveRequest req) {
         return ResponseEntity.ok(
-                CommonResponse.success("스쿼드 저장 성공", squadService.saveMySquad(userId, req.slots())));
+                CommonResponse.success(ResponseMessage.SQUAD_SAVE_SUCCESS, squadService.saveMySquad(userId, req.slots())));
     }
 
     public record SquadSaveRequest(Map<String, Long> slots) {}

@@ -1,6 +1,7 @@
 package com.example.backend.user;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import com.example.backend.user.enums.Role;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -31,7 +32,7 @@ public class AdminUserController {
     public ResponseEntity<CommonResponse<?>> list(
             @RequestParam(required = false) String q,
             @PageableDefault(size = 8) Pageable pageable) {
-        return ResponseEntity.ok(CommonResponse.success("조회 성공", userService.listUsers(q, pageable)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.READ_SUCCESS, userService.listUsers(q, pageable)));
     }
 
     /** 권한 변경: ?role=ADMIN_USER | COMMON_USER */
@@ -41,7 +42,7 @@ public class AdminUserController {
             @AuthenticationPrincipal Long userId,
             @PathVariable Long id,
             @RequestParam Role role) {
-        return ResponseEntity.ok(CommonResponse.success("권한 변경", userService.changeRole(userId, id, role)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.ROLE_CHANGED, userService.changeRole(userId, id, role)));
     }
 
     /** 계정상태 변경: ?active=true(활성) | false(정지)&message=정지 안내문(정지 시만, 선택) */
@@ -52,6 +53,6 @@ public class AdminUserController {
             @PathVariable Long id,
             @RequestParam boolean active,
             @RequestParam(required = false) String message) {
-        return ResponseEntity.ok(CommonResponse.success("계정상태 변경", userService.changeActive(userId, id, active, message)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.ACCOUNT_STATUS_CHANGED, userService.changeActive(userId, id, active, message)));
     }
 }

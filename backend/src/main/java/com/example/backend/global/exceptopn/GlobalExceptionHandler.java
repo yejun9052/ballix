@@ -1,6 +1,7 @@
 package com.example.backend.global.exceptopn;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,7 +40,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<CommonResponse<?>> handleAccessDenied(AccessDeniedException e) {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
-                .body(CommonResponse.fail("접근 권한이 없습니다."));
+                .body(CommonResponse.fail(ResponseMessage.FORBIDDEN));
     }
 
     // 그 외 예기치 못한 RuntimeException (500 → /error 포워드 방지용 안전망)
@@ -48,6 +49,6 @@ public class GlobalExceptionHandler {
         log.error("[error] 예기치 않은 오류: {}", e.getMessage(), e);
         return ResponseEntity
                 .badRequest()
-                .body(CommonResponse.fail("요청을 처리할 수 없습니다."));
+                .body(CommonResponse.fail(ResponseMessage.REQUEST_FAILED));
     }
 }

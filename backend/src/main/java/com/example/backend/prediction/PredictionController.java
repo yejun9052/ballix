@@ -1,6 +1,7 @@
 package com.example.backend.prediction;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import com.example.backend.prediction.enums.Winner;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -28,7 +29,7 @@ public class PredictionController {
             @RequestParam Long matchId,
             @RequestParam Winner predictedWinner) {
         return ResponseEntity
-                .ok(CommonResponse.success("예측 성공", predictionService.predict(userId, matchId, predictedWinner)));
+                .ok(CommonResponse.success(ResponseMessage.PREDICT_SUCCESS, predictionService.predict(userId, matchId, predictedWinner)));
     }
 
     // 내 예측 전부 조회 (페이지당 8개)
@@ -37,7 +38,7 @@ public class PredictionController {
             @AuthenticationPrincipal Long userId,
             @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", predictionService.myPrediction(userId, pageable)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, predictionService.myPrediction(userId, pageable)));
     }
 
     // 특정 경기에 대한 내 예측 조회
@@ -46,7 +47,7 @@ public class PredictionController {
             @AuthenticationPrincipal Long userId,
             @RequestParam Long matchId) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", predictionService.findByMatch(userId, matchId)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, predictionService.findByMatch(userId, matchId)));
     }
     // 예측 분포(%) 조회 - 본인이 예측한 경기만
     @GetMapping("/ratio")
@@ -54,7 +55,7 @@ public class PredictionController {
             @AuthenticationPrincipal Long userId,
             @RequestParam Long matchId) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", predictionService.getRatio(userId, matchId)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, predictionService.getRatio(userId, matchId)));
     }
 
 }

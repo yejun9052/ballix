@@ -1,6 +1,7 @@
 package com.example.backend.ai;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,13 +33,13 @@ public class AiAdminController {
             @RequestParam Long matchId,
             @RequestParam(defaultValue = "false") boolean force) {
         return ResponseEntity.ok(
-                CommonResponse.success("AI 승률 예측 완료", predictionService.predict(matchId, force)));
+                CommonResponse.success(ResponseMessage.AI_PREDICT_DONE, predictionService.predict(matchId, force)));
     }
 
     /** 실시간 AI 승률 갱신(15분 간격) 상태 조회 — 공개. enabled/간격/현재 대상 경기 수. */
     @GetMapping("/live-prediction")
     public ResponseEntity<CommonResponse<?>> getLivePrediction() {
-        return ResponseEntity.ok(CommonResponse.success("조회 성공", Map.of(
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.READ_SUCCESS, Map.of(
                 "enabled", liveScheduler.isEnabled(),
                 "intervalMinutes", liveScheduler.getIntervalMinutes(),
                 "liveTargets", liveScheduler.countLiveTargets())));

@@ -1,6 +1,7 @@
 package com.example.backend.fotmob;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -22,7 +23,7 @@ public class FotmobController {
     @GetMapping
     public ResponseEntity<CommonResponse<?>> view(@PathVariable Long matchId) {
         return ResponseEntity.ok(
-                CommonResponse.success("조회 성공", queryService.getView(matchId)));
+                CommonResponse.success(ResponseMessage.READ_SUCCESS, queryService.getView(matchId)));
     }
 
     /** 라인업(선발/후보 + 평점 + 교체분, 페이지당 8). 포메이션 피치는 통합 뷰(GET .)를 쓰세요. */
@@ -31,7 +32,7 @@ public class FotmobController {
             @PathVariable Long matchId,
             @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity.ok(
-                CommonResponse.success("조회 성공", queryService.getLineup(matchId, pageable)));
+                CommonResponse.success(ResponseMessage.READ_SUCCESS, queryService.getLineup(matchId, pageable)));
     }
 
     /** 이벤트(골/카드/교체 타임라인, 페이지당 8). */
@@ -40,7 +41,7 @@ public class FotmobController {
             @PathVariable Long matchId,
             @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity.ok(
-                CommonResponse.success("조회 성공", queryService.getEvents(matchId, pageable)));
+                CommonResponse.success(ResponseMessage.READ_SUCCESS, queryService.getEvents(matchId, pageable)));
     }
 
     /** 스케줄을 기다리지 않고 즉시 매핑+동기화 (관리/테스트용, 크롤 유발 → 관리자). */
@@ -48,6 +49,6 @@ public class FotmobController {
     @PostMapping("/sync")
     public ResponseEntity<CommonResponse<?>> syncNow(@PathVariable Long matchId) {
         return ResponseEntity.ok(
-                CommonResponse.success("동기화 완료", queryService.syncNow(matchId)));
+                CommonResponse.success(ResponseMessage.SYNC_DONE, queryService.syncNow(matchId)));
     }
 }

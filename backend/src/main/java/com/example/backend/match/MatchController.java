@@ -1,6 +1,7 @@
 package com.example.backend.match;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -24,7 +25,7 @@ public class MatchController {
     @GetMapping("/allMatch")
     public ResponseEntity<CommonResponse<?>> allMatch(@PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", matchService.allMatch(pageable)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, matchService.allMatch(pageable)));
     }
     // 특정 대회 경기 조회
     @GetMapping("/findByCompId")
@@ -32,7 +33,7 @@ public class MatchController {
             @RequestParam Long id,
             @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", matchService.findByCompId(id, pageable)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, matchService.findByCompId(id, pageable)));
     }
     // 특정 날짜 경기 조회
     @GetMapping("/MatchDay")
@@ -40,7 +41,7 @@ public class MatchController {
             @RequestParam LocalDate date,
             @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", matchService.findByDate(date, pageable)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, matchService.findByDate(date, pageable)));
     }
     // 팀 이름으로 경기 검색 (관리자 UI: matchId 대신 팀명으로 찾기). status 옵션(FINISHED 등)
     @GetMapping("/search")
@@ -49,7 +50,7 @@ public class MatchController {
             @RequestParam(required = false) String status,
             @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", matchService.search(q, status, pageable)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, matchService.search(q, status, pageable)));
     }
 
     // 다가오는 경기 조회 (compId 옵션 — WC만 보려면 6)
@@ -58,7 +59,7 @@ public class MatchController {
             @RequestParam(required = false) Long compId,
             @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", matchService.upcoming(compId, pageable)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, matchService.upcoming(compId, pageable)));
     }
 
 }

@@ -1,6 +1,7 @@
 package com.example.backend.notice;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -23,12 +24,12 @@ public class NoticeController {
     /** 공지 목록 (최신순, 페이지당 8). */
     @GetMapping
     public ResponseEntity<CommonResponse<?>> list(@PageableDefault(size = 8) Pageable pageable) {
-        return ResponseEntity.ok(CommonResponse.success("조회 성공", noticeService.list(pageable)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.READ_SUCCESS, noticeService.list(pageable)));
     }
 
     /** 공지 단건. */
     @GetMapping("/{id}")
     public ResponseEntity<CommonResponse<?>> get(@PathVariable Long id) {
-        return ResponseEntity.ok(CommonResponse.success("조회 성공", noticeService.get(id)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.READ_SUCCESS, noticeService.get(id)));
     }
 }

@@ -1,6 +1,7 @@
 package com.example.backend.competition;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -21,6 +22,6 @@ public class CompetitionController {
     @GetMapping("/allComp")
     public ResponseEntity<CommonResponse<?>> allComp(@PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity
-                .ok(CommonResponse.success("데이터 조회 성공", competitionService.allComp(pageable)));
+                .ok(CommonResponse.success(ResponseMessage.DATA_READ_SUCCESS, competitionService.allComp(pageable)));
     }
 }

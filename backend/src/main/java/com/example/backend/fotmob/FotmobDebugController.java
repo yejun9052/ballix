@@ -3,6 +3,7 @@ package com.example.backend.fotmob;
 import com.example.backend.fotmob.dto.FotmobMatchResponse;
 import com.example.backend.fotmob.dto.FotmobSearchResponse;
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import com.example.backend.team.Team;
 import com.example.backend.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +37,7 @@ public class FotmobDebugController {
             @PathVariable Long competitionId,
             @PageableDefault(size = 8) Pageable pageable) {
         return ResponseEntity.ok(
-                CommonResponse.success("순위 조회 성공", standingService.getStandings(competitionId, pageable)));
+                CommonResponse.success(ResponseMessage.STANDINGS_READ_SUCCESS, standingService.getStandings(competitionId, pageable)));
     }
 
     /** 리그 순위 강제 갱신. */
@@ -47,14 +48,14 @@ public class FotmobDebugController {
             @PageableDefault(size = 8) Pageable pageable) {
         standingService.syncStandings(competitionId);
         return ResponseEntity.ok(
-                CommonResponse.success("순위 갱신 완료", standingService.getStandings(competitionId, pageable)));
+                CommonResponse.success(ResponseMessage.STANDINGS_REFRESH_DONE, standingService.getStandings(competitionId, pageable)));
     }
 
     /** 리그 개인 기록(득점왕/도움왕) 조회 — leagueId = FotMob 리그 ID(예: 77=월드컵). 공개, DB-first lazy+TTL. */
     @GetMapping("/player-stats/{leagueId}")
     public ResponseEntity<CommonResponse<?>> playerStats(@PathVariable Long leagueId) {
         return ResponseEntity.ok(
-                CommonResponse.success("개인 기록 조회 성공", playerStatService.getBoard(leagueId)));
+                CommonResponse.success(ResponseMessage.PLAYER_STATS_READ_SUCCESS, playerStatService.getBoard(leagueId)));
     }
 
     /** 리그 개인 기록 강제 갱신. */
@@ -63,14 +64,14 @@ public class FotmobDebugController {
     public ResponseEntity<CommonResponse<?>> syncPlayerStats(@PathVariable Long leagueId) {
         playerStatService.syncPlayerStats(leagueId);
         return ResponseEntity.ok(
-                CommonResponse.success("개인 기록 갱신 완료", playerStatService.getBoard(leagueId)));
+                CommonResponse.success(ResponseMessage.PLAYER_STATS_REFRESH_DONE, playerStatService.getBoard(leagueId)));
     }
 
     /** 폴링 주기(분) 조회. */
     @GetMapping("/poll-interval")
     public ResponseEntity<CommonResponse<?>> getPollInterval() {
         return ResponseEntity.ok(
-                CommonResponse.success("조회 성공", pollScheduler.getIntervalMinutes()));
+                CommonResponse.success(ResponseMessage.READ_SUCCESS, pollScheduler.getIntervalMinutes()));
     }
 
     /** 폴링 주기(분) 변경 (관리자). */
@@ -79,7 +80,7 @@ public class FotmobDebugController {
     public ResponseEntity<CommonResponse<?>> setPollInterval(@RequestParam int minutes) {
         pollScheduler.setIntervalMinutes(minutes);
         return ResponseEntity.ok(
-                CommonResponse.success("폴링 주기 변경", pollScheduler.getIntervalMinutes()));
+                CommonResponse.success(ResponseMessage.POLL_INTERVAL_CHANGED, pollScheduler.getIntervalMinutes()));
     }
 
     /** 과거/미래 N일치 일정 동기화 (수동 트리거). 범위는 상한 클램프(과도한 크롤 방지). */
@@ -141,7 +142,7 @@ public class FotmobDebugController {
     @GetMapping("/preview/{fotmobId}")
     public ResponseEntity<CommonResponse<?>> preview(@PathVariable Long fotmobId) {
         FotmobMatchResponse data = fotmobClient.getMatch(fotmobId);
-        return ResponseEntity.ok(CommonResponse.success("미리보기 성공", data));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.PREVIEW_SUCCESS, data));
     }
 
     /**
@@ -156,7 +157,7 @@ public class FotmobDebugController {
             @RequestParam(required = false, defaultValue = "") String competition) {
         FotmobSearchResponse data = fotmobClient.search(
                 resolveTeamQuery(team1), resolveTeamQuery(team2), competition);
-        return ResponseEntity.ok(CommonResponse.success("검색 성공", data));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.SEARCH_SUCCESS, data));
     }
 
     /** 한글 검색어면 DB에서 nameKo 부분일치 팀을 찾아 영문명으로 치환(FotMob 검색은 영문). 못 찾으면 원문 유지. */

@@ -1,6 +1,7 @@
 package com.example.backend.ai;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import com.example.backend.global.exceptopn.UnauthorizedException;
 import com.example.backend.match.Match;
 import com.example.backend.user.User;
@@ -31,7 +32,7 @@ public class AiController {
     public ResponseEntity<CommonResponse<?>> history(@PathVariable Long matchId) {
         var rows = snapshotRepository.findByMatchIdOrderByPhaseMinuteAsc(matchId)
                 .stream().map(SnapshotView::from).toList();
-        return ResponseEntity.ok(CommonResponse.success("조회 성공", rows));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.READ_SUCCESS, rows));
     }
 
     /** 히스토리 1행 — phaseMinute: 0=경기 전, 15·30·45·60·75·90=라이브. */
@@ -53,7 +54,7 @@ public class AiController {
         }
         Match m = summaryService.getOrGenerate(matchId);
         return ResponseEntity.ok(CommonResponse.success(
-                "조회 성공", new SummaryView(m.getId(), m.getAiSummary(), m.getAiSummaryAt())));
+                ResponseMessage.READ_SUCCESS, new SummaryView(m.getId(), m.getAiSummary(), m.getAiSummaryAt())));
     }
 
     public record SummaryView(Long matchId, String summary, LocalDateTime generatedAt) {}

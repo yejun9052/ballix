@@ -2,6 +2,7 @@ package com.example.backend.fotmob.player;
 
 import com.example.backend.fotmob.dto.FotmobPlayerResponse;
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +26,6 @@ public class PlayerController {
     @GetMapping("/{playerId}")
     public ResponseEntity<CommonResponse<?>> player(@PathVariable Long playerId) {
         FotmobPlayerResponse data = playerService.getOrFetch(playerId);
-        return ResponseEntity.ok(CommonResponse.success("선수 조회 성공", data));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.PLAYER_READ_SUCCESS, data));
     }
 }

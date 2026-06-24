@@ -1,6 +1,7 @@
 package com.example.backend.match;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,13 +30,13 @@ public class MatchAdminController {
     public ResponseEntity<CommonResponse<?>> setReplay(
             @PathVariable Long id,
             @RequestParam String youtube) {
-        return ResponseEntity.ok(CommonResponse.success("다시보기 등록", matchService.setReplay(id, youtube)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.REPLAY_SET, matchService.setReplay(id, youtube)));
     }
 
     /** 다시보기 해제. */
     @PreAuthorize("hasRole('ADMIN_USER')")
     @DeleteMapping("/{id}/replay")
     public ResponseEntity<CommonResponse<?>> clearReplay(@PathVariable Long id) {
-        return ResponseEntity.ok(CommonResponse.success("다시보기 해제", matchService.clearReplay(id)));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.REPLAY_CLEARED, matchService.clearReplay(id)));
     }
 }

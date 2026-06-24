@@ -1,6 +1,7 @@
 package com.example.backend.match;
 
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +24,7 @@ public class MatchHighlightController {
     public ResponseEntity<CommonResponse<?>> highlight(@PathVariable Long matchId) {
         Match m = highlightService.getOrFetch(matchId);
         return ResponseEntity.ok(CommonResponse.success(
-                "조회 성공", new HighlightView(m.getId(), m.getReplayYoutubeId())));
+                ResponseMessage.READ_SUCCESS, new HighlightView(m.getId(), m.getReplayYoutubeId())));
     }
 
     public record HighlightView(Long matchId, String youtubeId) {}

@@ -2,6 +2,7 @@ package com.example.backend.auth;
 
 import com.example.backend.auth.jwt.CookieUtil;
 import com.example.backend.global.common.CommonResponse;
+import com.example.backend.global.common.ResponseMessage;
 import com.example.backend.user.dto.CreateUserRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -21,12 +22,12 @@ public class AuthController {
     public ResponseEntity<CommonResponse<?>> signup(@RequestBody CreateUserRequest request) {
         authService.signup(request);
         return ResponseEntity
-                .ok(CommonResponse.success("성공적으로 회원이 등록되었습니다.", null));
+                .ok(CommonResponse.success(ResponseMessage.SIGNUP_SUCCESS, null));
     }
     @PostMapping("/logout")
     public ResponseEntity<CommonResponse<?>> logout(HttpServletResponse response) {
         cookieUtil.deleteCookie(response, "access_token");
-        return ResponseEntity.ok(CommonResponse.success("로그아웃 성공", null));
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.LOGOUT_SUCCESS, null));
     }
 
 
