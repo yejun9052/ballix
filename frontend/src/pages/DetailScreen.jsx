@@ -13,6 +13,7 @@ import { BenchSection } from "../components/lineup/BenchSection.jsx";
 import { EventTimeline } from "../components/lineup/EventTimeline.jsx";
 import { PredictionPanel } from "../components/match/PredictionPanel.jsx";
 import { AiProbabilityCard } from "../components/match/AiProbabilityCard.jsx";
+import { AiHistoryTimeline } from "../components/match/AiHistoryTimeline.jsx";
 import { ReplayPanel } from "../components/match/ReplayPanel.jsx";
 import { CommentSection } from "../components/match/CommentSection.jsx";
 
@@ -289,6 +290,7 @@ export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi,
                 match={match}
                 onRegenerate={() => handleAiAction(true)}
               />
+              <AiHistoryTimeline matchId={match.id} />
               {aiActionError && <p className="action-error">{aiActionError}</p>}
             </CollapsiblePanel>
           )}

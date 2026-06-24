@@ -49,6 +49,11 @@ public class AiPredictionService {
     private final LineupPlayerRepository lineupPlayerRepository;
     private final PlayerService playerService;
     private final com.example.backend.prediction.AiPlayerService aiPlayerService;
+    private final AiPredictionSnapshotRepository snapshotRepository;
+    private final com.example.backend.fotmob.matchevent.MatchEventRepository matchEventRepository;
+
+    /** 히스토리 단계 간격(분): 0(경기 전) / 15·30·45·60·75·90. */
+    private static final int PHASE_STEP = 15;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -71,6 +76,9 @@ public class AiPredictionService {
         Parsed p = parseAndNormalize(json);
         match.applyPrediction(p.homePct, p.drawPct, p.awayPct, p.homeScore, p.awayScore);
         matchRepository.save(match);
+
+        // 단계별 히스토리 스냅샷 기록(경기 전 0 / 라이브 15·30·45·60·75·90, 단계당 1회) + 변동 사유 보존.
+        recordSnapshot(match, p);
 
         // AI 유저가 이 승률에서 최고 결과를 찍은 것으로 리더보드 참가(킥오프 전 1회 고정, 멱등).
         aiPlayerService.participate(matchId);
@@ -110,8 +118,19 @@ public class AiPredictionService {
             sb.append("[라이브] 현재 스코어 ").append(home).append(" ").append(nz(m.getHomeScore()))
                     .append(" - ").append(nz(m.getAwayScore())).append(" ").append(away);
             if (m.getLiveTime() != null) sb.append(" (경과 ").append(m.getLiveTime()).append(")");
-            sb.append("\n진행 중인 경기다. 현재 스코어와 남은 시간을 가장 크게 반영해 '최종 결과' 확률을 다시 추정하라");
+            sb.append("\n");
+            // 직전 AI 승률(변동 사유·변동폭 산출 기준)
+            if (m.getAiHomePct() != null) {
+                sb.append("직전 AI 승률: ").append(home).append(" ").append(m.getAiHomePct())
+                        .append("% / 무 ").append(m.getAiDrawPct()).append("% / ").append(away).append(" ").append(m.getAiAwayPct()).append("%\n");
+            }
+            // 지금까지의 주요 이벤트(골·카드) — 변동 사유 근거
+            String events = recentKeyEvents(m);
+            if (!events.isBlank()) sb.append("주요 이벤트: ").append(events).append("\n");
+            sb.append("진행 중인 경기다. 현재 스코어와 남은 시간을 가장 크게 반영해 '최종 결과' 확률을 다시 추정하라");
             sb.append("(이미 리드 중이면 그 팀 승 확률을 높이고, 남은 시간이 적을수록 현재 스코어를 더 확정적으로 반영).\n");
+            sb.append("그리고 reason 필드에 직전 AI 승률 대비 이번 변동의 핵심 이유를 한국어 한 문장으로 적어라");
+            sb.append(" — 골·퇴장 등 주요 이벤트와 남은 시간을 근거로, 변동폭(예: '약 12퍼센트포인트 하락')을 포함. 변동이 미미하면 그 취지로 적어라.\n");
         }
         return sb.toString();
     }
@@ -313,6 +332,10 @@ public class AiPredictionService {
                 - 실제 축구에서 흔히 나오는 현실적인 점수로만 예측하세요(보통 한 팀당 0~4골, 합계 0~5골 범위). 과장된 점수(예: 6-0)는 압도적 전력차가 명확할 때만 쓰세요.
                 - 예상 스코어의 승패 방향은 위 확률에서 가장 높은 결과와 일치해야 합니다(홈승 확률이 가장 높으면 홈 우세 스코어, 무승부 확률이 가장 높으면 동점, 원정승 확률이 가장 높으면 원정 우세 스코어).
                 - 최근 폼의 득실 경향을 반영해 현실적인 골 수를 정하세요.
+
+                변동 사유(reason):
+                - [라이브] 정보와 '직전 AI 승률'이 주어지면, reason에 직전 대비 이번 변동의 핵심 이유를 한국어 한 문장으로 적으세요(골·퇴장 등 주요 이벤트·남은 시간 근거, 변동폭 포함). 예: "전반 35분 손흥민 퇴장으로 한국 승률 약 12퍼센트포인트 하락".
+                - 경기 전(라이브 정보 없음)이면 reason은 빈 문자열("")로 두세요.
                 JSON 외 다른 텍스트는 출력하지 마세요.
 
                 [경기 정보]
@@ -327,7 +350,8 @@ public class AiPredictionService {
                         "draw", Map.of("type", "INTEGER"),
                         "awayWin", Map.of("type", "INTEGER"),
                         "homeScore", Map.of("type", "INTEGER"),
-                        "awayScore", Map.of("type", "INTEGER")),
+                        "awayScore", Map.of("type", "INTEGER"),
+                        "reason", Map.of("type", "STRING")),
                 "required", List.of("homeWin", "draw", "awayWin", "homeScore", "awayScore"));
         return Map.of(
                 "temperature", 0.4,
@@ -336,8 +360,8 @@ public class AiPredictionService {
                 "thinkingConfig", Map.of("thinkingBudget", 0));
     }
 
-    /** 파싱 결과: 정규화된 승률(합 100) + 예상 스코어. */
-    private record Parsed(int homePct, int drawPct, int awayPct, int homeScore, int awayScore) {}
+    /** 파싱 결과: 정규화된 승률(합 100) + 예상 스코어 + 변동 사유(reason, 라이브만 채워짐). */
+    private record Parsed(int homePct, int drawPct, int awayPct, int homeScore, int awayScore, String reason) {}
 
     /** JSON 파싱 후 합 100으로 정규화(반올림 오차는 홈 확률에 흡수). 예상 스코어는 0~9로 클램프. */
     private Parsed parseAndNormalize(String json) {
@@ -366,7 +390,8 @@ public class AiPredictionService {
                 hs = lvl;
                 as = lvl;
             }
-            return new Parsed(hh, dd, aa, clampScore(hs), clampScore(as));
+            String reason = n.path("reason").asText("");
+            return new Parsed(hh, dd, aa, clampScore(hs), clampScore(as), reason);
         } catch (BadRequestException e) {
             throw e;
         } catch (Exception e) {
@@ -376,6 +401,54 @@ public class AiPredictionService {
 
     private int clampScore(int v) {
         return Math.max(0, Math.min(9, v));
+    }
+
+    // ── 히스토리 스냅샷 ──────────────────────────────────────────────────
+    /** 현재 경과 분 기준 단계: 경기 전/시계 정지=0, 진행 중이면 15분 단위(0·15·30·45·60·75·90…). */
+    private int currentPhase(Match m) {
+        if (!"IN_PLAY".equals(m.getStatus())) return 0;
+        Long anchorMs = m.getLiveStartedAtMs();
+        if (anchorMs == null) return 0;   // HT 등 시계 정지 → 기준 모호, 0 취급
+        long elapsedMin = (System.currentTimeMillis() - anchorMs) / 60000L;
+        if (elapsedMin < 0) return 0;
+        return (int) (elapsedMin / PHASE_STEP) * PHASE_STEP;
+    }
+
+    /** 단계별 스냅샷 1행 기록. 경기 전(0)은 (재)생성 시 히스토리 초기화 후 기준점 저장, 라이브는 단계당 1회. */
+    private void recordSnapshot(Match m, Parsed p) {
+        int phase = currentPhase(m);
+        String reason = (p.reason == null || p.reason.isBlank())
+                ? (phase == 0 ? "경기 전 초기 예측" : "특이 변동 없음")
+                : p.reason.trim();
+        if (phase == 0) {
+            snapshotRepository.deleteByMatchId(m.getId());   // 경기 전 재생성 시 히스토리 리셋
+        } else if (snapshotRepository.existsByMatchIdAndPhaseMinute(m.getId(), phase)) {
+            return;   // 같은 단계 이미 기록됨 → 중복 방지
+        }
+        boolean live = "IN_PLAY".equals(m.getStatus());
+        snapshotRepository.save(AiPredictionSnapshot.builder()
+                .matchId(m.getId())
+                .phaseMinute(phase)
+                .homePct(m.getAiHomePct()).drawPct(m.getAiDrawPct()).awayPct(m.getAiAwayPct())
+                .homeScore(live ? m.getHomeScore() : null)
+                .awayScore(live ? m.getAwayScore() : null)
+                .reason(reason)
+                .build());
+    }
+
+    /** 지금까지의 주요 이벤트(골·카드)를 "35' 한국 손흥민 퇴장(레드)" 식으로 나열 — 변동 사유 근거. */
+    private String recentKeyEvents(Match m) {
+        return matchEventRepository.findByMatchIdOrderByMinuteAsc(m.getId()).stream()
+                .filter(e -> "GOAL".equals(e.getType()) || "CARD".equals(e.getType()))
+                .map(e -> {
+                    String who = e.isHome() ? teamName(m.getHomeTeam()) : teamName(m.getAwayTeam());
+                    String min = e.getMinute() == null ? "?" : e.getMinute() + "'";
+                    String name = e.getPlayerName() == null ? "" : e.getPlayerName() + " ";
+                    String what = "GOAL".equals(e.getType()) ? "골"
+                            : (e.getDetail() != null && e.getDetail().toLowerCase().contains("red")) ? "퇴장(레드)" : "경고(옐로)";
+                    return min + " " + who + " " + name + what;
+                })
+                .collect(Collectors.joining(", "));
     }
     //씹새
     // ── 헬퍼 ────────────────────────────────────────────────────────────

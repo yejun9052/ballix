@@ -69,3 +69,22 @@
 .detail-stack { display: grid; gap: 16px; }
 .match-info-grid { display: grid; gap: 16px; }
 
+/* ── AI 승률 변화 히스토리(경기 전→90분 단계별 + 변동 사유) ── */
+.ai-history { margin-top: 14px; padding-top: 14px; border-top: var(--bd) dashed var(--line-soft); }
+.ai-history-head { font-size: 12px; font-weight: 900; color: var(--ink-soft); margin-bottom: 10px; }
+.ai-history-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ai-history-item { position: relative; padding-left: 14px; border-left: var(--bd) solid var(--line-soft); }
+.ai-history-dot { position: absolute; left: -6px; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--blue); border: 2px solid var(--surface); }
+.ai-history-when { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink); }
+.ai-history-when strong { font-weight: 900; }
+.ai-history-score { margin-left: auto; font-weight: 900; font-size: 12px; color: var(--muted); }
+.ai-history-pcts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 11.5px; font-weight: 800; }
+.ahp { padding: 2px 7px; border-radius: var(--r-pill); border: 1.5px solid var(--line-soft); }
+.ahp.home { color: var(--blue-ink); background: var(--blue-soft); }
+.ahp.draw { color: var(--ink-soft); background: var(--surface-2); }
+.ahp.away { color: var(--warn); background: var(--warn-soft); }
+.ahp-delta { padding: 2px 7px; border-radius: var(--r-pill); font-weight: 900; }
+.ahp-delta.up { color: var(--win); }
+.ahp-delta.down { color: var(--live); }
+.ai-history-reason { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-soft); }
+

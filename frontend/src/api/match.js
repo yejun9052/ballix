@@ -25,6 +25,11 @@ export const getAiSummary = (matchId) => {
   return API.get(`/api/match/${matchId}/ai/summary`);
 };
 
+// AI 승률 예측 히스토리(단계별 승률·스코어·변동 사유) — 공개. 예측 안 켠 경기는 빈 배열.
+export const getAiHistory = (matchId) => {
+  return API.get(`/api/match/${matchId}/ai/history`);
+};
+
 // 하이라이트 영상(종료 경기) — 공개, DB-first lazy 검색
 export const getHighlight = (matchId) => {
   return API.get(`/api/match/${matchId}/highlight`);
