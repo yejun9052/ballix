@@ -27,7 +27,7 @@ import axios from "axios";
 import toast from "react-hot-toast";
 
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",  // 운영은 Render 백엔드 주소를 env로 주입
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",  // 운영은 셀프호스트 백엔드(Tailscale Funnel `*.ts.net`) 주소를 env로 주입
   withCredentials: true,            // JWT HTTP-only 쿠키 동봉
 });
 
@@ -117,4 +117,4 @@ axios, react-hot-toast   # package.json dependencies
 
 ## 참고 / TODO
 
-- `baseURL`은 `import.meta.env.VITE_API_BASE_URL`로 분리됨(운영=Render 백엔드, 미설정 시 `http://localhost:8080`). cross-origin + `withCredentials`라 쿠키는 운영에서 `SameSite=None; Secure`로 주고받는다(백엔드 `app.cookie.*`). 같은 도메인으로 묶고 싶으면 `vite.config.js` 프록시 + `baseURL: ""` 방식도 가능.
+- `baseURL`은 `import.meta.env.VITE_API_BASE_URL`로 분리됨(운영=셀프호스트 백엔드 `https://lee-h81m-ds2v.taile904f8.ts.net`, 미설정 시 `http://localhost:8080`). cross-origin + `withCredentials`라 쿠키는 운영에서 `SameSite=None; Secure`로 주고받는다(백엔드 `app.cookie.*`). 같은 도메인으로 묶고 싶으면 `vite.config.js` 프록시 + `baseURL: ""` 방식도 가능.

@@ -1,8 +1,6 @@
 # 경기별 댓글 로직
 
-> ⚠️ **미구현(계획) 문서.** 2026-06-21 기준 이 도메인은 코드에 없다 — `com.example.backend.comment` 패키지·`CommentController`·`Comment` 엔티티·`/api/match/{id}/comments` 라우트·프론트 `api/comment.js`가 전부 부재. 아래는 구현 시 설계안이며 실제 API로 오인하지 말 것.
-
-관련(구현 예정): `com.example.backend.comment`, 프론트 `DetailScreen`의 `CommentSection` + `api/comment.js`.
+관련: `com.example.backend.comment`(`CommentController` — `GET·POST /api/match/{matchId}/comments`, `DELETE /api/comments/{commentId}`), 프론트 `DetailScreen`의 `CommentSection` + `api/comment.js`.
 
 ---
 

@@ -94,13 +94,22 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 
 경기별 댓글. `Comment` 엔티티(`user`/`match` LAZY ManyToOne + `content` ≤500자) + `CommentView` DTO(User 비노출, `mine`=현재 유저가 작성자인지). **조회는 공개, 작성·삭제는 로그인 필요**(`PredictionService`와 동일하게 `@AuthenticationPrincipal Long userId`를 받아 서비스에서 `notLogin` 검증 — `@PreAuthorize` 아님). **삭제는 본인 또는 관리자**(`comment.user.id == userId || user.role == ADMIN_USER`, 서비스에서 판정). 엔드포인트: `GET /api/match/{matchId}/comments`(공개, 최신순 기본 10) · `POST /api/match/{matchId}/comments`(본문 `{content}`) · `DELETE /api/comments/{commentId}`. `comment → user/match` 단방향 의존. 프론트는 `DetailScreen`의 `CommentSection`(+`api/comment.js`)이 표시.
 
+### 선수 카드 뽑기 (`com.example.backend.playercard`)
+
+가챠형 선수 카드 수집. `PlayerCardController` `/api/playercard`(전부 **로그인 필요**): `POST /draw?count=`(1 또는 10연차) · `GET /my`(내 컬렉션, 같은 선수 중복은 수량 합산). 6등급(아마추어→세미프로→프로→탑클래스→월드클래스→레전드)에 **등급별 확률** 적용. **오버롤은 포지션별 가중식**으로 FotMob 시즌 스탯에서 산출(60~99, GK/CB/풀백/DM/공격 등 포지션마다 다른 공식 + 레드카드 패널티). 프론트 `PlayerCardScreen`(1연/10연 뽑기 + 등급 공개 연출 + 컬렉션 필터/정렬, `api/playerCard.js`).
+
+### 스쿼드 빌더 (`com.example.backend.squad`)
+
+뽑은 카드로 4-2-3-1 스쿼드 구성. `SquadController` `/api/squad`(전부 **로그인 필요**): `GET .`(내 스쿼드) · `PUT .`(저장, `{slots:{GK:cardId,…}}` 통째 교체). 프론트 `SquadScreen`(4-2-3-1 피치에 보유 카드 드래그 배치 — GK 슬롯은 골키퍼만, 등급 색상, 사진 폴백, `api/squad.js`).
+
 ### AI 기능 (`com.example.backend.ai`) — Google Gemini
 
 승률 예측 + 골 요약. 모델은 `ai.gemini.model`(기본 `gemini-3.1-flash-lite`), 키는 `ai.gemini.api-key`. `GeminiClient`가 별도 SDK 없이 `generateContent` REST를 RestClient로 호출(429/503 자동 재시도). **이 도메인은 `ai → fotmob`(FotmobClient/Standing) 의존이 있다.**
 
 - **승률 예측 + 예상 스코어** (`AiPredictionService`, `POST /api/admin/ai/predict?matchId=&force=`): **관리자만 "생성"**(`@PreAuthorize ROLE_ADMIN_USER`), 결과 조회는 누구나(값이 `Match`에 저장돼 일반 조회 응답에 포함). 입력 다이제스트 = **FIFA 랭킹(보조) + 리그 순위 + 최근 폼**(전부 DB에 있는 데이터, 추가 크롤 X). Gemini structured-output(JSON)으로 받아 **합 100·1% 단위**로 정규화해 `Match.aiHomePct/aiDrawPct/aiAwayPct`에 저장 + **예상 스코어 `aiHomeScore/aiAwayScore`**(0~9 클램프, 확률 최고 결과와 방향 어긋나면 보정). `predictionEnabled=true`가 되어 `allMatch`에서 최상단 정렬(`findAllByOrderByPredictionEnabledDescMatchTimeAsc`). 멱등(`aiPredictedAt != null`이면 force 없이는 재호출 안 함).
 - **실시간 승률 갱신** (`AiLivePredictionScheduler`): `predictionEnabled && IN_PLAY` 경기를 `predict(matchId, force=true)`로 재예측. **다이제스트가 IN_PLAY면 현재 스코어·경과시간을 주입**(`buildDigest`)해 남은 결과 확률을 갱신하고 기존 값을 덮어쓴다. **트리거는 벽시계 주기가 아니라 킥오프 기준 경과시간 `interval-minutes`(기본 15분) 간격** — 경과 15·30·45·60·75·90분 경계를 넘을 때 1회 재예측. **하프타임 등 시계 정지 구간은 제외, 전·후반(시계가 흐를 때)에만 동작** — `Match.isClockRunning()`(IN_PLAY && `liveStartedAt != null`)로 판별하고 경과분은 `liveStartedAt` 앵커로 계산. 스케줄러는 `tick-ms`(기본 1분)마다 깨어나 경과분을 `interval-minutes` 버킷으로 나눠 경계 통과를 검사하고, 경기별 마지막 버킷을 메모리에 들되 처음 본 경기는 현재 버킷만 기록(재시작/중간 진입 시 즉시 재예측 방지). `ai.live-prediction.{enabled,interval-minutes,tick-ms}` config. 대상이 '관리자가 켠 + 진행 중 + 전·후반'으로 한정돼 Gemini 호출이 과하지 않다. **런타임 on/off**는 `GET /api/admin/ai/live-prediction`(공개, `{enabled,intervalMinutes,liveTargets}`)·`POST /api/admin/ai/live-prediction?enabled=`(관리자)로 — `enabled`가 `volatile`이라 즉시 반영(재시작 시 yml 값으로 초기화). poll-interval과 같은 패턴.
-- **골 요약** (`AiSummaryService`, `GET /api/match/{id}/ai/summary?force=`, 공개): **종료 경기**만. 1순위로 **FotMob 라이브티커(ltc) 골 해설**(영문)을 `FotmobClient.getCommentary()`로 가져와 Gemini가 **한국어 해설 말투로 번역·요약**, 없으면 저장된 `MatchEvent`로 폴백. DB-first lazy(없으면 1회 생성 후 `Match.aiSummary`에 캐시). **생성 실패 시 5분 쿨다운** — 이 시간 안에 재요청이 와도 Gemini를 재호출하지 않고 빈 값을 반환(ltc 크롤+재시도 폭주 방지).
+- **예측 히스토리 + 변동 사유** (`AiPredictionSnapshot`, table `ai_prediction_snapshot`, `GET /api/match/{id}/ai/history` 공개): `predict()`가 호출될 때마다 **단계별로 1행씩** 스냅샷을 쌓는다 — `phaseMinute` = **0(경기 전 초기) / 15·30·45·60·75·90(라이브, HT 제외)**. 단계는 `predict()`가 `liveStartedAtMs` 경과로 산출(`currentPhase`, 15분 floor)하고 `(matchId, phaseMinute)` 유니크 + `existsBy…`로 단계당 1회만(경기 전 0은 재생성 시 `deleteByMatchId`로 리셋). 각 행은 그 시점 승률3·실시간 스코어 + **`reason`(변동 사유, 한국어)**. reason은 라이브 재예측 시 Gemini가 생성 — `buildDigest`가 **직전 AI 승률 + 지금까지 골·카드 이벤트(`recentKeyEvents`)** 를 주입하고 출력 스키마(`predictionConfig`)에 `reason` STRING을 추가해 "전반 35분 손흥민 퇴장으로 한국 승률 약 12%p 하락" 식으로 받는다(경기 전은 빈 문자열→"경기 전 초기 예측"). **관리자가 경기 전 예측을 켠 경기에서만 동작**(`predictionEnabled`, 스케줄러 대상과 동일). 스냅샷 기록은 `AiLivePredictionScheduler`가 기존 15분 경계 재예측 흐름에 그대로 얹혀 추가 트리거 없음.
+- **골 요약** (`AiSummaryService`, `GET /api/match/{id}/ai/summary`, **로그인 필요·강제재생성 없음**): **종료 경기**만. 1순위로 **FotMob 라이브티커(ltc) 골 해설**(영문)을 `FotmobClient.getCommentary()`로 가져와 Gemini가 **한국어 해설 말투로 번역·요약**, 없으면 저장된 `MatchEvent`로 폴백. DB-first lazy(없으면 1회 생성 후 `Match.aiSummary`에 캐시). **생성 실패 시 5분 쿨다운** — 이 시간 안에 재요청이 와도 Gemini를 재호출하지 않고 빈 값을 반환(ltc 크롤+재시도 폭주 방지).
 - **FIFA 랭킹**: `resources/fifa-rankings.json`(팀명→순위, 수정 쉬운 근사 스냅샷)을 `FifaRankingService`가 부팅 시 로드. 팀명은 FotMob 표기와 매칭.
 
 ### 인증 흐름 (기존 유지)
@@ -186,7 +195,10 @@ cd C:\ballix\frontend; npm run build ; npm run lint
 - `GET /api/fotmob/player/{playerId}` — 선수 상세 정보(프로필 + 주 리그 시즌 스탯). DB 미저장 프록시(Python `/player/{id}`). 프론트 라인업에서 선수 클릭 시 모달로 표시. `fotmobPlayerId`로 조회.
 - `POST /api/prediction/predict?matchId=&predictedWinner=` · `GET /api/prediction/{myPrediction,findByMatch?matchId=,ratio?matchId=}` — 예측·분포(로그인 필요)
 - `GET /api/match/allMatch` · `/findByCompId?id=` · `/MatchDay?date=YYYY-MM-DD` · `/upcoming?compId=` — 경기 목록 조회(`upcoming`=미래 경기만, compId 옵션). **`MatchDay`는 DB-first lazy-crawl**(없는 날짜 조회 시 그 날짜를 즉석 크롤·저장 후 반환).
-- `POST /api/admin/ai/predict?matchId=&force=`(관리자) · `GET /api/match/{id}/ai/summary?force=`(공개) — AI 승률 예측 / 골 요약
+- `POST /api/admin/ai/predict?matchId=&force=`(관리자) · `GET /api/match/{id}/ai/summary`(로그인) — AI 승률 예측 / 골 요약
+- `GET /api/match/{id}/ai/history`(공개) — AI 승률 예측 히스토리(단계별 승률·스코어·변동 사유, 경기 전→90분)
+- `POST /api/playercard/draw?count=` · `GET /api/playercard/my`(로그인) — 선수 카드 뽑기(1/10연) / 내 컬렉션
+- `GET|PUT /api/squad`(로그인) — 내 4-2-3-1 스쿼드 조회 / 저장
 - `GET /api/user/me`(로그인, `score`·`role` 포함) · `PUT /api/user/me/name?name=`(로그인, 닉네임 변경) · `GET /api/user/leaderboard`(공개, **포인트순**) — 내 전적 / 랭킹
 - `GET /api/notice`(공개, 게시 중만, 기본 8건) · `GET /api/notice/{id}` — 공지 목록/단건
 - `GET|POST|PUT|DELETE /api/admin/notice`(ADMIN_USER) — 공지 CRUD + 게시 예약(`publishAt`/`expireAt`)

@@ -73,7 +73,7 @@ FIFA랭킹 — 대한민국: 23위, 가나: 60위
 `predictionEnabled && IN_PLAY` 경기를 **킥오프 기준 경과 `interval-minutes`(기본 15)분 경계**(15·30·45·60·75·90)를 넘을 때 1회 재예측.
 - **하프타임 등 시계 정지 구간 제외**, 전·후반(시계 흐를 때)에만 — `Match.isClockRunning()`로 판별.
 - 다이제스트에 위 예시의 `[라이브] 현재 스코어 ... (경과 67')` 줄이 주입돼 남은 결과 확률을 갱신, 기존 값 덮어씀.
-- `ai.live-prediction.{enabled,interval-minutes,tick-ms}` config로만 on/off (런타임 토글 엔드포인트는 없음 — 설정 변경 후 재기동).
+- `ai.live-prediction.{enabled,interval-minutes,tick-ms}` config. 런타임 on/off는 `POST /api/admin/ai/live-prediction?enabled=`(관리자), 상태조회 `GET /api/admin/ai/live-prediction`(공개).
 
 ---
 
