@@ -360,3 +360,342 @@
 @media (max-width: 400px) {
   .sc-grid-col6 { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   카드 뒤집기 연출 — 3D flip + 등급별 빛/광택/스파클
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 뒤집기 컨테이너 ───────────────────────────────────────────────────────── */
+.sc-flip-wrap {
+  position: relative;
+  border-radius: var(--r);
+  perspective: 900px;
+  animation: flip-wrap-enter 0.45s var(--ease) both;
+  transition: transform 0.18s;
+}
+@keyframes flip-wrap-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.88); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 뒤집기 전 hover 리프트 */
+.sc-flip-wrap:not(.is-flipped) { cursor: pointer; }
+.sc-flip-wrap:not(.is-flipped):hover { transform: translateY(-5px) scale(1.02); }
+
+/* ── 뒤집기 내부 (3D 회전) ─────────────────────────────────────────────────── */
+.sc-flip-inner {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.36, 0.66, 0.04, 1);
+}
+.sc-flip-inner.is-flipped { transform: rotateY(180deg); }
+
+/* ── 앞·뒷면 공통 ──────────────────────────────────────────────────────────── */
+.sc-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+/* 앞면: 180도 뒤집어 시작, 플립 시 정면으로 옴 */
+.sc-face-front {
+  transform: rotateY(180deg);
+  position: relative; /* 광택/스파클 오버레이 기준 */
+}
+
+/* 뒷면: 앞면 공간을 채우며 처음에 정면 */
+.sc-face-back {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(145deg, #0d1b2a 0%, #1b263b 50%, #0d1b2a 100%);
+  border: 2px solid rgba(255,255,255,0.07);
+}
+
+/* 뒷면 패턴 (미세 대각선 격자) */
+.sc-back-pattern {
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+  background-image:
+    repeating-linear-gradient(45deg, #fff 0px, #fff 1px, transparent 1px, transparent 8px),
+    repeating-linear-gradient(-45deg, #fff 0px, #fff 1px, transparent 1px, transparent 8px);
+}
+
+.sc-back-ball {
+  font-size: 2.4rem;
+  filter: drop-shadow(0 0 10px rgba(255,255,255,0.25));
+  position: relative;
+  z-index: 1;
+}
+.sc-back-brand {
+  font-size: 8px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── 뒤집기 힌트 ───────────────────────────────────────────────────────────── */
+.sc-flip-hint {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  margin: 14px 0 0;
+  animation: hint-pulse 2s ease-in-out infinite;
+}
+@keyframes hint-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   뒤집기 전 뒷면 빛 번짐 (등급 힌트 — 탑클래스 이상)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sc-back-halo {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 탑 클래스 — 황금 박동 */
+.sc-halo-2 { animation: halo-gold 2s ease-in-out infinite; }
+@keyframes halo-gold {
+  0%, 100% {
+    box-shadow: 0 0 14px 4px rgba(224,179,65,.55),
+                0 0 40px 10px rgba(224,179,65,.15);
+  }
+  50% {
+    box-shadow: 0 0 26px 10px rgba(224,179,65,.75),
+                0 0 65px 22px rgba(224,179,65,.28);
+  }
+}
+
+/* 월드클래스 — 퍼플 강렬 박동 */
+.sc-halo-3 { animation: halo-purple 1.3s ease-in-out infinite; }
+@keyframes halo-purple {
+  0%, 100% {
+    box-shadow: 0 0 22px 7px rgba(168,85,247,.65),
+                0 0 60px 20px rgba(168,85,247,.22);
+  }
+  50% {
+    box-shadow: 0 0 40px 14px rgba(168,85,247,.88),
+                0 0 90px 38px rgba(168,85,247,.38);
+  }
+}
+
+/* 레전드 — 무지개 사이클링 */
+.sc-halo-4 { animation: halo-rainbow 1.6s linear infinite; }
+@keyframes halo-rainbow {
+  0%   {
+    box-shadow: 0 0 35px 14px rgba(255,94,196,.85),
+                0 0 90px 36px rgba(255,94,196,.35);
+  }
+  25%  {
+    box-shadow: 0 0 35px 14px rgba(255,160,0,.85),
+                0 0 90px 36px rgba(255,160,0,.35);
+  }
+  50%  {
+    box-shadow: 0 0 35px 14px rgba(0,210,90,.85),
+                0 0 90px 36px rgba(0,210,90,.35);
+  }
+  75%  {
+    box-shadow: 0 0 35px 14px rgba(80,140,255,.85),
+                0 0 90px 36px rgba(80,140,255,.35);
+  }
+  100% {
+    box-shadow: 0 0 35px 14px rgba(255,94,196,.85),
+                0 0 90px 36px rgba(255,94,196,.35);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   뒤집힌 후 앞면 광택 오버레이 (등급별)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sc-shine-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+/* 광택 스윕 — 공통 ::before */
+.sc-shine-overlay::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -60%;
+  width: 40%; height: 100%;
+  transform: skewX(-12deg);
+  animation: shine-sweep var(--sw-dur, 4s) ease-in-out infinite;
+}
+@keyframes shine-sweep {
+  0%  { left: -60%; opacity: 0; }
+  15% { opacity: 1; }
+  65% { left: 140%; opacity: 0.6; }
+  66% { left: 140%; opacity: 0; }
+  100%{ left: 140%; opacity: 0; }
+}
+
+/* 프로 — 흰 스윕 약하게 */
+.sc-shine-1 { --sw-dur: 4.5s; }
+.sc-shine-1::before {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent);
+}
+
+/* 탑 클래스 — 황금 스윕 */
+.sc-shine-2 { --sw-dur: 3s; }
+.sc-shine-2::before {
+  background: linear-gradient(90deg, transparent, rgba(255,215,0,.40), rgba(255,255,255,.25), transparent);
+}
+
+/* 월드클래스 — 퍼플 스윕 + 테두리 글로우 */
+.sc-shine-3 { --sw-dur: 2.2s; }
+.sc-shine-3::before {
+  background: linear-gradient(90deg, transparent, rgba(168,85,247,.50), rgba(255,255,255,.30), transparent);
+}
+.sc-shine-3::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r);
+  box-shadow: inset 0 0 18px 4px rgba(168,85,247,.30);
+  animation: shine-pulse-purple 2s ease-in-out infinite;
+}
+@keyframes shine-pulse-purple {
+  0%, 100% { box-shadow: inset 0 0 18px 4px rgba(168,85,247,.30); }
+  50%       { box-shadow: inset 0 0 32px 10px rgba(168,85,247,.55); }
+}
+
+/* 레전드 — 빠른 홀로그램 스윕 + 무지개 오버레이 + 내부 글로우 */
+.sc-shine-4 { --sw-dur: 1.8s; }
+.sc-shine-4::before {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.60), rgba(255,200,240,.40), transparent);
+}
+.sc-shine-4::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r);
+  background: linear-gradient(
+    135deg,
+    rgba(255,0,128,.10) 0%,
+    rgba(255,140,0,.10) 20%,
+    rgba(0,200,100,.10) 40%,
+    rgba(0,120,255,.10) 60%,
+    rgba(200,0,255,.10) 80%,
+    rgba(255,0,128,.10) 100%
+  );
+  background-size: 300% 300%;
+  animation: holo-drift 3.5s linear infinite;
+  box-shadow: inset 0 0 28px 8px rgba(255,94,196,.25);
+}
+@keyframes holo-drift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   스파클 파티클 (월드클래스 이상)
+   box-shadow 기법으로 카드 전면에 반짝이는 점들 생성
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sc-sparkle-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: var(--r);
+  z-index: 5;
+}
+
+/* 스파클 세트 A */
+.sc-sparkle-field::before {
+  content: '';
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: #fff;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow:
+    -52px -68px 0 2px rgba(255,255,255,.9),
+     28px -82px 0 1px rgba(255,230,100,.9),
+     63px -22px 0 2px rgba(255,255,255,.85),
+    -67px  38px 0 1px rgba(200,140,255,.9),
+     18px  72px 0 2px rgba(255,255,255,.9),
+     58px  62px 0 1px rgba(130,210,255,.9),
+    -28px -38px 0 1px rgba(255,190,60,.9),
+     46px  26px 0 2px rgba(255,110,200,.9);
+  animation: sparkle-a 1.5s ease-in-out infinite alternate;
+}
+
+/* 스파클 세트 B (다른 위치, 반대 타이밍) */
+.sc-sparkle-field::after {
+  content: '';
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  background: #fff;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow:
+     22px -73px 0 1px rgba(255,255,255,.75),
+    -44px -52px 0 2px rgba(255,230,120,.75),
+     68px  12px 0 1px rgba(150,255,160,.85),
+    -71px -12px 0 2px rgba(255,255,255,.75),
+     34px  78px 0 1px rgba(200,160,255,.85),
+    -54px  60px 0 2px rgba(255,255,255,.7),
+    -12px  48px 0 1px rgba(110,210,255,.85),
+     62px -58px 0 2px rgba(255,160,100,.75);
+  animation: sparkle-b 1.9s ease-in-out infinite alternate;
+  animation-delay: 0.75s;
+}
+
+@keyframes sparkle-a {
+  0%   { opacity: 0;   transform: translate(-50%, -50%) scale(.4); }
+  55%  { opacity: 1;   transform: translate(-50%, -50%) scale(1.2); }
+  100% { opacity: .15; transform: translate(-50%, -50%) scale(.7); }
+}
+@keyframes sparkle-b {
+  0%   { opacity: .1;  transform: translate(-50%, -50%) scale(.6); }
+  50%  { opacity: .9;  transform: translate(-50%, -50%) scale(1.3); }
+  100% { opacity: 0;   transform: translate(-50%, -50%) scale(.5); }
+}
+
+/* 레전드 추가 스파클 — 더 크고 화려한 별 효과 */
+.sc-sparkle-legend::before {
+  box-shadow:
+    -52px -68px 0 3px rgba(255,94,196,.95),
+     28px -82px 0 2px rgba(255,230,100,.95),
+     63px -22px 0 3px rgba(255,255,255,1),
+    -67px  38px 0 2px rgba(200,140,255,.95),
+     18px  72px 0 3px rgba(255,94,196,.95),
+     58px  62px 0 2px rgba(130,210,255,.95),
+    -28px -38px 0 2px rgba(255,190,60,.95),
+     46px  26px 0 3px rgba(255,110,200,1);
+  filter: blur(0.3px);
+}
+.sc-sparkle-legend::after {
+  box-shadow:
+     22px -73px 0 2px rgba(255,255,255,.9),
+    -44px -52px 0 3px rgba(255,230,120,.9),
+     68px  12px 0 2px rgba(150,255,160,1),
+    -71px -12px 0 3px rgba(255,94,196,.9),
+     34px  78px 0 2px rgba(200,160,255,.9),
+    -54px  60px 0 3px rgba(255,255,255,.9),
+    -12px  48px 0 2px rgba(110,210,255,.9),
+     62px -58px 0 3px rgba(255,160,100,.9);
+  filter: blur(0.3px);
+}

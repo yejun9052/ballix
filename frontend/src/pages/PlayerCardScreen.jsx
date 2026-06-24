@@ -4,16 +4,17 @@ import { drawPlayerCard, getMyCards } from "../api/playerCard.js";
 import "../styles/player-card-screen.css";
 
 // ── 등급 설정 ──────────────────────────────────────────────────────────────
+// shine: 0=없음 1=약한광택 2=골드 3=퍼플+스파클 4=레전드(홀로그램+스파클)
 const GRADE_CONFIG = {
-  "레전드":    { color: "#ff5ec4", glow: 3, border: "#ff5ec4" },
-  "월드클래스": { color: "#a855f7", glow: 2, border: "#a855f7" },
-  "탑 클래스":  { color: "#e0b341", glow: 1, border: "#e0b341" },
-  "프로":      { color: "#9aa4b2", glow: 0, border: "#9aa4b2" },
-  "세미프로":  { color: "#a97142", glow: 0, border: "#a97142" },
-  "아마추어":  { color: "#6b7280", glow: 0, border: "#888" },
+  "레전드":    { color: "#ff5ec4", glow: 3, border: "#ff5ec4", shine: 4 },
+  "월드클래스": { color: "#a855f7", glow: 2, border: "#a855f7", shine: 3 },
+  "탑 클래스":  { color: "#e0b341", glow: 1, border: "#e0b341", shine: 2 },
+  "프로":      { color: "#9aa4b2", glow: 0, border: "#9aa4b2", shine: 1 },
+  "세미프로":  { color: "#a97142", glow: 0, border: "#a97142", shine: 0 },
+  "아마추어":  { color: "#6b7280", glow: 0, border: "#888",    shine: 0 },
 };
 function getGradeConfig(grade) {
-  return GRADE_CONFIG[grade] ?? { color: "#888", glow: 0, border: "#888" };
+  return GRADE_CONFIG[grade] ?? { color: "#888", glow: 0, border: "#888", shine: 0 };
 }
 
 // ── 포지션 → 4개 그룹 분류 ────────────────────────────────────────────────
@@ -72,19 +73,93 @@ function SoccerCard({ card, index = 0, compact = false, count = 1 }) {
   );
 }
 
+// ── 뒤집기 카드 (뒷면 → 클릭 → 앞면 3D 플립) ──────────────────────────────
+function FlipCard({ card, index, flipped, onFlip }) {
+  const cfg = getGradeConfig(card.grade);
+  return (
+    <div
+      className={`sc-flip-wrap ${flipped ? "is-flipped" : ""}`}
+      style={{
+        "--gc": cfg.color,
+        "--gb": cfg.border,
+        animationDelay: `${index * 70}ms`,
+      }}
+      onClick={flipped ? undefined : onFlip}
+      role={flipped ? undefined : "button"}
+      aria-label={flipped ? undefined : "카드 뒤집기"}
+    >
+      {/* 뒤집기 전 등급 빛 번짐 (탑클래스 이상) */}
+      {!flipped && cfg.shine >= 2 && (
+        <div className={`sc-back-halo sc-halo-${cfg.shine}`} />
+      )}
+
+      <div className={`sc-flip-inner ${flipped ? "is-flipped" : ""}`}>
+        {/* ── 앞면 (뒤집히면 공개) ── */}
+        <div className="sc-face sc-face-front">
+          <SoccerCard card={card} />
+          {/* 광택 오버레이 */}
+          {flipped && cfg.shine >= 1 && (
+            <div className={`sc-shine-overlay sc-shine-${cfg.shine}`} />
+          )}
+          {/* 스파클 파티클 (월드클래스 이상) */}
+          {flipped && cfg.shine >= 3 && (
+            <div className={`sc-sparkle-field ${cfg.shine >= 4 ? "sc-sparkle-legend" : ""}`} />
+          )}
+        </div>
+
+        {/* ── 뒷면 ── */}
+        <div className="sc-face sc-face-back">
+          <div className="sc-back-pattern" />
+          <span className="sc-back-ball">⚽</span>
+          <span className="sc-back-brand">FOOTBALL PACK</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── 뽑기 결과 화면 ────────────────────────────────────────────────────────
 function RevealScreen({ cards, onReset }) {
+  const [flipped, setFlipped] = useState(new Set());
+
+  function flipOne(i) {
+    setFlipped(prev => new Set([...prev, i]));
+  }
+  function flipAll() {
+    setFlipped(new Set(cards.map((_, i) => i)));
+  }
+
+  const allFlipped = flipped.size === cards.length;
+
   return (
     <div className="sc-reveal">
       <div className="sc-reveal-header">
         <strong>⚽ {cards.length}명 획득!</strong>
-        <button type="button" className="sc-btn sc-btn-primary" onClick={onReset}>
-          다시 뽑기
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {!allFlipped && (
+            <button type="button" className="sc-btn sc-btn-secondary" onClick={flipAll}>
+              모두 공개
+            </button>
+          )}
+          <button type="button" className="sc-btn sc-btn-primary" onClick={onReset}>
+            다시 뽑기
+          </button>
+        </div>
       </div>
       <div className={`sc-grid ${cards.length === 1 ? "sc-grid-single" : ""}`}>
-        {cards.map((c, i) => <SoccerCard key={`${c.id}-${i}`} card={c} index={i} />)}
+        {cards.map((c, i) => (
+          <FlipCard
+            key={`${c.id}-${i}`}
+            card={c}
+            index={i}
+            flipped={flipped.has(i)}
+            onFlip={() => flipOne(i)}
+          />
+        ))}
       </div>
+      {!allFlipped && (
+        <p className="sc-flip-hint">카드를 클릭해 공개하세요</p>
+      )}
     </div>
   );
 }
