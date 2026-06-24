@@ -54,6 +54,19 @@ public class PlayerCard extends BaseTimeEntity {
     @Column(nullable = true)
     private String grade;
 
+    /** FotMob 선수 ID — 주간 오버롤 갱신 시 매칭 키. */
+    @Column(name = "fotmob_player_id")
+    private Long fotmobPlayerId;
+
+    /** 지난 갱신 대비 오버롤 변동. null=최초(미갱신), 0=변동 없음, 음수=하락, 양수=상승. */
+    @Column(name = "overall_delta")
+    private Integer overallDelta;
+
+    /** 주간 갱신: 새 오버롤로 업데이트하고 delta를 기록한다. */
+    public void refreshOverall(int newOverall) {
+        this.overallDelta = newOverall - this.overall;
+        this.overall = newOverall;
+    }
 
     public static PlayerCard create(User owner, String playerName, String nationality,
                                     Integer overall, String position, String team, String imageUrl) {
@@ -72,7 +85,7 @@ public class PlayerCard extends BaseTimeEntity {
     /** 가챠 추첨 결과(drawnGrade)로 등급을 직접 지정 — 오버롤에서 자동 산출하지 않는다. */
     public static PlayerCard createWithGrade(User owner, String playerName, String nationality,
                                              Integer overall, String position, String team,
-                                             String imageUrl, String drawnGrade) {
+                                             String imageUrl, String drawnGrade, Long fotmobPlayerId) {
         return PlayerCard.builder()
                 .owner(owner)
                 .playerName(playerName)
@@ -82,6 +95,7 @@ public class PlayerCard extends BaseTimeEntity {
                 .team(team)
                 .imageUrl(imageUrl)
                 .grade(drawnGrade)
+                .fotmobPlayerId(fotmobPlayerId)
                 .build();
     }
 

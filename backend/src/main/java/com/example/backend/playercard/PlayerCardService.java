@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -135,7 +136,7 @@ public class PlayerCardService {
             // 등급은 확률 테이블로 추첨 — 오버롤과 독립
             PlayerCard card = PlayerCard.createWithGrade(
                     owner, p.name(), p.nationality(), p.overall(),
-                    p.position(), p.team(), p.imageUrl(), rollGrade(rng)
+                    p.position(), p.team(), p.imageUrl(), rollGrade(rng), p.fotmobId()
             );
             result.add(PlayerCardView.from(playerCardRepository.save(card)));
         }
@@ -227,7 +228,8 @@ public class PlayerCardService {
                     resolvedPos,
                     "",
                     imageUrl,
-                    overall
+                    overall,
+                    fotmobId
             ));
         }
         return pool;
@@ -534,6 +536,37 @@ public class PlayerCardService {
 
     // ── 등급 추첨 ───────────────────────────────────────────────────────────
 
+    // ── 주간 오버롤 갱신 ────────────────────────────────────────────────────
+
+    /** 매주 월요일 새벽 3시 — 선수 풀 최신 스탯으로 보유 카드 오버롤 일괄 갱신. */
+    @Scheduled(cron = "0 0 3 * * MON")
+    @Transactional
+    public void weeklyOverallRefresh() {
+        log.info("[카드 오버롤 주간 갱신] 시작");
+        List<SoccerPlayerDto> pool = getPool();
+        if (pool.isEmpty()) { log.warn("[카드 오버롤 주간 갱신] 선수 풀 비어있음"); return; }
+
+        Map<Long, Integer> overallMap = new HashMap<>();
+        for (SoccerPlayerDto p : pool) {
+            if (p.fotmobId() != null) overallMap.put(p.fotmobId(), p.overall());
+        }
+
+        List<PlayerCard> cards = playerCardRepository.findByFotmobPlayerIdIsNotNull();
+        int updated = 0;
+        for (PlayerCard card : cards) {
+            Integer newOverall = overallMap.get(card.getFotmobPlayerId());
+            if (newOverall == null) continue;
+            if (newOverall.equals(card.getOverall())) {
+                // 변동 없어도 delta를 0으로 명시(최초 null에서 0으로 → "유지" 표시)
+                if (card.getOverallDelta() == null) card.refreshOverall(newOverall);
+                continue;
+            }
+            card.refreshOverall(newOverall);
+            updated++;
+        }
+        log.info("[카드 오버롤 주간 갱신] 완료 — {}장 변동", updated);
+    }
+
     /** GRADE_CUMULATIVE 누적 확률표로 등급을 추첨. roll 0~999,999 기준. */
     private String rollGrade(Random rng) {
         int roll = rng.nextInt(1_000_000);
@@ -545,5 +578,5 @@ public class PlayerCardService {
 
     record SoccerPlayerDto(
             String id, String name, String team, String position,
-            String nationality, String imageUrl, int overall) {}
+            String nationality, String imageUrl, int overall, Long fotmobId) {}
 }

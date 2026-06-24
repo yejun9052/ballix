@@ -6,6 +6,7 @@ public record PlayerCardView(
         String playerName,
         String nationality,
         Integer overall,
+        Integer overallDelta,   // null=최초(미갱신), 0=유지, 양수=상승, 음수=하락
         String position,
         String team,
         String imageUrl,
@@ -14,7 +15,8 @@ public record PlayerCardView(
     public static PlayerCardView from(PlayerCard c) {
         return new PlayerCardView(
                 c.getId(), c.getPlayerName(), c.getNationality(),
-                c.getOverall(), c.getPosition(), c.getTeam(), c.getImageUrl(), c.getGrade()
+                c.getOverall(), c.getOverallDelta(), c.getPosition(),
+                c.getTeam(), c.getImageUrl(), c.getGrade()
         );
     }
 
@@ -22,7 +24,8 @@ public record PlayerCardView(
     public static PlayerCardView fromWithPosition(PlayerCard c, String pos) {
         return new PlayerCardView(
                 c.getId(), c.getPlayerName(), c.getNationality(),
-                c.getOverall(), pos, c.getTeam(), c.getImageUrl(), c.getGrade()
+                c.getOverall(), c.getOverallDelta(), pos,
+                c.getTeam(), c.getImageUrl(), c.getGrade()
         );
     }
 }

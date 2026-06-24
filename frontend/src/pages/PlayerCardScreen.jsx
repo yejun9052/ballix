@@ -61,7 +61,14 @@ function SoccerCard({ card, index = 0, compact = false, count = 1 }) {
       style={{ "--gc": cfg.color, "--gb": cfg.border, animationDelay: `${index * 60}ms` }}
     >
       <div className="sc-top">
-        <span className="sc-overall">{card.overall ?? "?"}</span>
+        <span className="sc-overall">
+          {card.overall ?? "?"}
+          {card.overallDelta != null && card.overallDelta !== 0 && (
+            <span className={`sc-overall-delta ${card.overallDelta > 0 ? "sc-delta-up" : "sc-delta-down"}`}>
+              {card.overallDelta > 0 ? `+${card.overallDelta}` : card.overallDelta}
+            </span>
+          )}
+        </span>
         <span className="sc-pos">{card.position || "-"}</span>
       </div>
       <div className="sc-img">
