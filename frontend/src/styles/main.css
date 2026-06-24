@@ -141,8 +141,10 @@
   display: grid;
   gap: 20px;
   width: 100vw;
-  margin: 8px calc(50% - 50vw) -48px;
-  padding: 36px max(var(--pad), calc((100vw - var(--maxw)) / 2 + var(--pad)));
+  /* 하단을 바닥에 붙이던 -48px 제거 → 풋터 아래 여백 확보(안쪽으로 들어온 느낌) */
+  margin: 8px calc(50% - 50vw) 0;
+  /* 좌우 인셋 추가: 모바일 +16px, 와이드는 본문(maxw) 가장자리에서 +32px 안쪽으로 */
+  padding: 36px max(calc(var(--pad) + 16px), calc((100vw - var(--maxw)) / 2 + var(--pad) + 32px)) 40px;
   background: var(--paper);
   color: #2d3328;
 }

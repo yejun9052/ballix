@@ -19,6 +19,12 @@ export function normalizeMatch(match) {
     Number.isFinite(match.aiHomePct) &&
     Number.isFinite(match.aiDrawPct) &&
     Number.isFinite(match.aiAwayPct);
+  // 최초(킥오프 전) AI 예측 스냅샷 — 실시간 재예측으로 ai*Pct가 덮어써져도 보존되는 값.
+  // 이 split 기능 이전에 예측된 경기는 비어있어 null(프론트는 단일 표시로 폴백).
+  const hasInitialAi =
+    Number.isFinite(match.aiInitialHomePct) &&
+    Number.isFinite(match.aiInitialDrawPct) &&
+    Number.isFinite(match.aiInitialAwayPct);
 
   return {
     id: match.id,
@@ -46,6 +52,15 @@ export function normalizeMatch(match) {
           away: match.aiAwayPct,
         }
       : fallbackPrediction,
+    // 최초 예측(스냅샷). 없으면 null → 카드가 실시간 단일 표시로 폴백.
+    predictionInitial: hasInitialAi
+      ? {
+          home: match.aiInitialHomePct,
+          draw: match.aiInitialDrawPct,
+          away: match.aiInitialAwayPct,
+        }
+      : null,
+    hasInitialAi,
     aiPick: match.predictionEnabled ? "AI 승률 생성 완료" : aiFallback.aiPick,
     aiReason: match.aiSummary || aiFallback.aiReason,
     hasAiPrediction,

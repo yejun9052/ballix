@@ -32,7 +32,11 @@ public class User extends BaseTimeEntity {
 
     @Column(nullable = false)
     @Builder.Default
-    private int score = 0; // 누적 포인트(역배 가중) — 리더보드 순위 기준
+    private int score = 0; // 누적 포인트(역배 가중) — 리더보드 순위 기준(감소 안 함)
+
+    @Column(name = "point_balance", nullable = false)
+    @Builder.Default
+    private int pointBalance = 0; // 보유 포인트(카드뽑기 등에 소비) — 적중 시 +, 뽑기 시 -
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -64,12 +68,21 @@ public class User extends BaseTimeEntity {
     }
 
     // 예측 채점 결과를 전적에 반영 (참여 경기 수 +1, 맞췄으면 적중 수 +1, 획득 포인트 누적)
+    // 누적(score)·보유(pointBalance) 둘 다 더한다 — 랭킹은 누적, 카드뽑기는 보유 잔액을 쓴다.
     public void scorePrediction(boolean correct, int points) {
         this.matches_played++;
         if (correct) {
             this.correct_count++;
         }
         this.score += points;
+        this.pointBalance += points;
+    }
+
+    /** 포인트 차감(카드뽑기 등 소비). 음수로 내려가지 않게 클램프 — 잔액 검증은 호출부에서 한다. */
+    public void deductPoints(int amount) {
+        if (amount > 0) {
+            this.pointBalance = Math.max(0, this.pointBalance - amount);
+        }
     }
 
     // 계정상태 접근자 (Lombok boolean 게터 이름 혼동 방지용 명시 접근자)

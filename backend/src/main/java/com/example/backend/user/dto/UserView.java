@@ -9,7 +9,8 @@ import com.example.backend.user.User;
 public record UserView(
         Long id,
         String name,
-        int score,          // 누적 포인트
+        int score,          // 누적 포인트(랭킹 기준)
+        int pointBalance,   // 보유 포인트(카드뽑기 소비)
         int matchesPlayed,
         int correctCount,
         int accuracy,
@@ -19,7 +20,8 @@ public record UserView(
         int played = u.getMatches_played();
         int correct = u.getCorrect_count();
         int accuracy = played == 0 ? 0 : (int) Math.round(correct * 100.0 / played);
-        return new UserView(u.getId(), u.getName(), u.getScore(), played, correct, accuracy,
+        return new UserView(u.getId(), u.getName(), u.getScore(), u.getPointBalance(),
+                played, correct, accuracy,
                 u.getRole() == null ? null : u.getRole().name());
     }
 }

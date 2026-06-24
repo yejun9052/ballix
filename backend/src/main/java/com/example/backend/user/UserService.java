@@ -55,9 +55,14 @@ public class UserService {
         return UserView.from(user);
     }
 
-    // 리더보드 (적중수 내림차순, 순위 부여 — 페이지네이션. 순위는 페이지 오프셋 기준 전역 번호)
+    /** 공식 순위 집계 최소 경기 수 — 미달 유저는 포인트가 높아도 맨 아래로 내린다.
+     *  프론트 {@code LEADERBOARD_MIN_MATCHES}(constants.js)와 같은 값으로 유지할 것. */
+    private static final int LEADERBOARD_MIN_MATCHES = 5;
+
+    // 리더보드 (포인트 내림차순, 순위 부여 — 페이지네이션. 순위는 페이지 오프셋 기준 전역 번호.
+    //          단 최소 경기 수 미달 유저는 맨 아래로)
     public Page<RankView> leaderboard(Pageable pageable) {
-        Page<User> page = userRepository.findLeaderboard(pageable);
+        Page<User> page = userRepository.findLeaderboard(LEADERBOARD_MIN_MATCHES, pageable);
         long offset = page.getPageable().getOffset();   // 현재 페이지 시작 인덱스(0-based)
         List<RankView> rows = new ArrayList<>();
         List<User> content = page.getContent();

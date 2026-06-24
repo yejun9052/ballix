@@ -65,3 +65,17 @@
   .compact-hero > p { margin-left: 0; text-align: left; }
 }
 
+
+/* 리더보드 페이지네이션 */
+.rank-pager {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  margin-top: 18px; flex-wrap: wrap;
+}
+.rank-pager button {
+  padding: 8px 16px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--paper); color: var(--ink); font-weight: 700; cursor: pointer;
+  transition: background 0.15s;
+}
+.rank-pager button:hover:not(:disabled) { background: var(--blue-soft); }
+.rank-pager button:disabled { opacity: 0.45; cursor: default; }
+.rank-pager-info { font-size: 13px; color: var(--faint); white-space: nowrap; }

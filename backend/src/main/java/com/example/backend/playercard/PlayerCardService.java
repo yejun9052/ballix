@@ -92,6 +92,8 @@ public class PlayerCardService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final int DEFAULT_OVERALL = 65;
+    /** 카드 1장 뽑기 비용(보유 포인트). 1회=100, 10회=1000. */
+    private static final int COST_PER_DRAW = 100;
 
     // ── 뽑기 ───────────────────────────────────────────────────────────────
 
@@ -102,6 +104,13 @@ public class PlayerCardService {
 
         User owner = userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("유저를 찾을 수 없습니다."));
+
+        // 보유 포인트 차감(100P/장). 잔액 부족이면 거절.
+        int cost = count * COST_PER_DRAW;
+        if (owner.getPointBalance() < cost) {
+            throw new BadRequestException(
+                    "포인트가 부족합니다. (필요 " + cost + "P / 보유 " + owner.getPointBalance() + "P)");
+        }
 
         List<SoccerPlayerDto> pool = getPool();
         if (pool.isEmpty()) throw new BadRequestException("선수 데이터가 없습니다.");
@@ -116,6 +125,7 @@ public class PlayerCardService {
             );
             result.add(PlayerCardView.from(playerCardRepository.save(card)));
         }
+        owner.deductPoints(cost);   // 관리 엔티티 — 트랜잭션 커밋 시 반영
         return result;
     }
 

@@ -1,11 +1,40 @@
 /* 개인성적 — 득점왕/도움왕 */
 .playerstat-panel { padding: 16px; }
 .playerstat-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+}
+/* 두 영역을 세로 구분선으로 분리(데스크톱) */
+.playerstat-grid > .playerstat-block { padding: 0 24px; min-width: 0; }
+.playerstat-grid > .playerstat-block:first-child { padding-left: 0; }
+.playerstat-grid > .playerstat-block:last-child {
+  padding-right: 0;
+  border-left: 1px solid rgba(63, 74, 53, 0.18);
 }
 @media (max-width: 760px) {
   .playerstat-grid { grid-template-columns: 1fr; }
+  .playerstat-grid > .playerstat-block { padding: 0; }
+  /* 모바일(세로 적층)에선 가로 구분선으로 */
+  .playerstat-grid > .playerstat-block:last-child {
+    border-left: none;
+    border-top: 1px solid rgba(63, 74, 53, 0.18);
+    margin-top: 20px; padding-top: 20px;
+  }
 }
+
+/* 관리자 갱신 툴바 */
+.playerstat-admin {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  margin-bottom: 14px;
+}
+.playerstat-msg { font-size: 12px; color: var(--faint); }
+.playerstat-refresh {
+  font-size: 13px; font-weight: 700; padding: 7px 14px;
+  border: 1px solid rgba(63, 74, 53, 0.28); border-radius: 9px;
+  background: var(--surface); color: #2d3328; cursor: pointer;
+  transition: background 0.15s;
+}
+.playerstat-refresh:hover:not(:disabled) { background: var(--paper); }
+.playerstat-refresh:disabled { opacity: 0.55; cursor: default; }
 
 .playerstat-title {
   font-size: 16px; font-weight: 800; margin: 0 0 10px;

@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -74,6 +75,16 @@ public class FotmobSyncService {
                            String homeTeamName, Integer homeScore, Integer awayScore, String awayTeamName) {
         static FinalizeOutcome none() {
             return new FinalizeOutcome(false, false, false, null, null, null, null, null);
+        }
+    }
+
+    /** 커밋 후·락 밖에서 보낼 라이브 이벤트 알림 1건(골·하프타임 등). */
+    record NtfyMsg(String title, String body, String tags) {}
+
+    /** 라이브 빠른 동기화 결과 — 종료 처리 + 커밋 후 보낼 라이브 이벤트 알림 목록. */
+    record LiveSyncOutcome(FinalizeOutcome finalizeOutcome, List<NtfyMsg> events) {
+        static LiveSyncOutcome none() {
+            return new LiveSyncOutcome(FinalizeOutcome.none(), List.of());
         }
     }
 
@@ -278,18 +289,26 @@ public class FotmobSyncService {
         if (resp == null) {
             return;
         }
-        FinalizeOutcome outcome;
+        LiveSyncOutcome outcome;
         synchronized (lockFor(match.getId())) {     // 같은 경기 동시 쓰기 직렬화(P1)
             outcome = self.applyLiveSync(match.getId(), resp);
         }
-        runPostFinalize(outcome);                   // 순위 크롤·알림은 커밋 후·락 밖(P2)
+        runPostFinalize(outcome.finalizeOutcome());  // 순위 크롤·종료 알림(커밋 후·락 밖, P2)
+        for (NtfyMsg m : outcome.events()) {        // 골·하프타임 알림(커밋 후·락 밖)
+            ntfy.send(m.title(), m.body(), m.tags());
+        }
     }
 
     /** 라이브 빠른 동기화 반영(단독 트랜잭션) — 이벤트·스코어·status·HT/FT. 라인업은 아직 없을 때만 채운다. */
     @Transactional
-    public FinalizeOutcome applyLiveSync(Long matchId, FotmobMatchResponse resp) {
+    public LiveSyncOutcome applyLiveSync(Long matchId, FotmobMatchResponse resp) {
         Match match = matchRepository.findById(matchId).orElse(null);
-        if (match == null) return FinalizeOutcome.none();
+        if (match == null) return LiveSyncOutcome.none();
+
+        // 변동 감지용 직전 상태(스코어 총합·HT·진행여부) — 커밋 후 골/하프타임 알림을 1회만 보내기 위함.
+        int oldTotal = nzInt(match.getHomeScore()) + nzInt(match.getAwayScore());
+        boolean wasHalftime = isHalftime(match.getLiveTime());
+        boolean wasInPlay = "IN_PLAY".equals(match.getStatus());
 
         match.updateScore(resp.statusType(), resp.homeScore(), resp.awayScore(), resolveWinner(resp));
         match.updateLiveIfAbsent(resp.liveTime(), resp.liveSeconds());   // 앵커 1회만(재앵커는 11분 작업) + HT 라벨/정리
@@ -313,7 +332,45 @@ public class FotmobSyncService {
 
         FinalizeOutcome outcome = finalizeIfFinished(match, resp);   // 종료 즉시 확정/채점(순위·알림은 커밋 후)
         matchRepository.save(match);
-        return outcome;
+
+        List<NtfyMsg> events = collectLiveEvents(resp, oldTotal, wasHalftime, wasInPlay, outcome.finalized());
+        return new LiveSyncOutcome(outcome, events);
+    }
+
+    /** 라이브 변동 → 알림 목록(골·하프타임 진입). 종료(FT)는 finalize에서 따로 처리하므로 제외. 변동 없으면 빈 목록. */
+    private List<NtfyMsg> collectLiveEvents(FotmobMatchResponse resp, int oldTotal,
+                                            boolean wasHalftime, boolean wasInPlay, boolean finalized) {
+        List<NtfyMsg> out = new ArrayList<>();
+        if (finalized || !"IN_PLAY".equals(resp.statusType())) {
+            return out;   // 종료/비진행은 라이브 이벤트 알림 대상 아님
+        }
+        // 골: 총 득점이 직전보다 늘었을 때만(0-0 시작·하향 보정 제외). 직전이 진행 중이었을 때만(첫 진입 오탐 방지).
+        if (wasInPlay && resp.homeScore() != null && resp.awayScore() != null
+                && resp.homeScore() + resp.awayScore() > oldTotal) {
+            out.add(new NtfyMsg("Goal",
+                    String.format("⚽ %s %d-%d %s",
+                            resp.homeTeamName(), resp.homeScore(), resp.awayScore(), resp.awayTeamName()),
+                    "soccer"));
+        }
+        // 하프타임 진입: 직전엔 HT 아니었고 지금 HT.
+        if (isHalftime(resp.liveTime()) && !wasHalftime) {
+            out.add(new NtfyMsg("Half Time",
+                    String.format("%s %s-%s %s 하프타임",
+                            resp.homeTeamName(), nz(resp.homeScore()), nz(resp.awayScore()), resp.awayTeamName()),
+                    "hourglass_flowing_sand"));
+        }
+        return out;
+    }
+
+    /** 하프타임/정지 라벨인지 — "HT"·"Half Time" 등 숫자 없는 라벨. */
+    private boolean isHalftime(String liveTime) {
+        if (liveTime == null) return false;
+        String s = liveTime.trim().toLowerCase();
+        return s.equals("ht") || s.contains("half");
+    }
+
+    private int nzInt(Integer v) {
+        return v == null ? 0 : v;
     }
 
     private List<LineupPlayer> toLineupEntities(Match match, List<LineupDto> dtos) {

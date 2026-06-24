@@ -103,7 +103,10 @@
 }
 .sc-grade-name { font-size: 12px; font-weight: 800; }
 
-/* 뽑기 버튼 */
+/* 보유 포인트 + 뽑기 버튼 */
+.sc-balance { text-align: center; font-size: 15px; font-weight: 700; margin: 2px 0 12px; }
+.sc-balance b { color: #e0b341; font-size: 17px; }
+.sc-balance-hint { color: var(--muted); font-weight: 600; font-size: 12px; }
 .sc-draw-btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .sc-btn {
   border: var(--bd) solid var(--line);

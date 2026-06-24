@@ -10,7 +10,7 @@ export const changeMyName = (name) => {
   return API.put(`/api/user/me/name?name=${encodeURIComponent(name)}`);
 };
 
-// 리더보드(포인트순) — 공개
-export const getLeaderboard = ({ page = 0, size = 100 } = {}) => {
+// 리더보드(포인트순, 페이지네이션) — 공개. 응답은 Page 객체({content, totalPages, number, totalElements})
+export const getLeaderboard = ({ page = 0, size = 10 } = {}) => {
   return API.get(`/api/user/leaderboard?page=${page}&size=${size}`);
 };

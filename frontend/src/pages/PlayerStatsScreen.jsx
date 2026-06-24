@@ -1,6 +1,6 @@
 // 개인성적 화면 — 월드컵 득점왕 / 도움왕 (FotMob 크롤)
 import { useEffect, useState } from "react";
-import { getPlayerStats } from "../api/playerStats.js";
+import { getPlayerStats, syncPlayerStats } from "../api/playerStats.js";
 import { getTeamNameByOriginal } from "../utils/team.js";
 import { StateMessage } from "../components/common/StateMessage.jsx";
 
@@ -74,6 +74,10 @@ export function PlayerStatsScreen({ onBack, user }) {
   const [board, setBoard] = useState({ scorers: [], assists: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const isAdmin = user?.role === "ADMIN_USER";
 
   useEffect(() => {
     getPlayerStats()
@@ -88,6 +92,21 @@ export function PlayerStatsScreen({ onBack, user }) {
       )
       .finally(() => setIsLoading(false));
   }, []);
+
+  // 관리자: FotMob 재크롤로 기록 강제 갱신 후 보드 교체
+  async function handleRefresh() {
+    setRefreshing(true);
+    setMsg("");
+    try {
+      const data = await syncPlayerStats();
+      setBoard({ scorers: data?.scorers || [], assists: data?.assists || [] });
+      setMsg("✅ 갱신 완료");
+    } catch (err) {
+      setMsg(`❌ 갱신 실패: ${err.response?.data?.msg || err.message}`);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <main className="board-shell">
@@ -105,6 +124,19 @@ export function PlayerStatsScreen({ onBack, user }) {
         </section>
 
         <section className="detail-panel board-panel playerstat-panel">
+          {isAdmin && (
+            <div className="playerstat-admin">
+              {msg && <span className="playerstat-msg">{msg}</span>}
+              <button
+                type="button"
+                className="playerstat-refresh"
+                disabled={refreshing}
+                onClick={handleRefresh}
+              >
+                {refreshing ? "갱신 중…" : "↻ 기록 갱신"}
+              </button>
+            </div>
+          )}
           {isLoading && <StateMessage text="개인 기록을 불러오는 중" />}
           {!isLoading && error && <StateMessage text={error} />}
           {!isLoading && !error && (

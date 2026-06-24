@@ -25,6 +25,7 @@ export function MainScreen({
   onOpenPlayerStats,
   onOpenWorldCup,
   onOpenPlayerCard,
+  onOpenSquad,
   onOpenAdmin,
   onOpenMyPage,
   onRetryMatches,
@@ -136,6 +137,9 @@ export function MainScreen({
             <button type="button" className="nav-link" onClick={onOpenPlayerCard}>
               카드뽑기
             </button>
+            <button type="button" className="nav-link" onClick={onOpenSquad}>
+              스쿼드
+            </button>
             {isAdmin && (
               <button type="button" className="nav-link admin-nav" onClick={onOpenAdmin}>
                 관리자
@@ -150,6 +154,19 @@ export function MainScreen({
             </div>
           ) : (
             <div className="account-actions topbar-desktop-only">
+              {typeof user?.pointBalance === "number" && (
+                <span
+                  className="point-pill"
+                  title="보유 포인트 (카드 뽑기에 사용)"
+                  style={{
+                    fontSize: 13, fontWeight: 800, color: "#7a5b00",
+                    background: "#ffe8a3", border: "1px solid #e0c060",
+                    borderRadius: 999, padding: "4px 11px",
+                  }}
+                >
+                  {user.pointBalance.toLocaleString()} P
+                </span>
+              )}
               {isAdmin && <span className="admin-badge">관리자</span>}
               <button type="button" className="account-chip account-chip-btn" onClick={onOpenMyPage}>
                 {user?.name || "사용자"}
@@ -191,6 +208,7 @@ export function MainScreen({
               <button type="button" onClick={() => handleMobileNav(onOpenMyPredictions)}>내 예측</button>
               <button type="button" onClick={() => handleMobileNav(onOpenLeaderboard)}>랭킹</button>
               <button type="button" onClick={() => handleMobileNav(onOpenPlayerCard)}>카드뽑기</button>
+              <button type="button" onClick={() => handleMobileNav(onOpenSquad)}>스쿼드</button>
               {isAdmin && (
                 <button type="button" className="mobile-menu-admin" onClick={() => handleMobileNav(onOpenAdmin)}>관리자</button>
               )}

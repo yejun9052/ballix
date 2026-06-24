@@ -297,18 +297,21 @@ function CollectionTab({ isLoggedIn }) {
 }
 
 // ── 메인 화면 ─────────────────────────────────────────────────────────────
-export function PlayerCardScreen({ isLoggedIn, onBack }) {
+export function PlayerCardScreen({ isLoggedIn, user, onDrawn, onBack }) {
   const [tab, setTab]     = useState("draw");    // "draw" | "collection"
   const [phase, setPhase] = useState("entry");   // "entry" | "drawing" | "reveal"
   const [result, setResult] = useState(null);
+  const balance = user?.pointBalance ?? 0;        // 보유 포인트
 
   async function draw(count) {
     if (!isLoggedIn || phase === "drawing") return;
+    if (balance < count * 100) return;            // 잔액 부족(서버도 거절)
     setPhase("drawing");
     try {
       const cards = await drawPlayerCard(count);
       setResult(Array.isArray(cards) ? cards : []);
       setPhase("reveal");
+      onDrawn?.();                                 // 보유 포인트 갱신(me 재조회)
     } catch {
       setPhase("entry");
     }
@@ -370,24 +373,33 @@ export function PlayerCardScreen({ isLoggedIn, onBack }) {
                 {!isLoggedIn ? (
                   <p className="sc-empty">로그인 후 뽑기가 가능합니다.</p>
                 ) : (
-                  <div className="sc-draw-btns">
-                    <button
-                      type="button"
-                      className="sc-btn sc-btn-primary sc-btn-lg"
-                      onClick={() => draw(1)}
-                      disabled={phase === "drawing"}
-                    >
-                      {phase === "drawing" ? "뽑는 중…" : "1회 뽑기"}
-                    </button>
-                    <button
-                      type="button"
-                      className="sc-btn sc-btn-accent sc-btn-lg"
-                      onClick={() => draw(10)}
-                      disabled={phase === "drawing"}
-                    >
-                      {phase === "drawing" ? "뽑는 중…" : "10회 뽑기"}
-                    </button>
-                  </div>
+                  <>
+                    <p className="sc-balance">
+                      보유 포인트 <b>{balance.toLocaleString()} P</b>
+                      <span className="sc-balance-hint"> · 100P당 1회</span>
+                    </p>
+                    <div className="sc-draw-btns">
+                      <button
+                        type="button"
+                        className="sc-btn sc-btn-primary sc-btn-lg"
+                        onClick={() => draw(1)}
+                        disabled={phase === "drawing" || balance < 100}
+                      >
+                        {phase === "drawing" ? "뽑는 중…" : "1회 뽑기 (100P)"}
+                      </button>
+                      <button
+                        type="button"
+                        className="sc-btn sc-btn-accent sc-btn-lg"
+                        onClick={() => draw(10)}
+                        disabled={phase === "drawing" || balance < 1000}
+                      >
+                        {phase === "drawing" ? "뽑는 중…" : "10회 뽑기 (1000P)"}
+                      </button>
+                    </div>
+                    {balance < 100 && (
+                      <p className="sc-empty">포인트가 부족합니다 — 예측 적중으로 포인트를 모으세요.</p>
+                    )}
+                  </>
                 )}
               </div>
             )}

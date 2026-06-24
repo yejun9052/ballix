@@ -1,0 +1,261 @@
+/* 스쿼드 — 4-2-3-1 피치 + 슬롯 + 카드 피커 */
+
+.squad-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.squad-count {
+  margin-right: auto;
+  font-weight: 800;
+  color: var(--ink-soft, #3a3a36);
+}
+.squad-msg {
+  font-size: 13px;
+  color: var(--faint, #888);
+}
+.squad-save {
+  font-size: 14px;
+  font-weight: 800;
+  padding: 8px 20px;
+  border: 1px solid rgba(63, 74, 53, 0.3);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: #2d3328;
+  cursor: pointer;
+}
+.squad-save:hover:not(:disabled) {
+  background: var(--paper, #f3efe6);
+}
+.squad-save:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── 피치 ───────────────────────────────────────── */
+.squad-pitch {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  aspect-ratio: 3 / 4;
+  border-radius: 16px;
+  background: linear-gradient(0deg, #2f7d34, #3a9440);
+  border: 3px solid rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+}
+/* 잔디 가로 줄무늬 */
+.squad-pitch::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.05) 0 8.33%,
+    transparent 8.33% 16.66%
+  );
+  pointer-events: none;
+}
+/* 하프라인 */
+.squad-pitch::after {
+  content: "";
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 50%;
+  border-top: 2px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+/* ── 슬롯 ───────────────────────────────────────── */
+.squad-slot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.squad-slot.empty .slot-plus {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.14);
+  color: #fff;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.squad-slot.empty .slot-label,
+.slot-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-photo {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2.5px solid #fff;
+  background: #0b3d0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+.slot-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.slot-ovr {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 3px;
+  border-radius: 10px;
+  background: #111;
+  color: #ffd24a;
+  font-size: 11px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.slot-x {
+  position: absolute;
+  right: 8px;
+  top: -8px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: #c0392b;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+/* ── 카드 피커 모달 ──────────────────────────────── */
+.squad-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.squad-picker {
+  background: var(--surface, #fff);
+  border-radius: 14px;
+  width: min(560px, 100%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 15px;
+}
+.picker-head button {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--ink-soft, #555);
+}
+.picker-empty {
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--faint, #888);
+}
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(94px, 1fr));
+  gap: 10px;
+  padding: 16px;
+  overflow: auto;
+}
+.picker-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 6px 8px;
+  border: 2px solid #888;
+  border-radius: 10px;
+  background: var(--surface-2, #f7f6f2);
+  cursor: pointer;
+}
+.picker-card:hover {
+  transform: translateY(-2px);
+}
+.pc-ovr {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #111;
+  background: #ffd24a;
+  border-radius: 6px;
+  padding: 0 5px;
+}
+.pc-photo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0b3d0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.pc-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pc-name {
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-pos {
+  font-size: 11px;
+  color: var(--faint, #888);
+}

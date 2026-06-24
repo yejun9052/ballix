@@ -59,7 +59,9 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       FOTMOB_API_BASE_URL: http://fotmob:8800
-      NTFY_ENABLED: "false"          # 셀프호스트 ntfy를 안 띄우므로 기본 끔(쓰려면 true + NTFY_BASE_URL 지정)
+      NTFY_ENABLED: "true"           # ntfy.sh 공개 서버로 푸시 알림 사용
+      NTFY_BASE_URL: "https://ntfy.sh"
+      NTFY_TOPIC: ${NTFY_TOPIC}      # 추측 어려운 고유 토픽 — .env에서 주입(git 노출 방지)
       # Tailscale Funnel이 TLS를 종단하고 백엔드엔 http로 넘긴다. 이게 없으면 Spring이 X-Forwarded-Proto를
       # 무시해 OAuth redirect_uri를 http://...로 만들어 구글 로그인이 redirect_uri_mismatch로 깨진다(https로 교정).
       SERVER_FORWARD_HEADERS_STRATEGY: framework

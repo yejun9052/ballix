@@ -137,6 +137,18 @@ export function WorldCupScreen({ matches, onBack, onSelectMatch }) {
 }
 
 export function WcGroupGrid({ wcMatches, standingsByLetter, quals, qualifiedCount, thirdRanking, onSelectGroup }) {
+  // 경기 데이터의 Team.nameKo(DB 번역값)로 fotmobTeamId/영문명 → 한국어 룩업 구성. 프론트 맵은 폴백.
+  const koMap = {};
+  for (const m of wcMatches) {
+    for (const t of [m.raw?.homeTeam, m.raw?.awayTeam]) {
+      if (!t?.nameKo) continue;
+      if (t.fotmobTeamId != null) koMap[`id:${t.fotmobTeamId}`] = t.nameKo;
+      if (t.name) koMap[`name:${t.name}`] = t.nameKo;
+    }
+  }
+  const koByStanding = (row) => koMap[`id:${row.fotmobTeamId}`] || getTeamNameByOriginal(row.teamName);
+  const koByOriginal = (name) => koMap[`name:${name}`] || teamKo(name);
+
   return (
     <>
       <div className="wc-qual-legend">
@@ -184,7 +196,7 @@ export function WcGroupGrid({ wcMatches, standingsByLetter, quals, qualifiedCoun
                         <span className="wc-ms-rank">{row.rankNo ?? i + 1}</span>
                         <span className="wc-ms-nation">
                           {row.crest && <img src={row.crest} alt="" className="wc-ms-crest" />}
-                          <span className="wc-ms-team" title={getTeamNameByOriginal(row.teamName)}>{teamTla(row.teamName)}</span>
+                          <span className="wc-ms-team" title={koByStanding(row)}>{koByStanding(row)}</span>
                         </span>
                         <span className="wc-ms-pts">{row.points ?? 0}</span>
                         <span className={`wc-ms-gd ${gdCls}`}>{gdText}</span>
@@ -195,7 +207,7 @@ export function WcGroupGrid({ wcMatches, standingsByLetter, quals, qualifiedCoun
               ) : (
                 <ul className="wc-group-teams">
                   {teamFallback.length > 0
-                    ? teamFallback.map((t) => <li key={t}>{teamKo(t)}</li>)
+                    ? teamFallback.map((t) => <li key={t}>{koByOriginal(t)}</li>)
                     : <li className="wc-na">TBD</li>}
                 </ul>
               )}

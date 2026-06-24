@@ -20,6 +20,7 @@ const AdminScreen = lazy(() => import("./pages/AdminScreen.jsx").then((m) => ({ 
 const MyPageScreen = lazy(() => import("./pages/MyPageScreen.jsx").then((m) => ({ default: m.MyPageScreen })));
 const WorldCupScreen = lazy(() => import("./components/worldcup/WorldCupScreen.jsx").then((m) => ({ default: m.WorldCupScreen })));
 const PlayerCardScreen = lazy(() => import("./pages/PlayerCardScreen.jsx").then((m) => ({ default: m.PlayerCardScreen })));
+const SquadScreen = lazy(() => import("./pages/SquadScreen.jsx").then((m) => ({ default: m.SquadScreen })));
 
 // 온보딩(첫 로그인 닉네임 설정) 완료 플래그 키 — 유저별 1회
 const onboardKey = (userId) => `ballix-onboarded-${userId}`;
@@ -67,6 +68,13 @@ export default function App() {
   }, [currentUser]);
 
   // 닉네임 변경을 currentUser에 반영(마이페이지·모달 공용)
+  // 포인트 등 내 정보 재조회(카드 뽑기 후 보유 포인트 갱신용)
+  function refreshUser() {
+    getMe()
+      .then((u) => setCurrentUser(u))
+      .catch(() => {});
+  }
+
   function applyNameChange(newName) {
     setCurrentUser((prev) => (prev ? { ...prev, name: newName } : prev));
   }
@@ -224,6 +232,16 @@ export default function App() {
     view = (
       <PlayerCardScreen
         isLoggedIn={isLoggedIn}
+        user={currentUser}
+        onDrawn={refreshUser}
+        onBack={() => setScreen("main")}
+      />
+    );
+  } else if (screen === "squad") {
+    view = (
+      <SquadScreen
+        user={currentUser}
+        isLoggedIn={isLoggedIn}
         onBack={() => setScreen("main")}
       />
     );
@@ -271,6 +289,7 @@ export default function App() {
         onOpenPlayerStats={() => setScreen("playerStats")}
         onOpenWorldCup={() => setScreen("worldcup")}
         onOpenPlayerCard={() => setScreen("playerCard")}
+        onOpenSquad={() => (isLoggedIn ? setScreen("squad") : setScreen("login"))}
         onOpenAdmin={() => (isAdmin ? setScreen("admin") : null)}
         onOpenMyPage={() => setScreen("mypage")}
         onSelectMatch={(match) => {
