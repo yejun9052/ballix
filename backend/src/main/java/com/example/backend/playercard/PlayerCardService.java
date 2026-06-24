@@ -122,8 +122,44 @@ public class PlayerCardService {
     @Transactional(readOnly = true)
     public List<PlayerCardView> myCards(Long userId) {
         if (userId == null) throw new UnauthorizedException("로그인이 필요합니다.");
-        return playerCardRepository.findByOwnerIdOrderByCreateAtDesc(userId)
-                .stream().map(PlayerCardView::from).toList();
+        List<PlayerCard> cards = playerCardRepository.findByOwnerIdOrderByCreateAtDesc(userId);
+
+        // position이 비어있는 카드의 이름을 모아 Player+LineupPlayer에서 일괄 조회
+        List<String> missingNames = cards.stream()
+                .filter(c -> c.getPosition() == null || c.getPosition().isBlank())
+                .map(PlayerCard::getPlayerName)
+                .distinct()
+                .toList();
+
+        Map<String, String> posMap = new HashMap<>();
+        if (!missingNames.isEmpty()) {
+            List<Object[]> rows = em.createQuery("""
+                    SELECT p.name, p.position, MAX(lp.position)
+                    FROM Player p
+                    LEFT JOIN LineupPlayer lp ON lp.player = p
+                    WHERE p.name IN :names
+                    GROUP BY p.name, p.position
+                    """)
+                    .setParameter("names", missingNames)
+                    .getResultList();
+
+            for (Object[] row : rows) {
+                String name  = (String) row[0];
+                String pPos  = (String) row[1];
+                String lpPos = (String) row[2];
+                String resolved = (pPos != null && !pPos.isBlank()) ? pPos
+                               : (lpPos != null ? lpPos : "");
+                if (!resolved.isBlank()) posMap.put(name, resolved);
+            }
+        }
+
+        return cards.stream().map(c -> {
+            // 저장된 position이 있으면 그대로, 없으면 DB 조회 결과로 채움
+            String pos = (c.getPosition() != null && !c.getPosition().isBlank())
+                    ? c.getPosition()
+                    : posMap.getOrDefault(c.getPlayerName(), "");
+            return PlayerCardView.fromWithPosition(c, pos);
+        }).toList();
     }
 
     // ── 선수 풀 빌드 ────────────────────────────────────────────────────────
