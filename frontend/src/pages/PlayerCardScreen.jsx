@@ -1,5 +1,5 @@
 // 선수 카드 뽑기 화면 — 1회/10회 뽑기 + 내 컬렉션(페이지네이션·필터)
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { drawPlayerCard, getMyCards } from "../api/playerCard.js";
 import "../styles/player-card-screen.css";
 
@@ -31,6 +31,16 @@ function posGroup(pos) {
       p === "rm" || p === "lm" || p.includes("midfield")) return "미드필더";
   return "";
 }
+
+// ── 등급별 확률 테이블 ────────────────────────────────────────────────────
+const GRADE_RATES = [
+  { grade: "레전드",     rate: "0.0001%",  per10: "100만장에 1번" },
+  { grade: "월드클래스", rate: "0.0999%",  per10: "1,000장에 1번" },
+  { grade: "탑 클래스",  rate: "1.900%",   per10: "약 0.19장" },
+  { grade: "프로",       rate: "6.000%",   per10: "약 0.6장" },
+  { grade: "세미프로",   rate: "12.000%",  per10: "약 1.2장" },
+  { grade: "아마추어",   rate: "80.000%",  per10: "약 8장" },
+];
 
 // ── 컬렉션 필터/정렬 옵션 ─────────────────────────────────────────────────
 const SORT_OPTIONS = [
@@ -73,47 +83,116 @@ function SoccerCard({ card, index = 0, compact = false, count = 1 }) {
   );
 }
 
-// ── 뒤집기 카드 (뒷면 → 클릭 → 앞면 3D 플립) ──────────────────────────────
+// ── 드래그 공개 카드 (뒷면 → 아래로 드래그 → 위에서부터 앞면 reveal) ──────
 function FlipCard({ card, index, flipped, onFlip }) {
+  const [revealY, setRevealY]   = useState(0);   // 0~1 (드래그 진행률)
+  const [dragging, setDragging] = useState(false);
+  const cardRef  = useRef(null);
+  const startY   = useRef(null);
   const cfg = getGradeConfig(card.grade);
-  return (
-    <div
-      className={`sc-flip-wrap ${flipped ? "is-flipped" : ""}`}
-      style={{
-        "--gc": cfg.color,
-        "--gb": cfg.border,
-        animationDelay: `${index * 70}ms`,
-      }}
-      onClick={flipped ? undefined : onFlip}
-      role={flipped ? undefined : "button"}
-      aria-label={flipped ? undefined : "카드 뒤집기"}
-    >
-      {/* 뒤집기 전 등급 빛 번짐 (탑클래스 이상) */}
-      {!flipped && cfg.shine >= 2 && (
-        <div className={`sc-back-halo sc-halo-${cfg.shine}`} />
-      )}
 
-      <div className={`sc-flip-inner ${flipped ? "is-flipped" : ""}`}>
-        {/* ── 앞면 (뒤집히면 공개) ── */}
-        <div className="sc-face sc-face-front">
+  // ── 완전 공개 상태 ──
+  if (flipped) {
+    return (
+      <div
+        className="sc-flip-wrap is-flipped"
+        style={{ "--gc": cfg.color, "--gb": cfg.border, animationDelay: `${index * 70}ms` }}
+      >
+        <div className="sc-reveal-complete">
           <SoccerCard card={card} />
-          {/* 광택 오버레이 */}
-          {flipped && cfg.shine >= 1 && (
-            <div className={`sc-shine-overlay sc-shine-${cfg.shine}`} />
+          {cfg.shine >= 1 && <div className={`sc-shine-overlay sc-shine-${cfg.shine}`} />}
+          {cfg.shine >= 3 && (
+            <div className={`sc-sparkle-field${cfg.shine >= 4 ? " sc-sparkle-legend" : ""}`} />
           )}
-          {/* 스파클 파티클 (월드클래스 이상) */}
-          {flipped && cfg.shine >= 3 && (
-            <div className={`sc-sparkle-field ${cfg.shine >= 4 ? "sc-sparkle-legend" : ""}`} />
-          )}
-        </div>
-
-        {/* ── 뒷면 ── */}
-        <div className="sc-face sc-face-back">
-          <div className="sc-back-pattern" />
-          <span className="sc-back-ball">⚽</span>
-          <span className="sc-back-brand">FOOTBALL PACK</span>
         </div>
       </div>
+    );
+  }
+
+  // ── 드래그 핸들러 ──
+  function handlePointerDown(e) {
+    startY.current = e.clientY;
+    setDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e) {
+    if (!dragging || startY.current === null) return;
+    const h = cardRef.current?.offsetHeight || 200;
+    const pct = Math.max(0, Math.min(1, (e.clientY - startY.current) / h));
+    setRevealY(pct);
+  }
+
+  function handlePointerUp() {
+    if (!dragging) return;
+    setDragging(false);
+    startY.current = null;
+    if (revealY >= 0.6) {
+      setRevealY(1);
+      setTimeout(onFlip, 280);
+    } else {
+      setRevealY(0);   // 60% 미만: 원래대로 복귀 (transition으로 부드럽게)
+    }
+  }
+
+  // 뒷면 덮개: 위에서부터 clip (inset top이 늘수록 위에서 벗겨짐)
+  const backClipTop = (revealY * 100).toFixed(1);
+  // 광택/스파클 마스크: 드래그한 만큼만 위에서 보임
+  const shineEdge = `${Math.min(revealY * 100, 100).toFixed(0)}%`;
+  const shineFade = `${Math.min(revealY * 100 + 16, 100).toFixed(0)}%`;
+
+  return (
+    <div
+      ref={cardRef}
+      className="sc-flip-wrap sc-drag-card"
+      style={{ "--gc": cfg.color, "--gb": cfg.border, animationDelay: `${index * 70}ms` }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    >
+      {/* 앞면 — in-flow (카드 높이 결정) + 효과 포함 */}
+      <div className="sc-reveal-front-base">
+        <SoccerCard card={card} />
+        {cfg.shine >= 1 && (
+          <div
+            className={`sc-shine-overlay sc-shine-${cfg.shine}`}
+            style={{
+              maskImage: `linear-gradient(to bottom, white 0%, white ${shineEdge}, transparent ${shineFade})`,
+              WebkitMaskImage: `linear-gradient(to bottom, white 0%, white ${shineEdge}, transparent ${shineFade})`,
+              opacity: revealY < 0.04 ? 0 : 1,
+            }}
+          />
+        )}
+        {cfg.shine >= 3 && revealY > 0.15 && (
+          <div
+            className={`sc-sparkle-field${cfg.shine >= 4 ? " sc-sparkle-legend" : ""}`}
+            style={{
+              opacity: Math.min(1, (revealY - 0.15) / 0.4),
+              maskImage: `linear-gradient(to bottom, white 0%, white ${shineEdge}, transparent ${shineFade})`,
+              WebkitMaskImage: `linear-gradient(to bottom, white 0%, white ${shineEdge}, transparent ${shineFade})`,
+            }}
+          />
+        )}
+      </div>
+
+      {/* 뒷면 덮개 — 드래그 시 위에서부터 벗겨짐 */}
+      <div
+        className="sc-drag-back-cover"
+        style={{
+          clipPath: `inset(${backClipTop}% 0 0 0 round var(--r, 8px))`,
+          transition: dragging ? "none" : "clip-path 0.3s ease",
+        }}
+      >
+        <div className="sc-back-pattern" />
+        <span className="sc-back-ball">⚽</span>
+        <span className="sc-back-brand">FOOTBALL PACK</span>
+      </div>
+
+      {/* 드래그 힌트 (초기에만) */}
+      {revealY < 0.05 && (
+        <div className="sc-drag-hint">↓ 드래그</div>
+      )}
     </div>
   );
 }
@@ -158,7 +237,7 @@ function RevealScreen({ cards, onReset }) {
         ))}
       </div>
       {!allFlipped && (
-        <p className="sc-flip-hint">카드를 클릭해 공개하세요</p>
+        <p className="sc-flip-hint">카드를 아래로 드래그해 공개하세요</p>
       )}
     </div>
   );
@@ -434,14 +513,29 @@ export function PlayerCardScreen({ isLoggedIn, user, onDrawn, onBack }) {
                   <p className="sc-pack-desc">레전드~아마추어 6등급</p>
                 </div>
 
-                {/* 등급표 */}
-                <div className="sc-grade-table">
-                  {Object.entries(GRADE_CONFIG).reverse().map(([label, cfg]) => (
-                    <div key={label} className="sc-grade-row">
-                      <span className="sc-grade-dot" style={{ background: cfg.color }} />
-                      <span className="sc-grade-name" style={{ color: cfg.color }}>{label}</span>
-                    </div>
-                  ))}
+                {/* 확률표 */}
+                <div className="sc-rate-table">
+                  <div className="sc-rate-header">
+                    <span>등급</span>
+                    <span>확률</span>
+                    <span>10회 기준</span>
+                  </div>
+                  {GRADE_RATES.map(({ grade, rate, per10 }) => {
+                    const cfg = getGradeConfig(grade);
+                    return (
+                      <div
+                        key={grade}
+                        className={`sc-rate-row${grade === "레전드" ? " sc-rate-legend-row" : ""}`}
+                      >
+                        <span className="sc-rate-grade">
+                          <span className="sc-grade-dot" style={{ background: cfg.color }} />
+                          <span style={{ color: cfg.color }}>{grade}</span>
+                        </span>
+                        <span className="sc-rate-pct">{rate}</span>
+                        <span className="sc-rate-avg">{per10}</span>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* 뽑기 버튼 */}

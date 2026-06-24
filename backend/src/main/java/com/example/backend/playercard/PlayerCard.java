@@ -69,16 +69,25 @@ public class PlayerCard extends BaseTimeEntity {
                 .build();
     }
 
+    /** 가챠 추첨 결과(drawnGrade)로 등급을 직접 지정 — 오버롤에서 자동 산출하지 않는다. */
+    public static PlayerCard createWithGrade(User owner, String playerName, String nationality,
+                                             Integer overall, String position, String team,
+                                             String imageUrl, String drawnGrade) {
+        return PlayerCard.builder()
+                .owner(owner)
+                .playerName(playerName)
+                .nationality(nationality)
+                .overall(overall)
+                .position(position)
+                .team(team)
+                .imageUrl(imageUrl)
+                .grade(drawnGrade)
+                .build();
+    }
+
     /** 오버롤 변경 시 등급도 함께 재산출. */
     public void updateOverall(Integer overall) {
         this.overall = overall;
         this.grade = Grade.labelOf(overall);
-    }
-
-    /** 저장/수정 직전 항상 오버롤 기준으로 등급을 맞춘다 — 어떤 경로로 만들어도 grade가 항상 일관되게. */
-    @PrePersist
-    @PreUpdate
-    private void assignGrade() {
-        this.grade = Grade.labelOf(this.overall);
     }
 }

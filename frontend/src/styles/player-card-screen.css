@@ -87,21 +87,59 @@
 }
 .sc-pack-desc { font-size: 12px; color: rgba(255,255,255,0.75); margin: 0; }
 
-/* 등급표 */
-.sc-grade-table {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  justify-content: center;
+/* 확률 테이블 */
+.sc-rate-table {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto 20px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 0.82rem;
 }
-.sc-grade-row { display: flex; align-items: center; gap: 6px; }
+.sc-rate-header {
+  display: grid;
+  grid-template-columns: 1fr 80px 110px;
+  padding: 7px 14px;
+  background: rgba(0,0,0,0.06);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+[data-theme="dark"] .sc-rate-header { background: rgba(255,255,255,0.05); }
+.sc-rate-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 110px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+}
+.sc-rate-legend-row { background: rgba(255, 94, 196, 0.07); }
+.sc-rate-grade {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+}
 .sc-grade-dot {
   width: 10px; height: 10px;
   border-radius: 50%;
   border: 1px solid rgba(0,0,0,0.15);
   flex-shrink: 0;
 }
-.sc-grade-name { font-size: 12px; font-weight: 800; }
+.sc-rate-pct {
+  font-family: monospace;
+  font-weight: 800;
+  font-size: 0.84rem;
+  text-align: right;
+}
+.sc-rate-avg {
+  font-size: 0.73rem;
+  color: var(--text-muted, #888);
+  text-align: right;
+}
 
 /* 보유 포인트 + 뽑기 버튼 */
 .sc-balance { text-align: center; font-size: 15px; font-weight: 700; margin: 2px 0 12px; }
@@ -365,47 +403,34 @@
    카드 뒤집기 연출 — 3D flip + 등급별 빛/광택/스파클
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── 뒤집기 컨테이너 ───────────────────────────────────────────────────────── */
+/* ── 카드 래퍼 (공통) ─────────────────────────────────────────────────────── */
 .sc-flip-wrap {
   position: relative;
   border-radius: var(--r);
-  perspective: 900px;
   animation: flip-wrap-enter 0.45s var(--ease) both;
-  transition: transform 0.18s;
 }
 @keyframes flip-wrap-enter {
   from { opacity: 0; transform: translateY(18px) scale(0.88); }
   to   { opacity: 1; transform: none; }
 }
+.sc-flip-wrap.is-flipped { cursor: default; }
 
-/* 뒤집기 전 hover 리프트 */
-.sc-flip-wrap:not(.is-flipped) { cursor: pointer; }
-.sc-flip-wrap:not(.is-flipped):hover { transform: translateY(-5px) scale(1.02); }
-
-/* ── 뒤집기 내부 (3D 회전) ─────────────────────────────────────────────────── */
-.sc-flip-inner {
-  position: relative;
-  transform-style: preserve-3d;
-  transition: transform 0.65s cubic-bezier(0.36, 0.66, 0.04, 1);
+/* ── 드래그 공개 카드 ────────────────────────────────────────────────────── */
+.sc-drag-card {
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
 }
-.sc-flip-inner.is-flipped { transform: rotateY(180deg); }
+.sc-drag-card:hover { transform: none; }
 
-/* ── 앞·뒷면 공통 ──────────────────────────────────────────────────────────── */
-.sc-face {
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  border-radius: var(--r);
-  overflow: hidden;
-}
+/* 앞면 베이스 — in-flow, 카드 높이 결정 */
+.sc-reveal-front-base { position: relative; }
 
-/* 앞면: 180도 뒤집어 시작, 플립 시 정면으로 옴 */
-.sc-face-front {
-  transform: rotateY(180deg);
-  position: relative; /* 광택/스파클 오버레이 기준 */
-}
+/* 완전 공개 후 래퍼 — in-flow */
+.sc-reveal-complete   { position: relative; }
 
-/* 뒷면: 앞면 공간을 채우며 처음에 정면 */
-.sc-face-back {
+/* 뒷면 덮개 — 위에서부터 clip-path로 벗겨짐 */
+.sc-drag-back-cover {
   position: absolute;
   inset: 0;
   display: flex;
@@ -415,6 +440,9 @@
   gap: 10px;
   background: linear-gradient(145deg, #0d1b2a 0%, #1b263b 50%, #0d1b2a 100%);
   border: 2px solid rgba(255,255,255,0.07);
+  border-radius: var(--r);
+  z-index: 10;
+  pointer-events: none;
 }
 
 /* 뒷면 패턴 (미세 대각선 격자) */
@@ -443,7 +471,7 @@
   z-index: 1;
 }
 
-/* ── 뒤집기 힌트 ───────────────────────────────────────────────────────────── */
+/* ── 그리드 힌트 텍스트 (모두 공개 전) ────────────────────────────────────── */
 .sc-flip-hint {
   text-align: center;
   font-size: 12px;
@@ -457,66 +485,23 @@
   50%       { opacity: 1; }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   뒤집기 전 뒷면 빛 번짐 (등급 힌트 — 탑클래스 이상)
-   ═══════════════════════════════════════════════════════════════════════════ */
-.sc-back-halo {
+/* ── 개별 카드 드래그 힌트 ─────────────────────────────────────────────────── */
+.sc-drag-hint {
   position: absolute;
-  inset: 0;
-  border-radius: var(--r);
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.65);
+  z-index: 20;
   pointer-events: none;
-  z-index: 0;
+  animation: sc-drag-bounce 1.3s ease-in-out infinite;
 }
-
-/* 탑 클래스 — 황금 박동 */
-.sc-halo-2 { animation: halo-gold 2s ease-in-out infinite; }
-@keyframes halo-gold {
-  0%, 100% {
-    box-shadow: 0 0 14px 4px rgba(224,179,65,.55),
-                0 0 40px 10px rgba(224,179,65,.15);
-  }
-  50% {
-    box-shadow: 0 0 26px 10px rgba(224,179,65,.75),
-                0 0 65px 22px rgba(224,179,65,.28);
-  }
-}
-
-/* 월드클래스 — 퍼플 강렬 박동 */
-.sc-halo-3 { animation: halo-purple 1.3s ease-in-out infinite; }
-@keyframes halo-purple {
-  0%, 100% {
-    box-shadow: 0 0 22px 7px rgba(168,85,247,.65),
-                0 0 60px 20px rgba(168,85,247,.22);
-  }
-  50% {
-    box-shadow: 0 0 40px 14px rgba(168,85,247,.88),
-                0 0 90px 38px rgba(168,85,247,.38);
-  }
-}
-
-/* 레전드 — 무지개 사이클링 */
-.sc-halo-4 { animation: halo-rainbow 1.6s linear infinite; }
-@keyframes halo-rainbow {
-  0%   {
-    box-shadow: 0 0 35px 14px rgba(255,94,196,.85),
-                0 0 90px 36px rgba(255,94,196,.35);
-  }
-  25%  {
-    box-shadow: 0 0 35px 14px rgba(255,160,0,.85),
-                0 0 90px 36px rgba(255,160,0,.35);
-  }
-  50%  {
-    box-shadow: 0 0 35px 14px rgba(0,210,90,.85),
-                0 0 90px 36px rgba(0,210,90,.35);
-  }
-  75%  {
-    box-shadow: 0 0 35px 14px rgba(80,140,255,.85),
-                0 0 90px 36px rgba(80,140,255,.35);
-  }
-  100% {
-    box-shadow: 0 0 35px 14px rgba(255,94,196,.85),
-                0 0 90px 36px rgba(255,94,196,.35);
-  }
+@keyframes sc-drag-bounce {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) translateY(0); }
+  50%       { opacity: 1;   transform: translateX(-50%) translateY(4px); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

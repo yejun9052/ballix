@@ -95,6 +95,13 @@ public class PlayerCardService {
     /** 카드 1장 뽑기 비용(보유 포인트). 1회=100, 10회=1000. */
     private static final int COST_PER_DRAW = 100;
 
+    // ── 등급 추첨 확률 (1,000,000분율 누적) ─────────────────────────────────
+    // 아마추어 80% / 세미프로 12% / 프로 6% / 탑 클래스 1.9% / 월드클래스 0.0999% / 레전드 0.0001%
+    private static final int[]    GRADE_CUMULATIVE = { 1, 1_000, 20_000, 80_000, 200_000, 1_000_000 };
+    private static final String[] GRADE_LABELS     = {
+        "레전드", "월드클래스", "탑 클래스", "프로", "세미프로", "아마추어"
+    };
+
     // ── 뽑기 ───────────────────────────────────────────────────────────────
 
     @Transactional
@@ -115,13 +122,20 @@ public class PlayerCardService {
         List<SoccerPlayerDto> pool = getPool();
         if (pool.isEmpty()) throw new BadRequestException("선수 데이터가 없습니다.");
 
-        List<SoccerPlayerDto> drawn = weightedDraw(pool, count);
-
+        Random rng = new Random();
+        Set<String> picked = new HashSet<>();
         List<PlayerCardView> result = new ArrayList<>();
-        for (SoccerPlayerDto p : drawn) {
-            PlayerCard card = PlayerCard.create(
+        int guard = 0;
+
+        while (result.size() < count && guard < count * 500) {
+            guard++;
+            SoccerPlayerDto p = pool.get(rng.nextInt(pool.size()));
+            if (picked.contains(p.id())) continue;
+            picked.add(p.id());
+            // 등급은 확률 테이블로 추첨 — 오버롤과 독립
+            PlayerCard card = PlayerCard.createWithGrade(
                     owner, p.name(), p.nationality(), p.overall(),
-                    p.position(), p.team(), p.imageUrl()
+                    p.position(), p.team(), p.imageUrl(), rollGrade(rng)
             );
             result.add(PlayerCardView.from(playerCardRepository.save(card)));
         }
@@ -518,37 +532,15 @@ public class PlayerCardService {
         return "CM";
     }
 
-    // ── 가중치 뽑기 ─────────────────────────────────────────────────────────
+    // ── 등급 추첨 ───────────────────────────────────────────────────────────
 
-    /**
-     * 오버롤 높을수록 드물게(가중치 반비례).
-     * 레전드(95+)=1, 월드클래스(90~94)=2, 탑클래스(80~89)=4, 프로(70~79)=7, 하위=10
-     */
-    private List<SoccerPlayerDto> weightedDraw(List<SoccerPlayerDto> pool, int count) {
-        List<SoccerPlayerDto> weighted = new ArrayList<>();
-        for (SoccerPlayerDto p : pool) {
-            int w = p.overall() >= 95 ? 1
-                  : p.overall() >= 90 ? 2
-                  : p.overall() >= 80 ? 4
-                  : p.overall() >= 70 ? 7
-                  : 10;
-            for (int i = 0; i < w; i++) weighted.add(p);
+    /** GRADE_CUMULATIVE 누적 확률표로 등급을 추첨. roll 0~999,999 기준. */
+    private String rollGrade(Random rng) {
+        int roll = rng.nextInt(1_000_000);
+        for (int i = 0; i < GRADE_CUMULATIVE.length; i++) {
+            if (roll < GRADE_CUMULATIVE[i]) return GRADE_LABELS[i];
         }
-
-        Set<String> picked = new HashSet<>();
-        List<SoccerPlayerDto> result = new ArrayList<>();
-        int max = Math.min(count, pool.size());
-        Random rng = new Random();
-        int guard = 0;
-
-        while (result.size() < max && guard < max * 300) {
-            guard++;
-            SoccerPlayerDto c = weighted.get(rng.nextInt(weighted.size()));
-            if (picked.contains(c.id())) continue;
-            picked.add(c.id());
-            result.add(c);
-        }
-        return result;
+        return "아마추어";
     }
 
     record SoccerPlayerDto(
