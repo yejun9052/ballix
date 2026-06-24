@@ -73,7 +73,7 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
   1. `FotmobSyncService.applySyncResult()` → 폴링으로 종료 감지 시 즉시 채점.
   2. `FotmobScheduleService.persistSchedule()` → 일정 동기화 중 이미 FINISHED 된 경기를 발견하면 채점(폴링 창 밖에서 끝난 경기 커버).
 - 이 때문에 `fotmob → prediction` 단방향 의존이 있다.
-- **포인트제(역배 가중)**: 채점 시 `computePoints()`가 **그 경기의 AI 승률(`Match.aiHomePct/Draw/Away`)** 순위로 차등 점수 — 유저가 고른 결과보다 AI 확률이 높은 결과 개수 + 1 = 점수(본명 1점 / 2위 2점 / 최대 역배 3점), 틀리면 0점. **AI 예측 없는 경기는 적중 시 일괄 1점**. 획득 점수는 `Prediction.earnedPoints`에 기록하고 `User.scorePrediction(correct, points)`가 누적 `User.score`에 더한다 → `prediction → ai 데이터(Match)` 참조. 적중수/적중률(`correct_count`)도 그대로 유지(같이 표시).
+- **포인트제(역배 가중)**: 채점 시 `computePoints()`가 **그 경기의 최초 AI 승률(`Match.aiInitialHome/Draw/AwayPct` — 킥오프 전 첫 예측, 없으면 실시간 `aiHomePct/...`로 폴백)** 순위로 차등 점수 — 실시간 `ai*Pct`는 종료 무렵 실제 결과로 쏠려 역배 판정이 무의미해지므로 **역배/정배 판정은 최초 예측 기준** — 유저가 고른 결과보다 AI 확률이 높은 결과 개수(`higher`, 0~2)로 `500 * 2^higher` = 정배(1위) 500점 / 중간(2위) 1000점 / 최대 역배(최저확률) 2000점, 틀리면 0점. **AI 예측 없는 경기는 적중 시 정배와 동일한 일괄 500점**. 획득 점수는 `Prediction.earnedPoints`에 기록하고 `User.scorePrediction(correct, points)`가 누적 `User.score`에 더한다 → `prediction → ai 데이터(Match)` 참조. 적중수/적중률(`correct_count`)도 그대로 유지(같이 표시).
 
 ### 유저/리더보드 (`com.example.backend.user`)
 

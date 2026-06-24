@@ -157,19 +157,31 @@ public class PredictionService {
         if (!correct) {
             return 0;
         }
-        if (!match.hasPrediction() || match.getAiHomePct() == null
-                || match.getAiDrawPct() == null || match.getAiAwayPct() == null) {
-            return 1; // AI 예측 없음 → 일괄 1점
+        // 역배/정배 판정은 킥오프 전 '최초 예측'(aiInitial*) 기준 — 실시간 ai*Pct는 종료 무렵 실제 결과로 쏠려
+        // 역배 가중이 무의미해지기 때문. 최초 예측이 없는 과거 경기는 실시간 값으로 폴백, 그것도 없으면 일괄 500.
+        int h, d, a;
+        if (match.getAiInitialHomePct() != null && match.getAiInitialDrawPct() != null
+                && match.getAiInitialAwayPct() != null) {
+            h = match.getAiInitialHomePct();
+            d = match.getAiInitialDrawPct();
+            a = match.getAiInitialAwayPct();
+        } else if (match.hasPrediction() && match.getAiHomePct() != null
+                && match.getAiDrawPct() != null && match.getAiAwayPct() != null) {
+            h = match.getAiHomePct();
+            d = match.getAiDrawPct();
+            a = match.getAiAwayPct();
+        } else {
+            return 500; // AI 예측 없음 → 정배와 동일한 기본 500점
         }
-        int h = match.getAiHomePct(), d = match.getAiDrawPct(), a = match.getAiAwayPct();
         int picked = switch (pick) {
             case HOME_TEAM -> h;
             case DRAW -> d;
             case AWAY_TEAM -> a;
         };
-        // 내가 고른 결과보다 AI 확률이 더 높은 결과의 개수 + 1 = 순위(1~3). 동률은 같은 순위로 묶임.
+        // 내가 고른 결과보다 AI 확률이 더 높은 결과의 개수 = 순위(0~2). 동률은 같은 순위로 묶임.
+        // 정배(1위, higher=0)=500, 중간(2위)=1000, 역배(최저, higher=2)=2000 → 500 * 2^higher.
         int higher = (h > picked ? 1 : 0) + (d > picked ? 1 : 0) + (a > picked ? 1 : 0);
-        return higher + 1;
+        return 500 * (1 << higher);
     }
 
 

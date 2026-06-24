@@ -148,6 +148,25 @@ public class Match extends BaseTimeEntity {
     @Column(name = "ai_summary_at", nullable = true)
     private LocalDateTime aiSummaryAt;
 
+    /** 최초(킥오프 전) AI 예측 스냅샷 — 위 ai*Pct는 실시간 재예측으로 덮어써지지만, 이건 처음 1회만 저장하고 보존한다. */
+    @Column(name = "ai_initial_home_pct", nullable = true)
+    private Integer aiInitialHomePct;
+
+    @Column(name = "ai_initial_draw_pct", nullable = true)
+    private Integer aiInitialDrawPct;
+
+    @Column(name = "ai_initial_away_pct", nullable = true)
+    private Integer aiInitialAwayPct;
+
+    @Column(name = "ai_initial_home_score", nullable = true)
+    private Integer aiInitialHomeScore;
+
+    @Column(name = "ai_initial_away_score", nullable = true)
+    private Integer aiInitialAwayScore;
+
+    @Column(name = "ai_initial_predicted_at", nullable = true)
+    private LocalDateTime aiInitialPredictedAt;
+
     /** 일정 동기화 시 킥오프/단계/상태 갱신 (기존 경기 업데이트용). */
     public void updateSchedule(LocalDateTime matchTime, String stage, String groupName, String status) {
         this.matchTime = matchTime;
@@ -299,7 +318,8 @@ public class Match extends BaseTimeEntity {
         this.fotmobFinalized = true;
     }
 
-    /** 관리자 선택 + AI 승률·예상 스코어 예측 결과 반영(선택 경기는 목록 최상단으로 올라감). */
+    /** 관리자 선택 + AI 승률·예상 스코어 예측 결과 반영(선택 경기는 목록 최상단으로 올라감).
+     * ai*Pct는 매 호출마다 덮어써(실시간 재예측), aiInitial*은 최초 1회만 기록해 보존한다. */
     public void applyPrediction(int homePct, int drawPct, int awayPct, Integer homeScore, Integer awayScore) {
         this.predictionEnabled = true;
         this.aiHomePct = homePct;
@@ -308,6 +328,15 @@ public class Match extends BaseTimeEntity {
         this.aiHomeScore = homeScore;
         this.aiAwayScore = awayScore;
         this.aiPredictedAt = LocalDateTime.now();
+        // 최초 예측 스냅샷은 한 번만 저장(이후 실시간 재예측이 위 값만 갱신하고 이건 보존).
+        if (this.aiInitialPredictedAt == null) {
+            this.aiInitialHomePct = homePct;
+            this.aiInitialDrawPct = drawPct;
+            this.aiInitialAwayPct = awayPct;
+            this.aiInitialHomeScore = homeScore;
+            this.aiInitialAwayScore = awayScore;
+            this.aiInitialPredictedAt = this.aiPredictedAt;
+        }
     }
 
     /** 다시보기 유튜브 영상 등록(교체 포함). */

@@ -89,7 +89,7 @@ class VirtualMatchLifecycleTest {
 
     // ── 2) 역배 가중 채점 ────────────────────────────────
     @Test
-    @DisplayName("채점: AI 본명(최고확률) 적중 = 1점, 전적 갱신")
+    @DisplayName("채점: AI 본명(최고확률=정배) 적중 = 500점, 전적 갱신")
     void grade_favoriteWin_1pt() {
         Match m = virtualMatch(10L, "FINISHED");
         m.applyPrediction(70, 20, 10, 2, 0);                 // HOME 최고확률
@@ -101,14 +101,14 @@ class VirtualMatchLifecycleTest {
         service.gradeMatch(m);
 
         assertThat(p.getIsCorrect()).isTrue();
-        assertThat(p.getEarnedPoints()).isEqualTo(1);
-        assertThat(u.getScore()).isEqualTo(1);
+        assertThat(p.getEarnedPoints()).isEqualTo(500);
+        assertThat(u.getScore()).isEqualTo(500);
         assertThat(u.getCorrect_count()).isEqualTo(1);
         assertThat(u.getMatches_played()).isEqualTo(1);
     }
 
     @Test
-    @DisplayName("채점: 중간 순위(2위) 적중 = 2점")
+    @DisplayName("채점: 중간 순위(2위) 적중 = 1000점")
     void grade_secondRank_2pt() {
         Match m = virtualMatch(11L, "FINISHED");
         m.applyPrediction(50, 30, 20, 1, 1);                 // DRAW=30 (2위)
@@ -119,12 +119,12 @@ class VirtualMatchLifecycleTest {
 
         service.gradeMatch(m);
 
-        assertThat(p.getEarnedPoints()).isEqualTo(2);
-        assertThat(u.getScore()).isEqualTo(2);
+        assertThat(p.getEarnedPoints()).isEqualTo(1000);
+        assertThat(u.getScore()).isEqualTo(1000);
     }
 
     @Test
-    @DisplayName("채점: 최대 역배(최저확률) 적중 = 3점")
+    @DisplayName("채점: 최대 역배(최저확률) 적중 = 2000점")
     void grade_underdogWin_3pt() {
         Match m = virtualMatch(12L, "FINISHED");
         m.applyPrediction(70, 20, 10, 2, 0);                 // AWAY=10 (최저확률)
@@ -135,8 +135,8 @@ class VirtualMatchLifecycleTest {
 
         service.gradeMatch(m);
 
-        assertThat(p.getEarnedPoints()).isEqualTo(3);
-        assertThat(u.getScore()).isEqualTo(3);
+        assertThat(p.getEarnedPoints()).isEqualTo(2000);
+        assertThat(u.getScore()).isEqualTo(2000);
     }
 
     @Test
@@ -159,7 +159,7 @@ class VirtualMatchLifecycleTest {
     }
 
     @Test
-    @DisplayName("채점: AI 예측 없는 경기 적중 = 일괄 1점")
+    @DisplayName("채점: AI 예측 없는 경기 적중 = 일괄 500점")
     void grade_noAi_flat1pt() {
         Match m = virtualMatch(14L, "FINISHED");             // applyPrediction 미호출 → hasPrediction()=false
         m.updateScore("FINISHED", 2, 1, "HOME_TEAM");
@@ -169,8 +169,8 @@ class VirtualMatchLifecycleTest {
 
         service.gradeMatch(m);
 
-        assertThat(p.getEarnedPoints()).isEqualTo(1);
-        assertThat(u.getScore()).isEqualTo(1);
+        assertThat(p.getEarnedPoints()).isEqualTo(500);
+        assertThat(u.getScore()).isEqualTo(500);
     }
 
     @Test
@@ -183,10 +183,10 @@ class VirtualMatchLifecycleTest {
         Prediction p = Prediction.create(u, m, Winner.HOME_TEAM);
         givenPredictions(15L, p);
 
-        service.gradeMatch(m);   // 1회차: 채점 → score 1
+        service.gradeMatch(m);   // 1회차: 채점 → score 500
         service.gradeMatch(m);   // 2회차: 이미 graded → 무시
 
-        assertThat(u.getScore()).isEqualTo(1);
+        assertThat(u.getScore()).isEqualTo(500);
         assertThat(u.getMatches_played()).isEqualTo(1);
     }
 
