@@ -68,6 +68,11 @@ public class PlayerCard extends BaseTimeEntity {
         this.overall = newOverall;
     }
 
+    /** 잘못 부여된 등급(랜덤 가챠 등)을 올바른 값으로 교정한다. */
+    public void fixGrade(String correctGrade) {
+        this.grade = correctGrade;
+    }
+
     public static PlayerCard create(User owner, String playerName, String nationality,
                                     Integer overall, String position, String team, String imageUrl) {
         return PlayerCard.builder()

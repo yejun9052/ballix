@@ -133,10 +133,10 @@ public class PlayerCardService {
             SoccerPlayerDto p = pool.get(rng.nextInt(pool.size()));
             if (picked.contains(p.id())) continue;
             picked.add(p.id());
-            // 등급은 확률 테이블로 추첨 — 오버롤과 독립
+            // 등급은 오버롤로 결정(Grade.labelOf)
             PlayerCard card = PlayerCard.createWithGrade(
                     owner, p.name(), p.nationality(), p.overall(),
-                    p.position(), p.team(), p.imageUrl(), rollGrade(rng), p.fotmobId()
+                    p.position(), p.team(), p.imageUrl(), Grade.labelOf(p.overall()), p.fotmobId()
             );
             result.add(PlayerCardView.from(playerCardRepository.save(card)));
         }
@@ -556,12 +556,15 @@ public class PlayerCardService {
         for (PlayerCard card : cards) {
             Integer newOverall = overallMap.get(card.getFotmobPlayerId());
             if (newOverall == null) continue;
-            if (newOverall.equals(card.getOverall())) {
+            String correctGrade = Grade.labelOf(newOverall);
+            boolean gradeWrong = !correctGrade.equals(card.getGrade());
+            if (newOverall.equals(card.getOverall()) && !gradeWrong) {
                 // 변동 없어도 delta를 0으로 명시(최초 null에서 0으로 → "유지" 표시)
                 if (card.getOverallDelta() == null) card.refreshOverall(newOverall);
                 continue;
             }
-            card.refreshOverall(newOverall);
+            card.refreshOverall(newOverall);   // overall + delta 갱신
+            if (gradeWrong) card.fixGrade(correctGrade);  // 이전 랜덤 등급 교정
             updated++;
         }
         log.info("[카드 오버롤 주간 갱신] 완료 — {}장 변동", updated);

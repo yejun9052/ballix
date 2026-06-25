@@ -32,14 +32,14 @@ function posGroup(pos) {
   return "";
 }
 
-// ── 등급별 확률 테이블 ────────────────────────────────────────────────────
+// ── 등급별 오버롤 기준표 ────────────────────────────────────────────────────
 const GRADE_RATES = [
-  { grade: "레전드",     rate: "0.0001%",  per10: "100만장에 1번" },
-  { grade: "월드클래스", rate: "0.0999%",  per10: "1,000장에 1번" },
-  { grade: "탑 클래스",  rate: "1.900%",   per10: "약 0.19장" },
-  { grade: "프로",       rate: "6.000%",   per10: "약 0.6장" },
-  { grade: "세미프로",   rate: "12.000%",  per10: "약 1.2장" },
-  { grade: "아마추어",   rate: "80.000%",  per10: "약 8장" },
+  { grade: "레전드",     rate: "OVR 90+",  per10: "최정상급 선수" },
+  { grade: "월드클래스", rate: "OVR 80–89", per10: "세계적 수준" },
+  { grade: "탑 클래스",  rate: "OVR 70–79", per10: "주전급 실력" },
+  { grade: "프로",       rate: "OVR 65–69", per10: "프로 수준" },
+  { grade: "세미프로",   rate: "OVR 60–64", per10: "유망주 수준" },
+  { grade: "아마추어",   rate: "OVR 59 이하", per10: "입문 단계" },
 ];
 
 // ── 컬렉션 필터/정렬 옵션 ─────────────────────────────────────────────────
@@ -525,8 +525,8 @@ export function PlayerCardScreen({ isLoggedIn, user, onDrawn, onBack }) {
                 <div className="sc-rate-table">
                   <div className="sc-rate-header">
                     <span>등급</span>
-                    <span>확률</span>
-                    <span>10회 기준</span>
+                    <span>오버롤</span>
+                    <span>의미</span>
                   </div>
                   {GRADE_RATES.map(({ grade, rate, per10 }) => {
                     const cfg = getGradeConfig(grade);
