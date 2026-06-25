@@ -414,18 +414,31 @@ public class AiPredictionService {
         return (int) (elapsedMin / PHASE_STEP) * PHASE_STEP;
     }
 
-    /** 단계별 스냅샷 1행 기록. 경기 전(0)은 (재)생성 시 히스토리 초기화 후 기준점 저장, 라이브는 단계당 1회. */
+    /**
+     * 단계별 스냅샷 1행 기록.
+     * <ul>
+     *   <li><b>경기 전(킥오프 전, !IN_PLAY)</b>: 히스토리 초기화 후 기준점(phase 0) 저장.</li>
+     *   <li><b>진행 중(IN_PLAY)</b>: 현재 라이브 단계(15·30·45·60·75·90)를 단계당 1회 저장. 절대 기존 기록을 지우지 않는다.</li>
+     *   <li><b>진행 중인데 시계 정지(HT 등, 앵커 null → phase 0)</b>: 건너뛴다 — 여기서 리셋하면 전반 기록이 통째로 날아간다(과거 버그).</li>
+     * </ul>
+     */
     private void recordSnapshot(Match m, Parsed p) {
+        boolean live = "IN_PLAY".equals(m.getStatus());
         int phase = currentPhase(m);
         String reason = (p.reason == null || p.reason.isBlank())
                 ? (phase == 0 ? "경기 전 초기 예측" : "특이 변동 없음")
                 : p.reason.trim();
-        if (phase == 0) {
-            snapshotRepository.deleteByMatchId(m.getId());   // 경기 전 재생성 시 히스토리 리셋
-        } else if (snapshotRepository.existsByMatchIdAndPhaseMinute(m.getId(), phase)) {
-            return;   // 같은 단계 이미 기록됨 → 중복 방지
+
+        if (!live) {
+            // 경기 전 예측 (재)생성 → 히스토리 리셋 후 기준점만 다시 저장
+            snapshotRepository.deleteByMatchId(m.getId());
+            phase = 0;
+        } else {
+            // 진행 중: 시계가 멈춰(HT 등) 단계가 안 잡히면(앵커 null → phase 0) 아무것도 지우거나 쓰지 않는다.
+            if (m.getLiveStartedAtMs() == null || phase == 0) return;
+            if (snapshotRepository.existsByMatchIdAndPhaseMinute(m.getId(), phase)) return;   // 같은 단계 1회만
         }
-        boolean live = "IN_PLAY".equals(m.getStatus());
+
         snapshotRepository.save(AiPredictionSnapshot.builder()
                 .matchId(m.getId())
                 .phaseMinute(phase)
