@@ -20,6 +20,7 @@ export function MainScreen({
   matchesError,
   onGenerateAi,
   onLogin,
+  onLogout,
   onOpenLeaderboard,
   onOpenMyPredictions,
   onOpenPlayerStats,
@@ -219,9 +220,14 @@ export function MainScreen({
                   {isAuthLoading ? "확인 중…" : "로그인"}
                 </button>
               ) : (
-                <button type="button" className="mobile-menu-mypage" onClick={() => handleMobileNav(onOpenMyPage)}>
-                  내 정보 / 설정
-                </button>
+                <>
+                  <button type="button" className="mobile-menu-mypage" onClick={() => handleMobileNav(onOpenMyPage)}>
+                    내 정보 / 설정
+                  </button>
+                  <button type="button" className="mobile-menu-logout" onClick={() => handleMobileNav(onLogout)}>
+                    로그아웃
+                  </button>
+                </>
               )}
             </div>
           </div>

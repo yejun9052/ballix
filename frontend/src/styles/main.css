@@ -376,6 +376,15 @@
   .match-team { flex-direction: column; align-items: center; gap: 4px; width: 100%; }
   .match-team.away { flex-direction: column-reverse; }
   .match-team strong { font-size: 11px; text-align: center; width: 100%; }
+
+  /* 모바일: 경기 일정 필터를 한 줄씩 가지런히(날짜 스텝퍼는 ‹ [날짜] › 가 줄을 꽉 채움) */
+  .match-filters { gap: 10px; padding: 12px 14px; }
+  .match-filters label { width: 100%; }
+  .match-filters select,
+  .match-filters input[type="date"] { width: 100%; box-sizing: border-box; }
+  .date-nav-wrap { width: 100%; }
+  .date-nav-wrap input[type="date"] { flex: 1; min-width: 0; }
+  .filter-reset { width: 100%; margin-left: 0; }
 }
 
 /* ── 모바일 햄버거 + 전체화면 메뉴 ─────────────────────────────── */
@@ -437,12 +446,14 @@
 .mobile-menu-nav > button:active { background: var(--yellow); }
 .mobile-menu-admin { color: var(--blue-ink) !important; }
 .mobile-menu-footer {
+  display: grid; gap: 10px;
   padding: 16px 20px 40px;
   border-top: var(--bd) solid var(--line);
   margin-top: auto;
 }
 .mobile-menu-login,
-.mobile-menu-mypage {
+.mobile-menu-mypage,
+.mobile-menu-logout {
   width: 100%; padding: 16px;
   border: var(--bd) solid var(--line); border-radius: var(--r-pill);
   font-size: 15px; font-weight: 900;
@@ -455,8 +466,12 @@
 .mobile-menu-mypage {
   background: var(--surface-2); color: var(--ink);
 }
+.mobile-menu-logout {
+  background: var(--surface); color: var(--live);
+}
 .mobile-menu-login:hover,
-.mobile-menu-mypage:hover { transform: translate(-1px,-1px); box-shadow: 4px 4px 0 var(--shadow-col); }
+.mobile-menu-mypage:hover,
+.mobile-menu-logout:hover { transform: translate(-1px,-1px); box-shadow: 4px 4px 0 var(--shadow-col); }
 
 @media (max-width: 768px) {
   .topbar-nav { display: none !important; }
