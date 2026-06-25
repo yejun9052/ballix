@@ -11,7 +11,7 @@ import {
   backfillDetails,
 } from "../../api/fotmobAdmin.js";
 import { predictAi, getLiveAi, setLiveAi } from "../../api/admin.js";
-import { setReplay, clearReplay } from "../../api/matchAdmin.js";
+import { setReplay, clearReplay, backfillHighlights } from "../../api/matchAdmin.js";
 import { formatDateInputValue } from "../../utils/format.js";
 
 export function AdminDataTab() {
@@ -83,6 +83,20 @@ export function AdminDataTab() {
       setMsg(`✅ 상세 ${count}경기 보강 완료 (남은 경기가 있으면 다시 눌러 이어서 처리)`);
     } catch (err) {
       setMsg(`❌ 상세 일괄 보강 실패: ${err.response?.data?.msg || err.message}`);
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function handleBackfillHighlights() {
+    setLoading("하이라이트 보강");
+    setMsg("");
+    try {
+      const n = await backfillHighlights({ limit: 10, sinceDays: 7 });
+      const count = typeof n === "number" ? n : (n?.data ?? n ?? 0);
+      setMsg(`✅ 하이라이트 ${count}경기 보강 완료 (영상이 아직 안 올라온 경기는 자동으로 30분 뒤 재시도)`);
+    } catch (err) {
+      setMsg(`❌ 하이라이트 보강 실패: ${err.response?.data?.msg || err.message}`);
     } finally {
       setLoading("");
     }
@@ -371,6 +385,25 @@ export function AdminDataTab() {
             )}
           >
             해제
+          </button>
+        </div>
+      </div>
+
+      {/* 하이라이트 자동검색 일괄 보강 */}
+      <div className="data-card">
+        <h3 className="data-card-title">🎞 하이라이트 일괄 보강</h3>
+        <p className="data-hint">
+          종료됐는데 다시보기 영상이 없는 최근 경기를 즉시 유튜브에서 재검색합니다(한국 방송사 + 양 팀 매칭).
+          평소엔 30분마다 자동으로 돌지만, 지금 바로 채우고 싶을 때 누르세요. 이미 등록된(수동 포함) 영상은 건드리지 않습니다.
+        </p>
+        <div className="data-row">
+          <button
+            type="button"
+            className="data-btn"
+            disabled={Boolean(loading)}
+            onClick={handleBackfillHighlights}
+          >
+            {loading === "하이라이트 보강" ? "보강 중…" : "지금 보강"}
           </button>
         </div>
       </div>

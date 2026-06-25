@@ -11,3 +11,8 @@ export const setReplay = (matchId, youtube) => {
 export const clearReplay = (matchId) => {
   return API.delete(`/api/admin/match/${matchId}/replay`);
 };
+
+// 하이라이트 일괄 보강(수동) — 종료됐는데 영상 없는 최근 경기를 즉시 재검색. 채운 건수 반환.
+export const backfillHighlights = ({ limit = 10, sinceDays = 7 } = {}) => {
+  return API.post(`/api/admin/match/highlights/backfill?limit=${limit}&sinceDays=${sinceDays}`);
+};

@@ -8,6 +8,9 @@ import com.example.backend.youtube.dto.YoutubeSearchResponse;
 import com.example.backend.youtube.dto.YoutubeSearchResponse.Video;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,9 +36,42 @@ public class MatchHighlightService {
     private final MatchRepository matchRepository;
     private final YoutubeClient youtubeClient;
 
+    // 자기 자신 프록시 — 일괄 보강 루프에서 getOrFetch를 '경기별 독립 트랜잭션'으로 부르기 위함
+    // (자기호출은 프록시를 우회해 @Transactional이 무시되고, 스케줄러 스레드엔 OSIV가 없어 LAZY 연관 로드가 깨진다)
+    @Lazy
+    @Autowired
+    private MatchHighlightService self;
+
     // 검색 실패(또는 후보 없음) 시 N분 동안 재검색 억제 — 매 조회마다 유튜브 크롤 폭주 방지
     private static final long FAIL_COOLDOWN_MINUTES = 30;
     private final Map<Long, LocalDateTime> failedAt = new ConcurrentHashMap<>();
+
+    /**
+     * 종료됐는데 다시보기 영상이 없는 최근 경기를 일괄 보강 — 스케줄러/관리자 수동 트리거 공용.
+     * 경기별로 {@code self.getOrFetch}(프록시 경유 → 독립 트랜잭션, LAZY 연관 로드 보장)를 호출한다.
+     * 이미 영상이 있는 경기(수동 등록 포함)는 대상 쿼리에서 빠지고, 후보 없으면 30분 쿨다운.
+     * @return 이번 호출로 영상이 채워진 경기 수
+     */
+    public int backfillHighlights(int limit, int sinceDays) {
+        int max = Math.max(1, Math.min(limit, 20));
+        int days = Math.max(1, Math.min(sinceDays, 30));
+        LocalDateTime since = LocalDateTime.now().minusDays(days);
+        List<Match> targets = matchRepository.findHighlightBackfillTargets(since, PageRequest.of(0, max));
+        int filled = 0;
+        for (Match m : targets) {
+            try {
+                Match r = self.getOrFetch(m.getId());   // 프록시 경유 → 경기별 독립 트랜잭션
+                if (r.getReplayYoutubeId() != null && !r.getReplayYoutubeId().isBlank()) {
+                    filled++;
+                    log.info("[highlight-backfill] matchId={} 채움 videoId={}", m.getId(), r.getReplayYoutubeId());
+                }
+            } catch (Exception e) {
+                log.warn("[highlight-backfill] matchId={} 실패: {}", m.getId(), e.getMessage());
+            }
+        }
+        log.info("[highlight-backfill] 보강 {}건 채움 / 대상 {}건 (최근 {}일, 최대 {}건)", filled, targets.size(), days, max);
+        return filled;
+    }
 
     /** 종료 경기의 하이라이트 조회 — DB-first lazy. 영상이 있으면 그대로, 없으면 1회 검색·저장 후 반환. */
     @Transactional

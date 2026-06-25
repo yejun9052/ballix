@@ -3,12 +3,8 @@ package com.example.backend.match;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
-import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 종료 경기 하이라이트 자동 보강 — 다시보기 영상(replayYoutubeId)이 아직 없는 최근 종료 경기를
@@ -20,9 +16,9 @@ import java.util.List;
  * 그 경기는 대상 쿼리에서 자동으로 빠진다. 후보가 없으면 {@code MatchHighlightService}의 30분 쿨다운이
  * 불필요한 재크롤을 막는다(스케줄러 주기와 정렬됨).
  *
- * <p>안전장치: ① 진행 중(IN_PLAY) 경기가 있으면 통째로 건너뛴다(라이브 폴링과 브라우저 세마포어 경합 방지 —
- * 어차피 그땐 하이라이트가 막 안 올라옴). ② {@code since-days} 로 오래된 경기는 포기(무한 크롤 방지).
- * ③ 한 tick 처리 건수를 {@code limit} 로 제한.
+ * <p>안전장치: ① 진행 중(IN_PLAY) 경기가 있으면 이번 tick은 1건만 처리한다(완전 스킵하면 며칠 전 종료
+ * 경기도 라이브 경기 때문에 영영 안 채워진다 — 라이브 크롤과의 경합은 1건으로 최소화). ② {@code since-days}
+ * 로 오래된 경기는 포기(무한 크롤 방지). ③ 한 tick 처리 건수를 {@code limit} 로 제한.
  *
  * <p>설정(모두 {@code @Value} 기본값 — yml 없이도 동작): {@code match.highlight.backfill.{enabled,tick-ms,since-days,limit}}.
  */
@@ -51,30 +47,8 @@ public class MatchHighlightScheduler {
         if (!enabled) {
             return;
         }
-        // 진행 중 경기가 있으면 이번 tick은 건너뛴다 — 라이브 크롤과의 경합을 피하고, 어차피 갓 끝난 경기는
-        // 하이라이트가 아직 업로드 전이라 헛크롤이 된다.
-        if (matchRepository.existsByStatus("IN_PLAY")) {
-            return;
-        }
-        LocalDateTime since = LocalDateTime.now().minusDays(Math.max(1, sinceDays));
-        List<Match> targets = matchRepository.findHighlightBackfillTargets(since, PageRequest.of(0, Math.max(1, limit)));
-        if (targets.isEmpty()) {
-            return;
-        }
-        int filled = 0;
-        for (Match m : targets) {
-            try {
-                Match r = highlightService.getOrFetch(m.getId());   // 검색·선택·쿨다운은 서비스가 담당
-                if (r.getReplayYoutubeId() != null && !r.getReplayYoutubeId().isBlank()) {
-                    filled++;
-                    log.info("[highlight-backfill] matchId={} 하이라이트 채움 videoId={}", m.getId(), r.getReplayYoutubeId());
-                }
-            } catch (Exception e) {
-                log.warn("[highlight-backfill] matchId={} 실패: {}", m.getId(), e.getMessage());
-            }
-        }
-        if (filled > 0) {
-            log.info("[highlight-backfill] 이번 tick {}건 채움 (대상 {}건)", filled, targets.size());
-        }
+        // 진행 중 경기가 있으면 1건만(라이브 크롤 경합 최소화), 없으면 limit건 — 검색·선택·쿨다운은 서비스가 담당.
+        int effLimit = matchRepository.existsByStatus("IN_PLAY") ? 1 : limit;
+        highlightService.backfillHighlights(effLimit, sinceDays);
     }
 }
