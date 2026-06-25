@@ -15,7 +15,8 @@ public record AdminUserView(
         boolean active,     // 계정상태 (true=활성, false=정지)
         String banType,     // ADMIN | SELF | null
         String banMessage,  // 정지 안내 메시지 (정지 상태일 때만 값, 아니면 null)
-        int score,          // 누적 포인트
+        int score,          // 누적 포인트(랭킹)
+        int pointBalance,   // 보유 포인트(카드뽑기 소비 — 관리자 지급 대상)
         int matchesPlayed,
         int correctCount,
         LocalDateTime createAt
@@ -30,6 +31,7 @@ public record AdminUserView(
                 u.getBanType() == null ? null : u.getBanType().name(),
                 u.getBanMessage(),
                 u.getScore(),
+                u.getPointBalance(),
                 u.getMatches_played(),
                 u.getCorrect_count(),
                 u.getCreateAt()

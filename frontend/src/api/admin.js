@@ -35,6 +35,11 @@ export const changeUserStatus = (userId, active, message = "") => {
   return API.put(`/api/admin/users/${userId}/status?${params.toString()}`);
 };
 
+// 보유 포인트 지급/조정 — amount 양수=지급, 음수=차감(카드뽑기에 쓰는 보유 포인트만 변경)
+export const grantUserPoints = (userId, amount) => {
+  return API.put(`/api/admin/users/${userId}/points?amount=${amount}`);
+};
+
 // ── 공지 관리 ──
 
 // 전체 공지(SCHEDULED/ACTIVE/EXPIRED 포함)

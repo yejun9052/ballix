@@ -98,6 +98,21 @@ public class UserService {
         return AdminUserView.from(u);
     }
 
+    /** 보유 포인트 지급/조정(관리자). amount {@code >0} 지급, {@code <0} 차감(0 미만 클램프). 누적 랭킹 점수는 안 바뀐다. */
+    @Transactional
+    public AdminUserView grantPoints(Long targetId, int amount) {
+        if (amount == 0) {
+            throw new BadRequestException("지급할 포인트를 입력하세요.");
+        }
+        if (Math.abs(amount) > 1_000_000) {
+            throw new BadRequestException("한 번에 지급/차감할 수 있는 포인트는 1,000,000 이하입니다.");
+        }
+        User u = userRepository.findById(targetId)
+                .orElseThrow(() -> new NotFoundException("유저를 찾을 수 없습니다."));
+        u.grantPointBalance(amount);
+        return AdminUserView.from(u);
+    }
+
     /** 계정상태 변경(활성/정지). 본인 계정은 변경 불가. 정지 시 안내 메시지(선택)를 함께 저장. */
     @Transactional
     public AdminUserView changeActive(Long adminUserId, Long targetId, boolean active, String message) {

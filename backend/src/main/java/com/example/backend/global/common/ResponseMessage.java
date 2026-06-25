@@ -58,6 +58,7 @@ public final class ResponseMessage {
     // ── 유저 관리(관리자) ──
     public static final String ROLE_CHANGED = "권한 변경";
     public static final String ACCOUNT_STATUS_CHANGED = "계정상태 변경";
+    public static final String POINTS_GRANTED = "포인트 지급 완료";
 
     // ── 에러(공통) ──
     public static final String FORBIDDEN = "접근 권한이 없습니다.";

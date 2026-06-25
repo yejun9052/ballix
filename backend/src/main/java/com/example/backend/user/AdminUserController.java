@@ -55,4 +55,13 @@ public class AdminUserController {
             @RequestParam(required = false) String message) {
         return ResponseEntity.ok(CommonResponse.success(ResponseMessage.ACCOUNT_STATUS_CHANGED, userService.changeActive(userId, id, active, message)));
     }
+
+    /** 보유 포인트 지급/조정: ?amount=정수(+지급, -차감). 카드뽑기에 쓰는 보유 포인트만 바뀌고 누적 랭킹 점수는 안 바뀐다. */
+    @PreAuthorize("hasRole('ADMIN_USER')")
+    @PutMapping("/{id}/points")
+    public ResponseEntity<CommonResponse<?>> grantPoints(
+            @PathVariable Long id,
+            @RequestParam int amount) {
+        return ResponseEntity.ok(CommonResponse.success(ResponseMessage.POINTS_GRANTED, userService.grantPoints(id, amount)));
+    }
 }

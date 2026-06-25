@@ -81,7 +81,7 @@ FotMob ──Playwright──> Python FastAPI(:8800) ──HTTP──> Spring Bo
 
 **관리자 판별은 `role` 단일 기준** — 프론트는 `me()`의 `role == "ADMIN_USER"`로 관리자 UI 노출을 판단하고, 백엔드 관리자 엔드포인트는 전부 `@PreAuthorize("hasRole('ADMIN_USER')")`로 보호한다(과거 `ai.admin-emails` 화이트리스트·`UserView.admin` 플래그·`AdminGuard`는 제거됨).
 
-**유저 관리(관리자)** — `GET /api/admin/users` · `PUT /{id}/role` · `PUT /{id}/status?active=&message=`. **정지(`active=false`) 시 `message`로 안내문을 함께 저장**(`User.banMessage`) — 정지된 유저가 로그인하면 `OAuth2SuccessHandler`가 `/home?error=banned&msg=<URL인코딩>`로 전달, 정지 해제 시 `activate()`가 메시지도 정리. 본인 권한/계정상태는 변경 불가.
+**유저 관리(관리자)** — `GET /api/admin/users` · `PUT /{id}/role` · `PUT /{id}/status?active=&message=` · `PUT /{id}/points?amount=`. **정지(`active=false`) 시 `message`로 안내문을 함께 저장**(`User.banMessage`) — 정지된 유저가 로그인하면 `OAuth2SuccessHandler`가 `/home?error=banned&msg=<URL인코딩>`로 전달, 정지 해제 시 `activate()`가 메시지도 정리. 본인 권한/계정상태는 변경 불가. **포인트 지급**(`/points?amount=`)은 `amount` 양수=지급/음수=차감으로 **보유 포인트(`pointBalance`, 카드뽑기용)만** 바꾸고 **누적 랭킹 점수(`score`)는 안 건드린다**(0 미만 클램프, ±1,000,000 한도). 프론트 `AdminUsersTab`에 유저별 입력+지급 버튼.
 
 ### 공지사항 (`com.example.backend.notice`)
 
@@ -204,7 +204,7 @@ cd C:\ballix\frontend; npm run build ; npm run lint
 - `GET|POST|PUT|DELETE /api/admin/notice`(ADMIN_USER) — 공지 CRUD + 게시 예약(`publishAt`/`expireAt`)
 - `PUT /api/admin/match/{id}/replay?youtube=` · `DELETE .../replay`(ADMIN_USER) — 유튜브 다시보기 등록/해제(종료 경기만, videoId 또는 URL 입력). `Match.replayYoutubeId`로 직렬화 → 프론트가 `youtube.com/embed/{id}` 임베드
 - `GET /api/match/{id}/highlight`(공개) — 종료 경기 하이라이트 유튜브 영상. **DB-first lazy** — `replayYoutubeId` 없으면 `MatchHighlightService`가 Python `/youtube/search`로 1회 검색해 가장 적합한 영상을 골라 `Match.replayYoutubeId`에 저장 후 반환. 수동 등록 영상이 있으면 우선(자동은 비어있을 때만). 검색 실패/후보 없음은 30분 쿨다운. **검색어는 한국어**(`"{홈} {원정} 하이라이트"`) — 방송사가 흔히 쓰는 약칭(`NAME_ALIASES`, 예 남아공·한국) 우선, 없으면 `nameKo`, 둘 다 없으면 영어 폴백(한국 방송사 영상은 영어 쿼리론 안 surface됨). **선택 기준**: ① 채널이 한국 방송사(`PREFERRED_CHANNELS` — KBS/SBS/MBC/JTBC/SPOTV/쿠팡 등)이고 ② 제목에 **홈·원정 두 팀이 모두 언급**(약칭 매칭 포함 — 한 팀만 맞으면 상대팀 오선택이라 제외)되며 ③ 타종목(야구/농구/배구)이 아닌 영상만 후보. 그 후보 중 상위 5개까지 Python `/youtube/embeddable/{id}`(watch 페이지 `playabilityStatus.playableInEmbed`)로 **실제 임베드 가능 여부를 확인해 첫 가능 영상**을 고른다. 적합 후보 없으면 null(엉뚱한 영상 대신 미표시). **자동 보강**: `MatchHighlightScheduler`가 **종료됐는데 영상 없는 최근 경기를 ~30분마다 재검색**해 채운다(방송사 하이라이트는 종료 후 수십 분~몇 시간 뒤 업로드 → 유저 조회를 안 기다림). IN_PLAY 경기 있으면 스킵, 최근 `since-days`일만, tick당 `limit`건. `match.highlight.backfill.{enabled,tick-ms(기본 30분),since-days(3),limit(5)}` config. `ai → fotmob`처럼 `match → youtube` 단방향 의존.
-- `GET /api/admin/users`(ADMIN_USER, 기본 8건) · `PUT /api/admin/users/{id}/role?role=` · `PUT /api/admin/users/{id}/status?active=&message=` — 유저 목록·권한·계정상태 관리(정지 시 `message`=정지 안내문 저장)
+- `GET /api/admin/users`(ADMIN_USER, 기본 8건) · `PUT /api/admin/users/{id}/role?role=` · `PUT /api/admin/users/{id}/status?active=&message=` · `PUT /api/admin/users/{id}/points?amount=` — 유저 목록·권한·계정상태 관리(정지 시 `message`=정지 안내문 저장) + **보유 포인트 지급/차감**(`amount` ±, 누적 랭킹 점수 불변)
 
 > 프론트 연동용 전체 응답 스키마/예시는 루트 **`API_SPEC.md`** 참고(프론트엔드 담당자 전달용).
 

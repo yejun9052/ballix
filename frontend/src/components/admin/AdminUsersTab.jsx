@@ -1,6 +1,6 @@
-// 관리자 - 유저 관리 탭 (권한/계정상태 변경, 페이지네이션)
+// 관리자 - 유저 관리 탭 (권한/계정상태 변경, 보유 포인트 지급, 페이지네이션)
 import { useEffect, useState } from "react";
-import { getUsers, changeUserRole, changeUserStatus } from "../../api/admin.js";
+import { getUsers, changeUserRole, changeUserStatus, grantUserPoints } from "../../api/admin.js";
 import { getPageContent } from "../../utils/format.js";
 import { StateMessage } from "../common/StateMessage.jsx";
 
@@ -11,6 +11,8 @@ export function AdminUsersTab({ user }) {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [pointDraft, setPointDraft] = useState({});   // { [userId]: 입력값 }
+  const [busyId, setBusyId] = useState(null);
   const refresh = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
@@ -56,6 +58,27 @@ export function AdminUsersTab({ user }) {
     }
   }
 
+  // 보유 포인트 지급/조정 — 양수=지급, 음수=차감(누적 랭킹 점수는 안 바뀜)
+  async function handleGrantPoints(u) {
+    const raw = (pointDraft[u.id] ?? "").trim();
+    const amount = Number(raw);
+    if (!raw || !Number.isInteger(amount) || amount === 0) {
+      setError("지급할 포인트(0이 아닌 정수)를 입력하세요.");
+      return;
+    }
+    setError("");
+    setBusyId(u.id);
+    try {
+      await grantUserPoints(u.id, amount);
+      setPointDraft((d) => ({ ...d, [u.id]: "" }));
+      refresh();
+    } catch (err) {
+      setError(err.response?.data?.msg || "포인트 지급에 실패했습니다.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="admin-section">
       {error && <p className="action-error">{error}</p>}
@@ -74,7 +97,9 @@ export function AdminUsersTab({ user }) {
               <strong>{u.name}</strong>
               {isMe && <em className="me-tag">나</em>}
               <span className="user-admin-email">{u.email}</span>
-              <span className="user-admin-stats">{u.matchesPlayed}경기 · {u.correctCount}적중</span>
+              <span className="user-admin-stats">
+                {u.matchesPlayed}경기 · {u.correctCount}적중 · 보유 {(u.pointBalance ?? 0).toLocaleString()}P
+              </span>
             </div>
             <div className="user-admin-badges">
               <span className={u.role === "ADMIN_USER" ? "admin-badge" : "role-chip"}>
@@ -105,6 +130,24 @@ export function AdminUsersTab({ user }) {
               ) : (
                 <span className="self-note">본인 계정</span>
               )}
+              <div className="point-grant">
+                <input
+                  type="number"
+                  className="point-grant-input"
+                  placeholder="포인트"
+                  value={pointDraft[u.id] ?? ""}
+                  onChange={(e) => setPointDraft((d) => ({ ...d, [u.id]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleGrantPoints(u); }}
+                />
+                <button
+                  type="button"
+                  className="small-btn point-grant-btn"
+                  disabled={busyId === u.id}
+                  onClick={() => handleGrantPoints(u)}
+                >
+                  {busyId === u.id ? "지급 중…" : "지급"}
+                </button>
+              </div>
             </div>
           </div>
         );

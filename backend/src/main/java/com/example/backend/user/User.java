@@ -85,6 +85,11 @@ public class User extends BaseTimeEntity {
         }
     }
 
+    /** 관리자 지급/조정: 보유 포인트에 amount를 더한다(음수면 차감, 0 미만 클램프). 누적 점수(랭킹)는 건드리지 않는다. */
+    public void grantPointBalance(int amount) {
+        this.pointBalance = Math.max(0, this.pointBalance + amount);
+    }
+
     // 계정상태 접근자 (Lombok boolean 게터 이름 혼동 방지용 명시 접근자)
     public boolean isActive() {
         return is_active;

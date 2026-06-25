@@ -68,8 +68,19 @@
 .role-chip { background: var(--surface-2); color: var(--ink-soft); }
 .active-chip { background: var(--win-soft); color: var(--win); }
 .banned-chip { background: var(--live-soft); color: var(--live); }
-.user-admin-actions { display: flex; gap: 8px; }
+.user-admin-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .self-note { color: var(--faint); font-size: 12px; font-weight: 800; }
+
+/* 보유 포인트 지급 */
+.point-grant { display: flex; align-items: center; gap: 6px; }
+.point-grant-input {
+  width: 78px; padding: 6px 9px; font-size: 12px; font-weight: 800;
+  border: var(--bd) solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink);
+}
+.point-grant-btn { background: var(--blue); color: #fff; }
+.point-grant-btn:hover { background: var(--blue); }
+.point-grant-btn:disabled { opacity: 0.55; cursor: default; transform: none; box-shadow: 2px 2px 0 var(--shadow-col); }
 
 @media (max-width: 600px) {
   .user-admin-row { grid-template-columns: 1fr; }
