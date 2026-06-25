@@ -442,13 +442,19 @@
 }
 .sc-drag-card:hover { transform: none; }
 
-/* 앞면 베이스 — in-flow, 카드 높이 결정 */
-.sc-reveal-front-base { position: relative; }
+/* 앞면 베이스 — in-flow(카드 높이 결정), clip-path로 위에서부터 공개, 뒷면 위에 위치 */
+.sc-reveal-front-base {
+  position: relative;
+  z-index: 2;
+  /* clip-path는 JSX inline style로 적용 */
+}
+/* sc-card 내장 sc-pop 애니메이션 제거 (flip-wrap 자체 enter 애니메이션으로 충분) */
+.sc-reveal-front-base .sc-card { animation: none; }
 
 /* 완전 공개 후 래퍼 — in-flow */
 .sc-reveal-complete   { position: relative; }
 
-/* 뒷면 덮개 — 위에서부터 clip-path로 벗겨짐 */
+/* 뒷면 덮개 — 정적 배경(clip-path 없음), 앞면 뒤에 위치 */
 .sc-drag-back-cover {
   position: absolute;
   inset: 0;
@@ -460,7 +466,7 @@
   background: linear-gradient(145deg, #0d1b2a 0%, #1b263b 50%, #0d1b2a 100%);
   border: 2px solid rgba(255,255,255,0.07);
   border-radius: var(--r);
-  z-index: 10;
+  z-index: 1;
   pointer-events: none;
 }
 

@@ -142,8 +142,9 @@ function FlipCard({ card, index, flipped, onFlip }) {
     }
   }
 
-  // 뒷면 덮개: 위에서부터 clip (inset top이 늘수록 위에서 벗겨짐)
-  const backClipTop = (revealY * 100).toFixed(1);
+  // 앞면: 위에서부터 보임 (아래를 revealY만큼 clip)
+  // inset(0 0 hideBottom 0) → 아래 hideBottom% 숨김 → 위에서부터 점진 공개
+  const hideBottom = `${(100 - revealY * 100).toFixed(1)}%`;
   // 광택/스파클 마스크: 드래그한 만큼만 위에서 보임
   const shineEdge = `${Math.min(revealY * 100, 100).toFixed(0)}%`;
   const shineFade = `${Math.min(revealY * 100 + 16, 100).toFixed(0)}%`;
@@ -158,8 +159,21 @@ function FlipCard({ card, index, flipped, onFlip }) {
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
     >
-      {/* 앞면 — in-flow (카드 높이 결정) + 효과 포함 */}
-      <div className="sc-reveal-front-base">
+      {/* 뒷면 — 정적 배경 (항상 전체 표시, z-index: 1) */}
+      <div className="sc-drag-back-cover">
+        <div className="sc-back-pattern" />
+        <span className="sc-back-ball">⚽</span>
+        <span className="sc-back-brand">FOOTBALL PACK</span>
+      </div>
+
+      {/* 앞면 — clip-path로 위에서부터 점진 공개, z-index: 2 */}
+      <div
+        className="sc-reveal-front-base"
+        style={{
+          clipPath: `inset(0 0 ${hideBottom} 0 round var(--r, 8px))`,
+          transition: dragging ? "none" : "clip-path 0.3s ease",
+        }}
+      >
         <SoccerCard card={card} />
         {cfg.shine >= 1 && (
           <div
@@ -181,19 +195,6 @@ function FlipCard({ card, index, flipped, onFlip }) {
             }}
           />
         )}
-      </div>
-
-      {/* 뒷면 덮개 — 드래그 시 위에서부터 벗겨짐 */}
-      <div
-        className="sc-drag-back-cover"
-        style={{
-          clipPath: `inset(${backClipTop}% 0 0 0 round var(--r, 8px))`,
-          transition: dragging ? "none" : "clip-path 0.3s ease",
-        }}
-      >
-        <div className="sc-back-pattern" />
-        <span className="sc-back-ball">⚽</span>
-        <span className="sc-back-brand">FOOTBALL PACK</span>
       </div>
 
       {/* 드래그 힌트 (초기에만) */}
