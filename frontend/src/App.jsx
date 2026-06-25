@@ -25,6 +25,25 @@ const SquadScreen = lazy(() => import("./pages/SquadScreen.jsx").then((m) => ({ 
 // 온보딩(첫 로그인 닉네임 설정) 완료 플래그 키 — 유저별 1회
 const onboardKey = (userId) => `ballix-onboarded-${userId}`;
 
+// 새로고침해도 보던 화면/경기를 유지하기 위한 localStorage 키
+const SCREEN_KEY = "ballix:screen";
+const MATCH_KEY = "ballix:matchId";
+const readStored = (key) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const writeStored = (key, value) => {
+  try {
+    if (value == null) localStorage.removeItem(key);
+    else localStorage.setItem(key, String(value));
+  } catch {
+    /* 무시 */
+  }
+};
+
 // 라이브 경기가 하프 경계(스토피지 진입/정지) 근처인지 — true면 폴링을 10초로 좁혀
 // HT·추가시간·종료가 바로 반영되게 한다(평상시는 20초).
 function isLiveNearBoundary(match) {
@@ -47,7 +66,11 @@ function ScreenFallback() {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState("main");
+  // 새로고침 시 직전 화면 복원("login"은 복원하지 않음 — 로그인 직후 재진입 방지)
+  const [screen, setScreen] = useState(() => {
+    const saved = readStored(SCREEN_KEY);
+    return saved && saved !== "login" ? saved : "main";
+  });
   const [matches, setMatches] = useState([]);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [isMatchesLoading, setIsMatchesLoading] = useState(true);
@@ -57,6 +80,16 @@ export default function App() {
   const [showNameSetup, setShowNameSetup] = useState(false);
   const isLoggedIn = Boolean(currentUser);
   const isAdmin = currentUser?.role === "ADMIN_USER";
+
+  // 화면 전환 시 localStorage에 기록(새로고침 복원용). "login"은 저장 안 함.
+  useEffect(() => {
+    writeStored(SCREEN_KEY, screen === "login" ? null : screen);
+  }, [screen]);
+
+  // 선택한 경기 id 기록(상세 화면 복원용).
+  useEffect(() => {
+    if (selectedMatch?.id != null) writeStored(MATCH_KEY, selectedMatch.id);
+  }, [selectedMatch]);
 
   // 첫 로그인(이 기기에서 온보딩 미완료)이면 닉네임 설정 모달을 띄운다.
   useEffect(() => {
@@ -139,7 +172,12 @@ export default function App() {
       setMatches(normalizedMatches);
       setSelectedMatch((current) => {
         if (!current) {
-          return normalizedMatches[0] || null;
+          // 새로고침 복원: 저장된 경기 id가 있으면 그 경기를, 없으면 첫 경기를 선택
+          const savedId = Number(readStored(MATCH_KEY));
+          const restored = savedId
+            ? normalizedMatches.find((item) => item.id === savedId)
+            : null;
+          return restored || normalizedMatches[0] || null;
         }
         return normalizedMatches.find((item) => item.id === current.id) || current;
       });
@@ -256,7 +294,7 @@ export default function App() {
         onUserUpdate={applyNameChange}
       />
     );
-  } else if (screen === "detail") {
+  } else if (screen === "detail" && selectedMatch) {
     view = (
       <DetailScreen
         isLoggedIn={isLoggedIn}
