@@ -290,7 +290,7 @@ export function DetailScreen({ isAdmin, isLoggedIn, match, onBack, onGenerateAi,
                 match={match}
                 onRegenerate={() => handleAiAction(true)}
               />
-              <AiHistoryTimeline matchId={match.id} />
+              <AiHistoryTimeline matchId={match.id} homeName={match.homeTeam} awayName={match.awayTeam} />
               {aiActionError && <p className="action-error">{aiActionError}</p>}
             </CollapsiblePanel>
           )}
