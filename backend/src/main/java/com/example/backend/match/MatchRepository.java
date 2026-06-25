@@ -113,4 +113,19 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
             "AND m.matchTime >= :since " +
             "ORDER BY m.matchTime DESC")
     List<Match> findDetailBackfillTargets(@Param("since") LocalDateTime since, Pageable pageable);
+
+    /** 진행 중 경기 존재 여부 — 라이브 폴링과 크롤 충돌을 피하려는 스케줄러용 가드. */
+    boolean existsByStatus(String status);
+
+    /**
+     * 하이라이트 자동 보강 대상: 종료됐는데 다시보기 영상(replayYoutubeId)이 아직 없는 최근 경기.
+     * 방송사 하이라이트는 종료 후 수십 분~몇 시간 뒤 올라오므로 주기적으로 재검색해 채운다.
+     * since 로 너무 오래된 경기는 제외(무한 크롤 방지), Pageable 로 한 tick 처리 건수 제한.
+     */
+    @Query("SELECT m FROM Match m " +
+            "WHERE m.status = 'FINISHED' " +
+            "AND (m.replayYoutubeId IS NULL OR m.replayYoutubeId = '') " +
+            "AND m.matchTime >= :since " +
+            "ORDER BY m.matchTime DESC")
+    List<Match> findHighlightBackfillTargets(@Param("since") LocalDateTime since, Pageable pageable);
 }
