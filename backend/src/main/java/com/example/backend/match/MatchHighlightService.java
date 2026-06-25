@@ -66,24 +66,17 @@ public class MatchHighlightService {
 
         // 한국 방송사 영상만 띄울 거라 검색도 한국어로 한다 — 영어 쿼리("Korea vs Czechia highlights")는
         // 검색결과가 외국/공식(FIFA) 채널 위주라 한국 방송사 영상이 아예 안 surface된다.
-        // 두 팀 모두 한국어 이름(nameKo)이 있으면 "{홈} {원정} 하이라이트"로, 없으면 영어로 폴백.
-        String homeKo = teamNameKo(match.getHomeTeam());
-        String awayKo = teamNameKo(match.getAwayTeam());
+        // 방송사가 흔히 쓰는 약칭(한국/남아공)을 우선 써야 정식명(대한민국/남아프리카공화국)보다 영상이 잘 잡힌다.
+        String homeKo = searchKo(match.getHomeTeam());
+        String awayKo = searchKo(match.getAwayTeam());
         boolean korean = homeKo != null && awayKo != null;
         String query = korean
                 ? homeKo + " " + awayKo + " 하이라이트"
                 : home + " vs " + away + " highlights";
 
-        // 제목 적합도 매칭용 토큰(영문 마지막 단어 + 한국어 전체) — 채널 필터를 통과한 후보들의 정렬용
-        List<String> tokens = new ArrayList<>();
-        tokens.add(lastWord(home).toLowerCase());
-        tokens.add(lastWord(away).toLowerCase());
-        if (homeKo != null) tokens.add(homeKo.toLowerCase());
-        if (awayKo != null) tokens.add(awayKo.toLowerCase());
-
         try {
             YoutubeSearchResponse res = youtubeClient.search(query);
-            String videoId = pickBest(res, tokens);
+            String videoId = pickBest(res, match.getHomeTeam(), match.getAwayTeam());
             if (videoId == null) {
                 failedAt.put(matchId, LocalDateTime.now());
                 log.info("[highlight] matchId={} 적합한 영상 없음 (q={})", matchId, query);
@@ -111,25 +104,50 @@ public class MatchHighlightService {
     private static final int MAX_EMBED_CHECKS = 5;
 
     /**
-     * 한국 방송사 채널 영상 중 하이라이트로 가장 적합하면서 '임베드 재생 가능한' 영상 선택.
-     * 채널이 PREFERRED_CHANNELS(KBS/SBS/MBC/JTBC/SPOTV/쿠팡 등)에 걸리는 영상만 후보로 삼고(외국·FIFA·
-     * 타종목은 전부 제외), 그 안에서 제목 적합도(하이라이트 키워드·팀명 일치) 높은 순으로 정렬한 뒤
-     * 상위 후보부터 실제 임베드 가능한 첫 영상을 고른다.
-     * 한국 방송사 후보가 없거나 전부 임베드 불가면 null(엉뚱한 외국 영상 대신 아무것도 안 보여줌 → 잠시 후 재시도).
+     * 방송사가 흔히 쓰는 약칭(정식 한글명/영문명과 안 맞는 경우) — 영문 팀명(소문자) → 제목에서 찾을 한글 토큰들.
+     * 예: 제목은 "남아공"인데 nameKo는 "남아프리카공화국", 제목은 "한국"인데 nameKo는 "대한민국"이라 안 맞던 문제 보정.
      */
-    private String pickBest(YoutubeSearchResponse res, List<String> tokens) {
+    private static final Map<String, List<String>> NAME_ALIASES = Map.ofEntries(
+            Map.entry("south korea", List.of("한국", "대한민국", "코리아")),
+            Map.entry("korea republic", List.of("한국", "대한민국", "코리아")),
+            Map.entry("south africa", List.of("남아공", "남아프리카공화국", "남아프리카")),
+            Map.entry("bosnia and herzegovina", List.of("보스니아", "보스니아헤르체고비나")),
+            Map.entry("north macedonia", List.of("북마케도니아", "마케도니아")),
+            Map.entry("saudi arabia", List.of("사우디아라비아", "사우디")),
+            Map.entry("uzbekistan", List.of("우즈베키스탄", "우즈벡")),
+            Map.entry("ivory coast", List.of("코트디부아르", "아이보리코스트")),
+            Map.entry("czechia", List.of("체코", "체코공화국")),
+            Map.entry("dr congo", List.of("dr콩고", "콩고")),
+            Map.entry("united states", List.of("미국")),
+            Map.entry("usa", List.of("미국")),
+            Map.entry("turkiye", List.of("튀르키예", "터키")));
+
+    /**
+     * 한국 방송사 채널 + '양 팀이 모두 제목에 나오는' 영상 중 임베드 가능한 첫 영상 선택.
+     * <p>핵심: 제목에 <b>홈·원정 두 팀이 다 언급</b>돼야 후보가 된다 — 예전엔 한 팀만 맞거나 "하이라이트"
+     * 키워드만 있어도 통과해서 "한국 vs 남아공"인데 "남아공 vs 체코" 영상을 가져오는 오선택이 있었다.
+     * 채널이 PREFERRED_CHANNELS가 아니거나, 한 팀이라도 제목에 없거나, 타종목이면 제외.
+     * 적합 후보가 없거나 전부 임베드 불가면 null(엉뚱한 영상 대신 아무것도 안 보여줌 → 잠시 후 재시도).
+     */
+    private String pickBest(YoutubeSearchResponse res, Team home, Team away) {
         if (res == null || res.videos() == null || res.videos().isEmpty()) {
             return null;
         }
-        // 한국 방송사 채널만 후보로 — 그 외(외국/FIFA/개인 채널)는 전부 제외하고, 적합도 높은 순 정렬
-        List<Video> korean = res.videos().stream()
-                .filter(v -> isPreferredChannel(v.channel() == null ? "" : v.channel().toLowerCase()))
-                .filter(v -> relevance(v, tokens) >= 0)   // 타종목(야구/농구 등) 제외
-                .sorted(Comparator.comparingInt((Video v) -> relevance(v, tokens)).reversed())
+        List<String> homeTokens = teamTokens(home);
+        List<String> awayTokens = teamTokens(away);
+
+        List<Video> candidates = res.videos().stream()
+                .filter(v -> isPreferredChannel(lower(v.channel())))     // 한국 방송사만
+                .filter(v -> {
+                    String t = lower(v.title());
+                    // 양 팀이 모두 제목에 있고(상대팀 오선택 차단) + 타종목이 아니어야 함
+                    return titleHasTeam(t, homeTokens) && titleHasTeam(t, awayTokens) && !isOtherSport(t);
+                })
+                .sorted(Comparator.comparingInt((Video v) -> relevance(v)).reversed())
                 .toList();
 
         int checked = 0;
-        for (Video v : korean) {
+        for (Video v : candidates) {
             if (checked >= MAX_EMBED_CHECKS) break;
             checked++;
             if (youtubeClient.isEmbeddable(v.videoId())) {
@@ -141,16 +159,46 @@ public class MatchHighlightService {
         return null;
     }
 
-    /** 한국 방송사 후보 안에서의 적합도: 하이라이트 키워드 +20, 팀명 일치 +8씩, 타종목 -100. */
-    private int relevance(Video v, List<String> tokens) {
-        String t = v.title() == null ? "" : v.title().toLowerCase();
-        int s = 0;
-        if (t.contains("highlight") || t.contains("하이라이트")) s += 20;
-        for (String tok : tokens) {
-            if (!tok.isBlank() && t.contains(tok)) s += 8;
+    /** 양 팀 매칭을 통과한 후보들의 정렬용 — 하이라이트 키워드가 있으면 우선. */
+    private int relevance(Video v) {
+        String t = lower(v.title());
+        return (t.contains("highlight") || t.contains("하이라이트")) ? 20 : 0;
+    }
+
+    /** 제목(소문자)에 팀의 토큰 중 하나라도 들어 있으면 그 팀이 언급된 것으로 본다. */
+    private boolean titleHasTeam(String titleLower, List<String> teamTokens) {
+        for (String tok : teamTokens) {
+            if (!tok.isBlank() && titleLower.contains(tok)) return true;
         }
-        if (t.contains("baseball") || t.contains("야구") || t.contains("basketball") || t.contains("농구")) s -= 100;
-        return s;
+        return false;
+    }
+
+    /** 한 팀을 제목에서 찾기 위한 토큰 집합 — 영문 전체/마지막 단어 + 한글명 + 약칭(alias). 모두 소문자. */
+    private List<String> teamTokens(Team t) {
+        List<String> toks = new ArrayList<>();
+        if (t == null) return toks;
+        String en = lower(t.getName());
+        if (!en.isBlank()) {
+            toks.add(en);
+            String last = lastWord(en);
+            if (last.length() >= 4) toks.add(last);   // 짧은 단어(usa 등)는 오매칭 우려로 제외 — 한글/약칭이 커버
+            List<String> aliases = NAME_ALIASES.get(en);
+            if (aliases != null) toks.addAll(aliases);
+        }
+        String ko = t.getNameKo();
+        if (ko != null && !ko.isBlank()) {
+            String kol = ko.toLowerCase().trim();
+            toks.add(kol);
+            String noSpace = kol.replace(" ", "");
+            if (!noSpace.equals(kol)) toks.add(noSpace);
+        }
+        return toks;
+    }
+
+    private boolean isOtherSport(String titleLower) {
+        return titleLower.contains("baseball") || titleLower.contains("야구")
+                || titleLower.contains("basketball") || titleLower.contains("농구")
+                || titleLower.contains("volleyball") || titleLower.contains("배구");
     }
 
     private boolean isPreferredChannel(String channel) {
@@ -158,6 +206,10 @@ public class MatchHighlightService {
             if (channel.contains(c)) return true;
         }
         return false;
+    }
+
+    private String lower(String s) {
+        return s == null ? "" : s.toLowerCase();
     }
 
     /** "South Korea" → "korea" 처럼 팀명 마지막 단어(국가명 매칭률↑). */
@@ -170,10 +222,18 @@ public class MatchHighlightService {
         return t == null ? null : t.getName();
     }
 
-    /** 한국어 팀명(번역된 nameKo) — 없으면 null. 한국어 검색어 구성에 쓴다. */
+    /** 한국어 팀명(번역된 nameKo) — 없으면 null. */
     private String teamNameKo(Team t) {
         if (t == null) return null;
         String ko = t.getNameKo();
         return (ko == null || ko.isBlank()) ? null : ko;
+    }
+
+    /** 검색어에 쓸 한국어 팀명 — 방송사 흔한 약칭(alias) 우선, 없으면 nameKo. 둘 다 없으면 null. */
+    private String searchKo(Team t) {
+        if (t == null) return null;
+        List<String> aliases = NAME_ALIASES.get(lower(t.getName()));
+        if (aliases != null && !aliases.isEmpty()) return aliases.get(0);
+        return teamNameKo(t);
     }
 }
