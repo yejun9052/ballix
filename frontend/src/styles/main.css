@@ -275,7 +275,7 @@
 
 /* ── 스코어 카드 타일 ──────────────────────────────────────────── */
 .prediction-feed {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 14px; padding: 16px;
 }
 .prediction-item,
@@ -299,7 +299,7 @@
 .item-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(72px, 112px) minmax(0, 1fr); align-items: center; gap: 10px; }
 .status-pill { display: none; }
 .match-team { display: flex; align-items: center; gap: 9px; min-width: 0; width: 100%; }
-.match-team strong { flex: 1; min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.2; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; }
+.match-team strong { flex: 1; min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.2; max-width: 5.2em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .match-team.away { text-align: right; }
 .match-team.away strong { text-align: right; }
 
@@ -371,6 +371,11 @@
   .item-body { grid-template-columns: minmax(0, 1fr) minmax(60px, 96px) minmax(0, 1fr); gap: 8px; }
   .match-team strong { font-size: 12px; }
   .schedule-item:hover { transform: translate(-2px,-2px); box-shadow: 5px 5px 0 var(--shadow-col); }
+
+  /* 모바일: 국기 위 · 이름 아래 */
+  .match-team { flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+  .match-team.away { flex-direction: column-reverse; }
+  .match-team strong { font-size: 11px; text-align: center; width: 100%; }
 }
 
 /* ── 모바일 햄버거 + 전체화면 메뉴 ─────────────────────────────── */
