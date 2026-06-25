@@ -41,12 +41,17 @@
   display: flex; align-items: center; gap: 6px;
 }
 
-.playerstat-table { width: 100%; }
+/* 컬럼 폭 고정 — 선수명 컬럼만 가변(줄어들며 말줄임)하고 #·경기·값 컬럼은 항상 보이게.
+   auto 레이아웃이면 긴 이름이 컬럼을 넓혀 값(골) 컬럼이 패널 밖으로 밀려 잘렸다. */
+.playerstat-table { width: 100%; table-layout: fixed; }
 .playerstat-table .player-col { text-align: left; }
+.playerstat-table th:nth-child(1), .playerstat-table td:nth-child(1) { width: 30px; }
+.playerstat-table th:nth-child(3), .playerstat-table td:nth-child(3) { width: 46px; white-space: nowrap; }
+.playerstat-table th:nth-child(4), .playerstat-table td:nth-child(4) { width: 52px; white-space: nowrap; }
 
 .player-col {
   display: flex; align-items: center; gap: 8px;
-  min-width: 0;
+  min-width: 0; overflow: hidden;
 }
 .playerstat-photo {
   width: 30px; height: 30px; border-radius: 50%; object-fit: cover;
@@ -55,7 +60,11 @@
 .playerstat-crest { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
 .playerstat-name {
   font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex-shrink: 1; min-width: 0;
 }
-.playerstat-team { color: var(--faint); font-size: 12px; white-space: nowrap; }
+.playerstat-team {
+  color: var(--faint); font-size: 12px; white-space: nowrap;
+  flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
 
 .playerstat-block + .playerstat-block { margin-top: 0; }
