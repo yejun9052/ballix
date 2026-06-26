@@ -34,12 +34,12 @@ function posGroup(pos) {
 
 // ── 등급별 오버롤 기준표 ────────────────────────────────────────────────────
 const GRADE_RATES = [
-  { grade: "레전드",     rate: "OVR 90+",  per10: "최정상급 선수" },
-  { grade: "월드클래스", rate: "OVR 80–89", per10: "세계적 수준" },
-  { grade: "탑 클래스",  rate: "OVR 70–79", per10: "주전급 실력" },
-  { grade: "프로",       rate: "OVR 65–69", per10: "프로 수준" },
-  { grade: "세미프로",   rate: "OVR 60–64", per10: "유망주 수준" },
-  { grade: "아마추어",   rate: "OVR 59 이하", per10: "입문 단계" },
+  { grade: "레전드",     rate: "OVR 90+",    prob: "약 2%",  per10: "최정상급 선수" },
+  { grade: "월드클래스", rate: "OVR 80–89",  prob: "약 8%",  per10: "세계적 수준" },
+  { grade: "탑 클래스",  rate: "OVR 70–79",  prob: "약 20%", per10: "주전급 실력" },
+  { grade: "프로",       rate: "OVR 65–69",  prob: "약 28%", per10: "프로 수준" },
+  { grade: "세미프로",   rate: "OVR 60–64",  prob: "약 30%", per10: "유망주 수준" },
+  { grade: "아마추어",   rate: "OVR 59 이하", prob: "약 12%", per10: "입문 단계" },
 ];
 
 // ── 오버롤 산출 방식 표 ───────────────────────────────────────────────────
@@ -606,9 +606,10 @@ export function PlayerCardScreen({ isLoggedIn, user, onDrawn, onBack }) {
                   <div className="sc-rate-header">
                     <span>등급</span>
                     <span>오버롤</span>
+                    <span>확률</span>
                     <span>의미</span>
                   </div>
-                  {GRADE_RATES.map(({ grade, rate, per10 }) => {
+                  {GRADE_RATES.map(({ grade, rate, prob, per10 }) => {
                     const cfg = getGradeConfig(grade);
                     return (
                       <div
@@ -620,6 +621,7 @@ export function PlayerCardScreen({ isLoggedIn, user, onDrawn, onBack }) {
                           <span style={{ color: cfg.color }}>{grade}</span>
                         </span>
                         <span className="sc-rate-pct">{rate}</span>
+                        <span className="sc-rate-prob">{prob}</span>
                         <span className="sc-rate-avg">{per10}</span>
                       </div>
                     );
