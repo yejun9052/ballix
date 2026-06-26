@@ -159,6 +159,7 @@ export function PlayerModal({ playerId, fallbackName, matchPlayer, matchTeamName
       <div className="modal-card player-modal" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="player-modal-close" onClick={onClose} aria-label="닫기">✕</button>
 
+        <div className="player-modal-scroll">
         {/* 헤더 */}
         <div className="player-modal-head">
           <div className="pm-photo-wrap">
@@ -307,6 +308,7 @@ export function PlayerModal({ playerId, fallbackName, matchPlayer, matchTeamName
             </>
           )}
         </div>
+        </div>{/* player-modal-scroll */}
       </div>
     </div>,
     document.body,
