@@ -420,6 +420,7 @@
   .sc-pack-art { padding: 28px 16px; }
   .sc-btn-lg { padding: 12px 24px; font-size: 14px; }
   .sc-filter-label { min-width: 36px; }
+  .sc-ovr-box { display: none; }
 }
 @media (max-width: 400px) {
   .sc-grid-col6 { grid-template-columns: repeat(2, 1fr); }
