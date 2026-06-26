@@ -1,5 +1,5 @@
 // 관리자 - 데이터 관리 탭 (일정/경기/순위 동기화, AI 생성, FotMob 검색, 폴링 주기)
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getPollInterval,
   setPollInterval,
@@ -12,6 +12,8 @@ import {
 } from "../../api/fotmobAdmin.js";
 import { predictAi, getLiveAi, setLiveAi } from "../../api/admin.js";
 import { setReplay, clearReplay, backfillHighlights, resyncHighlight } from "../../api/matchAdmin.js";
+import { getAllMatches } from "../../api/match.js";
+import { normalizeMatch } from "../../utils/match.js";
 import { formatDateInputValue } from "../../utils/format.js";
 
 export function AdminDataTab() {
@@ -35,6 +37,9 @@ export function AdminDataTab() {
   const [replayYoutube, setReplayYoutube] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState("");
+  // 경기 찾아 동기화(이름 검색)
+  const [allMatches, setAllMatches] = useState([]);
+  const [finderQuery, setFinderQuery] = useState("");
 
   useEffect(() => {
     getPollInterval()
@@ -43,7 +48,34 @@ export function AdminDataTab() {
     getLiveAi()
       .then((d) => setLiveAiState(d))
       .catch(() => {});
+    // 경기 목록(이름 검색용) — 한 번에 넉넉히 받아 클라이언트에서 필터
+    getAllMatches({ page: 0, size: 500 })
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (data?.content ?? []);
+        setAllMatches(list.map(normalizeMatch));
+      })
+      .catch(() => {});
   }, []);
+
+  // 이름(영문/한글, 팀명 또는 마지막 단어)이 입력으로 '시작하는' 경기만
+  const finderResults = useMemo(() => {
+    const q = finderQuery.trim().toLowerCase();
+    if (!q) return [];
+    const lastWord = (s) => {
+      const parts = (s || "").trim().split(/\s+/);
+      return parts[parts.length - 1] || "";
+    };
+    const hit = (name) => {
+      const n = (name || "").toLowerCase();
+      return n.startsWith(q) || lastWord(n).startsWith(q);
+    };
+    return allMatches
+      .filter((m) =>
+        hit(m.homeTeamOriginal) || hit(m.awayTeamOriginal) ||
+        hit(m.homeTeam) || hit(m.awayTeam),
+      )
+      .slice(0, 40);
+  }, [finderQuery, allMatches]);
 
   async function toggleLiveAi(next) {
     await run(`실시간 AI 예측 ${next ? "켜기" : "끄기"}`, async () => {
@@ -148,6 +180,59 @@ export function AdminDataTab() {
   return (
     <div className="admin-section admin-data-tab">
       {msg && <p className={`action-msg ${msg.startsWith("✅") ? "ok" : "err"}`}>{msg}</p>}
+
+      {/* 경기 찾아 동기화 (이름으로 검색 → 목록에서 바로 동기화) */}
+      <div className="data-card">
+        <h3 className="data-card-title">🔎 경기 찾아 동기화 (이름)</h3>
+        <p className="data-hint">
+          경기 ID를 몰라도 나라 이름으로 찾습니다. 예: <b>s</b> → Spain·Senegal·South Korea… 입력하면 아래에 해당 경기가
+          뜨고, 행에서 바로 동기화·AI예측·영상동기화 할 수 있습니다.
+        </p>
+        <div className="data-row">
+          <input
+            type="text"
+            value={finderQuery}
+            onChange={(e) => setFinderQuery(e.target.value)}
+            placeholder="나라/팀 이름 (영문 또는 한글)"
+            className="data-input"
+          />
+          {allMatches.length === 0 && <span className="data-hint">경기 목록 불러오는 중…</span>}
+        </div>
+        {finderQuery.trim() && (
+          <div className="match-finder-list">
+            {finderResults.length === 0 ? (
+              <p className="data-hint">“{finderQuery.trim()}”로 시작하는 경기가 없습니다.</p>
+            ) : (
+              finderResults.map((m) => (
+                <div className="match-finder-item" key={m.id}>
+                  <div className="match-finder-info">
+                    <strong>{m.homeTeam} vs {m.awayTeam}</strong>
+                    <span className="match-finder-meta">{m.matchTime} · {m.status} · #{m.id}</span>
+                  </div>
+                  <div className="match-finder-actions">
+                    <button
+                      type="button" className="data-btn" disabled={Boolean(loading)}
+                      onClick={() => run(`경기 ${m.id} 동기화`, () => syncMatch(m.id))}
+                    >동기화</button>
+                    {!["FINISHED", "CANCELLED"].includes(m.statusRaw) && (
+                      <button
+                        type="button" className="data-btn" disabled={Boolean(loading)}
+                        onClick={() => run(`경기 ${m.id} AI예측`, () => predictAi(m.id, { force: false }))}
+                      >AI예측</button>
+                    )}
+                    {m.statusRaw === "FINISHED" && (
+                      <button
+                        type="button" className="data-btn" disabled={Boolean(loading)}
+                        onClick={() => run(`경기 ${m.id} 영상동기화`, () => resyncHighlight(m.id))}
+                      >영상</button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* 일정 동기화 */}
       <div className="data-card">

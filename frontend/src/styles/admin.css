@@ -35,6 +35,15 @@
 .data-btn.secondary { background: var(--surface); color: var(--ink); }
 .data-result { padding: 12px; border: var(--bd) solid var(--line); border-radius: var(--r-sm); background: var(--surface-2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; color: var(--ink-soft); }
 
+/* 경기 찾아 동기화 — 검색 결과 리스트 */
+.match-finder-list { display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
+.match-finder-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: var(--bd) solid var(--line); border-radius: var(--r-sm); background: var(--surface-2); }
+.match-finder-info { display: grid; gap: 2px; min-width: 0; }
+.match-finder-info > strong { font-size: 13px; font-weight: 900; color: var(--ink); }
+.match-finder-meta { font-size: 11px; font-weight: 800; color: var(--muted); }
+.match-finder-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.match-finder-actions .data-btn { height: 34px; padding: 0 12px; box-shadow: 2px 2px 0 var(--shadow-col); }
+
 .new-notice-btn { padding: 13px; border: var(--bd) solid var(--line); border-radius: var(--r-pill); background: var(--blue); color: #fff; font-weight: 800; font-size: 13px; box-shadow: 3px 3px 0 var(--shadow-col); }
 .notice-form { display: grid; gap: 10px; padding: 18px; border: var(--bd) solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: 4px 4px 0 var(--shadow-col); }
 .notice-form h3 { font-size: 15px; font-weight: 900; }
