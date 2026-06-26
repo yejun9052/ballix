@@ -5,15 +5,15 @@
 .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 20px; background: var(--paper-2); }
 .login-screen { display: grid; gap: 16px; width: 100%; max-width: 1060px; }
 
-.login-visual { display: none; flex-direction: column; justify-content: center; gap: 18px; padding: 30px; border: var(--bd-2) solid var(--line); border-radius: var(--r); background: var(--ink); color: var(--paper); box-shadow: 6px 6px 0 var(--shadow-col); }
-.prediction-preview { display: grid; gap: 13px; padding: 20px; border: var(--bd) solid var(--paper); border-radius: var(--r-sm); background: #ffffff10; }
-.prediction-preview .preview-top { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 900; color: var(--faint); text-transform: uppercase; }
+.login-visual { display: none; flex-direction: column; justify-content: center; gap: 18px; padding: 30px; border: var(--bd-2) solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); box-shadow: 6px 6px 0 var(--shadow-col); }
+.prediction-preview { display: grid; gap: 13px; padding: 20px; border: var(--bd) solid var(--ink); border-radius: var(--r-sm); background: var(--surface); }
+.prediction-preview .preview-top { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 900; color: var(--ink); text-transform: uppercase; }
 .prediction-preview .preview-top strong { color: var(--yellow); font-size: 13px; }
 .prediction-preview h2 { font-size: 22px; font-weight: 900; }
 .preview-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.preview-buttons span { padding: 11px 8px; border: var(--bd) solid var(--paper); border-radius: var(--r-xs); background: #ffffff10; text-align: center; font-size: 12px; font-weight: 800; }
+.preview-buttons span { padding: 11px 8px; border: var(--bd) solid var(--ink); border-radius: var(--r-xs); background: var(--surface); text-align: center; font-size: 12px; font-weight: 800; }
 .preview-buttons span:nth-child(1) { background: var(--yellow); color: #15130f; border-color: var(--yellow); }
-.floating-card { display: flex; align-items: center; gap: 11px; padding: 15px; border: var(--bd) solid var(--line); border-radius: var(--r-sm); background: #fff; color: #15130f; font-weight: 800; font-size: 13px; box-shadow: 4px 4px 0 rgba(0,0,0,0.25); }
+.floating-card { display: flex; align-items: center; gap: 11px; padding: 15px; border: var(--bd) solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: #15130f; font-weight: 800; font-size: 13px; box-shadow: 4px 4px 0 rgba(0,0,0,0.25); }
 .floating-card svg { color: var(--yellow); flex-shrink: 0; }
 
 .login-panel { display: flex; flex-direction: column; gap: 13px; padding: 32px; border: var(--bd-2) solid var(--line); border-radius: var(--r); background: var(--surface); box-shadow: 6px 6px 0 var(--shadow-col); }
