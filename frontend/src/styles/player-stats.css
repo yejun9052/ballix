@@ -44,6 +44,8 @@
 /* 컬럼 폭 고정 — 선수명 컬럼만 가변(줄어들며 말줄임)하고 #·경기·값 컬럼은 항상 보이게.
    auto 레이아웃이면 긴 이름이 컬럼을 넓혀 값(골) 컬럼이 패널 밖으로 밀려 잘렸다. */
 .playerstat-table { width: 100%; table-layout: fixed; }
+.playerstat-row-clickable { cursor: pointer; transition: background 0.12s; }
+.playerstat-row-clickable:hover { background: var(--yellow-soft); }
 .playerstat-table .player-col { text-align: left; }
 .playerstat-table th:nth-child(1), .playerstat-table td:nth-child(1) { width: 30px; }
 .playerstat-table th:nth-child(3), .playerstat-table td:nth-child(3) { width: 46px; white-space: nowrap; }

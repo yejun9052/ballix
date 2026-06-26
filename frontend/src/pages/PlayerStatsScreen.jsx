@@ -3,13 +3,14 @@ import { useEffect, useState } from "react";
 import { getPlayerStats, syncPlayerStats } from "../api/playerStats.js";
 import { getTeamNameByOriginal } from "../utils/team.js";
 import { StateMessage } from "../components/common/StateMessage.jsx";
+import { PlayerModal } from "../components/common/PlayerModal.jsx";
 
 const PLAYER_IMG = (id) =>
   `https://images.fotmob.com/image_resources/playerimages/${id}.png`;
 const TEAM_CREST = (id) =>
   `https://images.fotmob.com/image_resources/logo/teamlogo/${id}.png`;
 
-function StatTable({ title, unit, rows }) {
+function StatTable({ title, unit, rows, onSelectPlayer }) {
   return (
     <div className="playerstat-block">
       <h3 className="playerstat-title">{title}</h3>
@@ -27,7 +28,11 @@ function StatTable({ title, unit, rows }) {
           </thead>
           <tbody>
             {rows.map((p, i) => (
-              <tr key={`${p.fotmobPlayerId ?? p.playerName}-${i}`}>
+              <tr
+                key={`${p.fotmobPlayerId ?? p.playerName}-${i}`}
+                className={p.fotmobPlayerId ? "playerstat-row-clickable" : ""}
+                onClick={p.fotmobPlayerId ? () => onSelectPlayer(p) : undefined}
+              >
                 <td className="rank-col">{p.rank ?? i + 1}</td>
                 <td className="player-col">
                   {p.fotmobPlayerId && (
@@ -76,6 +81,7 @@ export function PlayerStatsScreen({ onBack, user }) {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [msg, setMsg] = useState("");
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
 
   const isAdmin = user?.role === "ADMIN_USER";
 
@@ -141,12 +147,19 @@ export function PlayerStatsScreen({ onBack, user }) {
           {!isLoading && error && <StateMessage text={error} />}
           {!isLoading && !error && (
             <div className="playerstat-grid">
-              <StatTable title="⚽ 득점왕" unit="골" rows={board.scorers} />
-              <StatTable title="🅰️ 도움왕" unit="도움" rows={board.assists} />
+              <StatTable title="⚽ 득점왕" unit="골" rows={board.scorers} onSelectPlayer={setSelectedPlayer} />
+              <StatTable title="🅰️ 도움왕" unit="도움" rows={board.assists} onSelectPlayer={setSelectedPlayer} />
             </div>
           )}
         </section>
       </section>
+      {selectedPlayer && (
+        <PlayerModal
+          playerId={selectedPlayer.fotmobPlayerId}
+          fallbackName={selectedPlayer.playerName}
+          onClose={() => setSelectedPlayer(null)}
+        />
+      )}
     </main>
   );
 }
