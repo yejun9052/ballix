@@ -709,3 +709,81 @@
      62px -58px 0 3px rgba(255,160,100,.9);
   filter: blur(0.3px);
 }
+
+/* ── 오버롤 산출 방식 접기/펼치기 박스 ── */
+.sc-ovr-box {
+  border: var(--bd) solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: 3px 3px 0 var(--shadow-col);
+}
+.sc-ovr-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 13px 16px;
+  background: var(--surface-2);
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  border: none;
+  border-bottom: 1px solid transparent;
+  transition: background 0.12s;
+}
+.sc-ovr-toggle[aria-expanded="true"] {
+  border-bottom-color: var(--line);
+}
+.sc-ovr-toggle:hover { background: var(--yellow-soft); }
+.sc-ovr-chevron { font-size: 10px; color: var(--muted); }
+.sc-ovr-content { padding: 14px 16px 16px; }
+.sc-ovr-desc {
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+.sc-ovr-desc b { color: var(--ink); }
+.sc-ovr-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sc-ovr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sc-ovr-table th {
+  padding: 6px 8px;
+  background: var(--surface-2);
+  font-weight: 900;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: var(--bd) solid var(--line);
+  text-align: center;
+}
+.sc-ovr-table th.sc-ovr-stat { text-align: left; }
+.sc-ovr-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.sc-ovr-table tr:last-child td { border-bottom: 0; }
+.sc-ovr-table td.sc-ovr-stat {
+  text-align: left;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.sc-ovr-table td.sc-ovr-range {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.sc-ovr-table td.sc-ovr-hit {
+  font-weight: 900;
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.sc-ovr-table td.sc-ovr-miss { color: var(--faint); }

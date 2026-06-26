@@ -1,5 +1,5 @@
 // 선수 카드 뽑기 화면 — 1회/10회 뽑기 + 내 컬렉션(페이지네이션·필터)
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, memo } from "react";
 import { drawPlayerCard, getMyCards } from "../api/playerCard.js";
 import "../styles/player-card-screen.css";
 
@@ -41,6 +41,86 @@ const GRADE_RATES = [
   { grade: "세미프로",   rate: "OVR 60–64", per10: "유망주 수준" },
   { grade: "아마추어",   rate: "OVR 59 이하", per10: "입문 단계" },
 ];
+
+// ── 오버롤 산출 방식 표 ───────────────────────────────────────────────────
+const OVR_ROWS = [
+  { stat: "Rating (FotMob)",      note: "5.5~8.5",  GK:"25%", CB:"20%", FB:"18%", DM:"22%", CM:"18%", AM:"18%", WG:"18%", ST:"18%" },
+  { stat: "Save %",               note: "55~90%",   GK:"25%", CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "클린시트/경기",          note: "0~0.50",   GK:"20%", CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Goals prevented",      note: "0~15",     GK:"10%", CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Saves/경기",            note: "0~5.5",    GK:"10%", CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "페널티 선방",            note: "0~100%",   GK:"5%",  CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Clearances/90",        note: "0~7",      GK:"-",   CB:"18%", FB:"12%", DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Aerials won %",        note: "20~80%",   GK:"-",   CB:"15%", FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"7%"  },
+  { stat: "Tackles/90",           note: "0~4.5",    GK:"-",   CB:"12%", FB:"14%", DM:"18%", CM:"7%",  AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Interceptions/90",     note: "0~2.8",    GK:"-",   CB:"12%", FB:"10%", DM:"16%", CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Pass accuracy",        note: "60~95%",   GK:"5%",  CB:"10%", FB:"8%",  DM:"14%", CM:"18%", AM:"4%",  WG:"-",   ST:"-"   },
+  { stat: "Duels won %",          note: "30~70%",   GK:"-",   CB:"8%",  FB:"4%",  DM:"14%", CM:"8%",  AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Def.Actions/90",       note: "0~9",      GK:"-",   CB:"-",   FB:"-",   DM:"8%",  CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Recoveries/90",        note: "0~10",     GK:"-",   CB:"-",   FB:"-",   DM:"8%",  CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+  { stat: "Assists/90",           note: "0~0.45",   GK:"-",   CB:"-",   FB:"10%", DM:"-",   CM:"14%", AM:"14%", WG:"14%", ST:"8%"  },
+  { stat: "Chances created/90",   note: "0~3.5",    GK:"-",   CB:"-",   FB:"10%", DM:"-",   CM:"12%", AM:"10%", WG:"10%", ST:"-"   },
+  { stat: "Successful crosses/90",note: "0~3.0",    GK:"-",   CB:"-",   FB:"8%",  DM:"-",   CM:"-",   AM:"-",   WG:"6%",  ST:"-"   },
+  { stat: "Dribble success %",    note: "20~80%",   GK:"-",   CB:"-",   FB:"6%",  DM:"-",   CM:"5%",  AM:"6%",  WG:"10%", ST:"-"   },
+  { stat: "Goals/90",             note: "0~0.70",   GK:"-",   CB:"-",   FB:"-",   DM:"-",   CM:"8%",  AM:"18%", WG:"18%", ST:"28%" },
+  { stat: "xG/90",                note: "0~0.65",   GK:"-",   CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"12%", WG:"10%", ST:"14%" },
+  { stat: "xA/90",                note: "0~0.40",   GK:"-",   CB:"-",   FB:"-",   DM:"-",   CM:"10%", AM:"10%", WG:"10%", ST:"-"   },
+  { stat: "Shot accuracy %",      note: "0~65%",    GK:"-",   CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"8%",  WG:"4%",  ST:"10%" },
+  { stat: "Box touches/90",       note: "0~6.0",    GK:"-",   CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"8%"  },
+  { stat: "Headed shots/90",      note: "0~3.0",    GK:"-",   CB:"-",   FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"7%"  },
+  { stat: "(골+도움)/90",           note: "0~0.20",   GK:"-",   CB:"5%",  FB:"-",   DM:"-",   CM:"-",   AM:"-",   WG:"-",   ST:"-"   },
+];
+
+const OVR_POSITIONS = ["GK","CB","FB","DM","CM","AM","WG","ST"];
+
+const OvrFormulaTable = memo(function OvrFormulaTable() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="sc-ovr-box">
+      <button
+        type="button"
+        className="sc-ovr-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span>📊 오버롤(OVR) 산출 방식</span>
+        <span className="sc-ovr-chevron">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="sc-ovr-content">
+          <p className="sc-ovr-desc">
+            <b>공식</b>: OVR = 60 + round(가중합 × 39) &nbsp;→&nbsp; 범위 <b>60~99</b><br/>
+            볼륨 스탯은 90분 환산, 비율 스탯은 min~max 정규화. 레드카드 1장당 −0.04 감점 (최대 3장).
+          </p>
+          <div className="sc-ovr-table-wrap">
+            <table className="sc-ovr-table">
+              <thead>
+                <tr>
+                  <th className="sc-ovr-stat">스탯</th>
+                  <th className="sc-ovr-range">범위</th>
+                  {OVR_POSITIONS.map((p) => <th key={p}>{p}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {OVR_ROWS.map((row) => (
+                  <tr key={row.stat}>
+                    <td className="sc-ovr-stat">{row.stat}</td>
+                    <td className="sc-ovr-range">{row.note}</td>
+                    {OVR_POSITIONS.map((p) => (
+                      <td key={p} className={row[p] !== "-" ? "sc-ovr-hit" : "sc-ovr-miss"}>
+                        {row[p]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 // ── 컬렉션 필터/정렬 옵션 ─────────────────────────────────────────────────
 const SORT_OPTIONS = [
@@ -545,6 +625,9 @@ export function PlayerCardScreen({ isLoggedIn, user, onDrawn, onBack }) {
                     );
                   })}
                 </div>
+
+                {/* 오버롤 산출 방식 (접기/펼치기) */}
+                <OvrFormulaTable />
 
                 {/* 뽑기 버튼 */}
                 {!isLoggedIn ? (
