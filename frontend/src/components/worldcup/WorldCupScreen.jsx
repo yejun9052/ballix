@@ -464,26 +464,6 @@ export function WcBracket({ wcMatches, standingsByLetter, quals, onSelectMatch, 
     return getSorted(roundKey)[idx] || null;
   }
 
-  // 토너먼트 대진이 아직 확정되지 않았으면(녹아웃 경기에 라운드/스테이지 정보 없음)
-  // 빈 NA 박스로 가득 찬 깨진 브래킷 대신 안내 문구를 보여준다.
-  const KNOCKOUT_ROUNDS = [
-    "Round of 32", "Round of 16", "Quarter-final",
-    "Semi-final", "Final", "Third place play-off",
-  ];
-  const hasKnockoutData = KNOCKOUT_ROUNDS.some(
-    (r) => (knockoutByRound[r] || []).length > 0,
-  );
-  if (!hasKnockoutData) {
-    return (
-      <div className="wc-bracket-empty">
-        <span className="wc-bracket-empty-icon">🏆</span>
-        <strong>토너먼트 대진 준비 중</strong>
-        <p>조별리그가 마무리되면 32강 대진표가 여기에 표시됩니다.</p>
-        <p className="wc-bracket-empty-sub">현재 조별 순위는 ‘조별리그’ 탭에서 확인하세요.</p>
-      </div>
-    );
-  }
-
   // ── 매치 박스 (2행: 엠블럼+약자+득점, 승자 강조) ─────────────────────────
   function BoxTeamRow({ crest, original, fallback, goal, played, win, lose }) {
     return (
