@@ -70,10 +70,21 @@ export function getGroupLabel(group) {
 }
 
 
+// 녹아웃 라운드 → 진행 순서 접두사(조별리그 뒤 = "M" 이후)
+const KNOCKOUT_ORDER = {
+  "Round of 32":          "M0",
+  "Round of 16":          "M1",
+  "Quarter-final":        "M2",
+  "Semi-final":           "M3",
+  "Final":                "M4",
+  "Third place play-off": "M5",
+};
+
 export function getGroupSortValue(group) {
   const label = getGroupLabel(group);
   const groupCode = label.match(/^([A-L])조$/)?.[1];
-  return groupCode || label;
+  if (groupCode) return groupCode;                  // 조별리그: A~L
+  return KNOCKOUT_ORDER[group] ?? `M9_${group}`;   // 녹아웃: M0~M5, 미분류는 맨 뒤
 }
 
 // 목록 정렬: 진행 중(시간순) → 나머지 날짜순·시간순
