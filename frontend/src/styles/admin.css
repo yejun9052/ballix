@@ -68,6 +68,16 @@
 .role-chip { background: var(--surface-2); color: var(--ink-soft); }
 .active-chip { background: var(--win-soft); color: var(--win); }
 .banned-chip { background: var(--live-soft); color: var(--live); }
+/* 유저 이름 검색 바 */
+.user-search { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.user-search-input {
+  flex: 1; min-width: 0; max-width: 320px;
+  padding: 8px 12px; font-size: 13px; font-weight: 700;
+  border: var(--bd) solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink);
+}
+.user-search-note { font-size: 12px; font-weight: 800; color: var(--muted); margin: 0 0 10px; }
+
 .user-admin-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .self-note { color: var(--faint); font-size: 12px; font-weight: 800; }
 

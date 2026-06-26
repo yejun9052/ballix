@@ -73,6 +73,24 @@ public class MatchHighlightService {
         return filled;
     }
 
+    /**
+     * 특정 경기 하이라이트 강제 재동기화(관리자) — 기존(잘못 등록된) 영상을 비우고 쿨다운을 풀어 즉시 재검색.
+     * 일괄 보강(backfillHighlights)이 '영상 없는 여러 경기'를 훑는 것과 달리, 경기 1건을 지정해 다시 찾는다.
+     * 재검색에 실패(적합 후보 없음)하면 영상은 빈 상태로 남는다(잘못된 영상 제거가 목적이므로 의도된 동작).
+     */
+    @Transactional
+    public Match resyncHighlight(Long matchId) {
+        Match match = matchRepository.findById(matchId)
+                .orElseThrow(() -> new NotFoundException("경기를 찾을 수 없습니다."));
+        if (!match.isFotmobFinalized() && !"FINISHED".equals(match.getStatus())) {
+            throw new BadRequestException("아직 종료되지 않은 경기는 하이라이트를 가져올 수 없습니다.");
+        }
+        failedAt.remove(matchId);   // 쿨다운 해제
+        match.clearReplay();        // 기존 영상 비움 → getOrFetch가 재검색하도록
+        matchRepository.save(match);
+        return self.getOrFetch(matchId);   // 프록시 경유(같은 트랜잭션 참여) — 비워진 상태에서 재검색
+    }
+
     /** 종료 경기의 하이라이트 조회 — DB-first lazy. 영상이 있으면 그대로, 없으면 1회 검색·저장 후 반환. */
     @Transactional
     public Match getOrFetch(Long matchId) {

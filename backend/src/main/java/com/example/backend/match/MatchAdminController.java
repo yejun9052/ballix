@@ -52,4 +52,12 @@ public class MatchAdminController {
     public ResponseEntity<CommonResponse<?>> clearReplay(@PathVariable Long id) {
         return ResponseEntity.ok(CommonResponse.success(ResponseMessage.REPLAY_CLEARED, matchService.clearReplay(id)));
     }
+
+    /** 특정 경기 하이라이트 강제 재동기화 — 기존(잘못된) 영상을 비우고 즉시 재검색. 새 videoId(또는 null) 반환. */
+    @PreAuthorize("hasRole('ADMIN_USER')")
+    @PostMapping("/{id}/highlight/resync")
+    public ResponseEntity<CommonResponse<?>> resyncHighlight(@PathVariable Long id) {
+        return ResponseEntity.ok(CommonResponse.success(
+                ResponseMessage.SYNC_DONE, matchHighlightService.resyncHighlight(id).getReplayYoutubeId()));
+    }
 }

@@ -16,3 +16,8 @@ export const clearReplay = (matchId) => {
 export const backfillHighlights = ({ limit = 10, sinceDays = 7 } = {}) => {
   return API.post(`/api/admin/match/highlights/backfill?limit=${limit}&sinceDays=${sinceDays}`);
 };
+
+// 특정 경기 영상 강제 재동기화 — 기존(잘못된) 영상 비우고 즉시 재검색. 새 videoId(또는 null) 반환.
+export const resyncHighlight = (matchId) => {
+  return API.post(`/api/admin/match/${matchId}/highlight/resync`);
+};

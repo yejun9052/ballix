@@ -11,7 +11,7 @@ import {
   backfillDetails,
 } from "../../api/fotmobAdmin.js";
 import { predictAi, getLiveAi, setLiveAi } from "../../api/admin.js";
-import { setReplay, clearReplay, backfillHighlights } from "../../api/matchAdmin.js";
+import { setReplay, clearReplay, backfillHighlights, resyncHighlight } from "../../api/matchAdmin.js";
 import { formatDateInputValue } from "../../utils/format.js";
 
 export function AdminDataTab() {
@@ -97,6 +97,24 @@ export function AdminDataTab() {
       setMsg(`✅ 하이라이트 ${count}경기 보강 완료 (영상이 아직 안 올라온 경기는 자동으로 30분 뒤 재시도)`);
     } catch (err) {
       setMsg(`❌ 하이라이트 보강 실패: ${err.response?.data?.msg || err.message}`);
+    } finally {
+      setLoading("");
+    }
+  }
+
+  // 특정 경기 영상 강제 재동기화 — 기존(잘못된) 영상 비우고 즉시 재검색
+  async function handleResync() {
+    if (!replayMatchId) return;
+    setLoading(`영상 동기화(${replayMatchId})`);
+    setMsg("");
+    try {
+      const vid = await resyncHighlight(Number(replayMatchId));
+      const id = typeof vid === "string" ? vid : (vid?.data ?? "");
+      setMsg(id
+        ? `✅ 영상 동기화 완료 — videoId=${id}`
+        : "✅ 재검색했지만 적합한 영상 없음(기존 영상 제거됨, 30분 뒤 자동 재시도)");
+    } catch (err) {
+      setMsg(`❌ 영상 동기화 실패: ${err.response?.data?.msg || err.message}`);
     } finally {
       setLoading("");
     }
@@ -348,10 +366,13 @@ export function AdminDataTab() {
         )}
       </div>
 
-      {/* 다시보기(유튜브) 등록/해제 */}
+      {/* 다시보기(유튜브) 등록/해제/재동기화 */}
       <div className="data-card">
-        <h3 className="data-card-title">🎬 다시보기 등록</h3>
-        <p className="data-hint">종료된 경기에 유튜브 다시보기 영상을 등록합니다. (링크 또는 영상 ID)</p>
+        <h3 className="data-card-title">🎬 다시보기 등록 / 영상 동기화</h3>
+        <p className="data-hint">
+          종료 경기에 유튜브 영상을 직접 등록(링크/ID)하거나, <b>영상 동기화</b>로 그 경기의 영상을 자동 재검색합니다
+          (잘못 등록된 영상을 비우고 한국 방송사 + 양 팀 매칭으로 다시 찾음).
+        </p>
         <div className="data-row">
           <label>경기 ID</label>
           <input
@@ -375,6 +396,14 @@ export function AdminDataTab() {
             )}
           >
             {loading === `다시보기 등록(${replayMatchId})` ? "등록 중…" : "등록"}
+          </button>
+          <button
+            type="button"
+            className="data-btn"
+            disabled={Boolean(loading) || !replayMatchId}
+            onClick={handleResync}
+          >
+            {loading === `영상 동기화(${replayMatchId})` ? "동기화 중…" : "영상 동기화"}
           </button>
           <button
             type="button"

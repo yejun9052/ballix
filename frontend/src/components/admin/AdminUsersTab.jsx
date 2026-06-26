@@ -13,13 +13,15 @@ export function AdminUsersTab({ user }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [pointDraft, setPointDraft] = useState({});   // { [userId]: 입력값 }
   const [busyId, setBusyId] = useState(null);
+  const [q, setQ] = useState("");          // 적용된 검색어(이름)
+  const [qInput, setQInput] = useState("");  // 검색 입력칸
   const refresh = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
     let mounted = true;
     setIsLoading(true);
     setError("");
-    getUsers({ page, size: 8 })
+    getUsers({ q, page, size: 8 })
       .then((data) => {
         if (!mounted) return;
         if (data?.content) {
@@ -36,7 +38,18 @@ export function AdminUsersTab({ user }) {
         if (mounted) setIsLoading(false);
       });
     return () => { mounted = false; };
-  }, [page, refreshKey]);
+  }, [q, page, refreshKey]);
+
+  function submitSearch(e) {
+    e.preventDefault();
+    setPage(0);
+    setQ(qInput.trim());
+  }
+  function clearSearch() {
+    setQInput("");
+    setQ("");
+    setPage(0);
+  }
 
   async function handleRoleChange(u) {
     setError("");
@@ -81,10 +94,24 @@ export function AdminUsersTab({ user }) {
 
   return (
     <div className="admin-section">
+      <form className="user-search" onSubmit={submitSearch}>
+        <input
+          type="text"
+          className="user-search-input"
+          placeholder="이름으로 검색"
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
+        />
+        <button type="submit" className="small-btn">검색</button>
+        {q && (
+          <button type="button" className="small-btn" onClick={clearSearch}>전체</button>
+        )}
+      </form>
+      {q && <p className="user-search-note">“{q}” 검색 결과</p>}
       {error && <p className="action-error">{error}</p>}
       {isLoading && <StateMessage text="유저 목록을 불러오는 중" />}
       {!isLoading && users.length === 0 && !error && (
-        <StateMessage text="유저가 없습니다" />
+        <StateMessage text={q ? `“${q}”에 해당하는 유저가 없습니다` : "유저가 없습니다"} />
       )}
       {!isLoading && users.map((u) => {
         const isMe = user?.id === u.id;
